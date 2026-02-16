@@ -37,7 +37,7 @@ export async function processPost(postData: any, accountId: string) {
     }
 
     // 4. Save
-    await prisma.post.create({
+    const savedPost = await prisma.post.create({
         data: {
             thread_id: postData.threadId,
             content_original: postData.content,
@@ -52,6 +52,7 @@ export async function processPost(postData: any, accountId: string) {
             posted_at: new Date(), // Approximate
         },
     });
+    return savedPost;
 }
 
 function calculateHotScore(post: any): number {

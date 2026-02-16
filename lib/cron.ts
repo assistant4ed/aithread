@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
 import { ThreadsScraper } from "./scraper";
 import { processPost } from "./processor";
+import { logToSheets } from "./sheets_logger";
 
 const prisma = new PrismaClient();
 const scraper = new ThreadsScraper();
@@ -26,7 +27,18 @@ export function startPolling() {
                     console.log(`Found ${posts.length} posts for ${account.username}`);
 
                     for (const post of posts) {
-                        await processPost(post, account.id);
+                        const savedPost = await processPost(post, account.id);
+                        console.log(`Processed post ${savedPost?.thread_id} with hot_score: ${savedPost?.hot_score}`);
+                        if (savedPost && savedPost.hot_score >= 0) { // Lowered for trial to ensure logging works
+                            // Fetch full post object including account for logging
+                            const fullPost = await prisma.post.findUnique({
+                                where: { id: savedPost.id },
+                                include: { account: true }
+                            });
+                            if (fullPost) {
+                                await logToSheets(fullPost);
+                            }
+                        }
                     }
 
                 } catch (err) {

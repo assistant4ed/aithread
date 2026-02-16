@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import fs from 'fs';
