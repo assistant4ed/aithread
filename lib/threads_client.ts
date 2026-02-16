@@ -63,6 +63,7 @@ export async function createContainer(
 
     if (!response.ok) {
         const errorData = (await response.json()) as ThreadsErrorResponse;
+        console.error('Threads API Error Details:', JSON.stringify(errorData, null, 2));
         const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
         throw new Error(`Threads API Create Container Error: ${errorMessage}`);
     }
@@ -97,6 +98,7 @@ export async function publishContainer(
 
     if (!response.ok) {
         const errorData = (await response.json()) as ThreadsErrorResponse;
+        console.error('Threads API Publish Error Details:', JSON.stringify(errorData, null, 2));
         const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
         throw new Error(`Threads API Publish Error: ${errorMessage}`);
     }

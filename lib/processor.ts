@@ -1,11 +1,12 @@
 import { PrismaClient } from "@prisma/client";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 
 const prisma = new PrismaClient();
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API || "");
-const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+// Initialize Groq
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+});
 
 export async function processPost(postData: any, accountId: string) {
     // 1. Check if post exists
@@ -59,25 +60,33 @@ function calculateHotScore(post: any): number {
     return (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
 }
 
-async function translateContent(text: string): Promise<string> {
-    if (!process.env.GEMINI_API) return "Translation unavailable (No API Key)";
+export async function translateContent(text: string): Promise<string> {
+    if (!process.env.GROQ_API_KEY) return "Translation unavailable (No API Key)";
 
     try {
-        const prompt = `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable). 
-        
-        RULES:
-        1. Output ONLY the translated text. Do NOT add "Here is the translation" or any conversational filler.
-        2. Do NOT translate the username, date code (e.g., 2d, 10/07/24), or engagement numbers (e.g., 604, 197) if they appear at the start or end. Try to identify the main body of the post and translate that.
-        3. Maintain the tone and brevity.
-        
-        TEXT TO TRANSLATE:
-        ${text}`;
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable).
+                    
+                    RULES:
+                    1. Output ONLY the translated text. Do NOT add "Here is the translation" or any conversational filler.
+                    2. Do NOT translate the username, date code (e.g., 2d, 10/07/24), or engagement numbers (e.g., 604, 197) if they appear at the start or end. Try to identify the main body of the post and translate that.
+                    3. Maintain the tone and brevity.`
+                },
+                {
+                    role: "user",
+                    content: text
+                }
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.1,
+        });
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
-    } catch (e) {
-        console.error("Translation failed:", e);
+        return completion.choices[0]?.message?.content || "Translation failed";
+    } catch (e: any) {
+        console.error("Translation failed:", e.message);
         return "Translation failed";
     }
 }

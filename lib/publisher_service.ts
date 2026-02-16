@@ -93,7 +93,8 @@ async function processRow(rowIndex: number, row: any[]) {
                 }
 
                 // Construct direct download link which Threads API can ingest
-                mediaUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                // Using lh3.googleusercontent.com/d/ID as it is more reliable for direct image access
+                mediaUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
             } else {
                 console.warn(`  Could not extract ID from link: ${driveLink}`);
             }
@@ -106,6 +107,7 @@ async function processRow(rowIndex: number, row: any[]) {
 
         // 3. Create Container
         console.log(`  Creating Threads container (${mediaType})...`);
+        console.log(`  Media URL: ${mediaUrl}`);
         const containerId = await createContainer(
             THREADS_USER_ID!,
             THREADS_ACCESS_TOKEN!,
@@ -113,6 +115,10 @@ async function processRow(rowIndex: number, row: any[]) {
             mediaUrl,
             text
         );
+
+        console.log(`  Container ID: ${containerId}`);
+        console.log('  Waiting 10 seconds for container to be ready...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
 
         // 4. Publish
         console.log(`  Publishing container ${containerId}...`);
