@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { ThreadsScraper } from "./scraper";
 import { processPost } from "./processor";
 import { logToSheets } from "./sheets_logger";
+import { checkAndPublishApprovedPosts } from "./publisher_service";
 
 const prisma = new PrismaClient();
 const scraper = new ThreadsScraper();
@@ -10,7 +11,7 @@ const scraper = new ThreadsScraper();
 export function startPolling() {
     console.log("Starting polling service...");
 
-    // Schedule task to run every 5 minutes
+    // Schedule task to run every 5 minutes (Scraping)
     cron.schedule("*/5 * * * *", async () => {
         console.log("Running scheduled scrape...");
 
@@ -54,5 +55,11 @@ export function startPolling() {
         } catch (error) {
             console.error("Error in polling job:", error);
         }
+    });
+
+    // Schedule task to run every 10 minutes (Publishing - Pulse)
+    cron.schedule("*/10 * * * *", async () => {
+        console.log("Running scheduled publisher check...");
+        await checkAndPublishApprovedPosts();
     });
 }
