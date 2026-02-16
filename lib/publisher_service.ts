@@ -46,6 +46,10 @@ export async function checkAndPublishApprovedPosts() {
             if (status === 'APPROVED') {
                 console.log(`Processing row ${i + 1} (APPROVED)...`);
                 await processRow(i + 1, row);
+
+                // Throttled Loop: Wait 30 seconds between posts to avoid rate limits
+                console.log("Waiting 30 seconds before next post...");
+                await new Promise(resolve => setTimeout(resolve, 30000));
             }
         }
 
