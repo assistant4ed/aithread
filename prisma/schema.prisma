@@ -1,0 +1,40 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  profile_pic  String?
+  last_polled  DateTime?
+  posts        Post[]
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
+
+model Post {
+  id                 String   @id @default(cuid())
+  thread_id          String   @unique // The ID on Threads
+  content_original   String?
+  content_translated String?
+  media_urls         String?  // Stored as JSON string
+  likes              Int      @default(0)
+  replies            Int      @default(0)
+  reposts            Int      @default(0)
+  hot_score          Float    @default(0)
+  url                String?  // Link to the post
+  
+  account_id         String
+  account            Account  @relation(fields: [account_id], references: [id])
+  
+  created_at         DateTime @default(now())
+  posted_at          DateTime? // When it was posted on Threads
+}
