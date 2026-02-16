@@ -1,6 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import Groq from "groq-sdk";
 
+import { getSettings } from "./sheet_config";
+
 const prisma = new PrismaClient();
 
 // Initialize Groq
@@ -9,6 +11,8 @@ const groq = new Groq({
 });
 
 export async function processPost(postData: any, accountId: string) {
+    const settings = await getSettings();
+
     // 1. Check if post exists
     const existing = await prisma.post.findUnique({
         where: { thread_id: postData.threadId },
@@ -31,9 +35,9 @@ export async function processPost(postData: any, accountId: string) {
     // 2. Score
     const score = calculateHotScore(postData);
 
-    // 3. Translate if hot (threshold > 100 or whatever)
+    // 3. Translate if hot (threshold from sheet)
     let translated = "";
-    if (score > 50) { // Arbitrary threshold for demo
+    if (score > settings.hotScoreThreshold) {
         translated = await translateContent(postData.content);
     }
 
@@ -63,17 +67,14 @@ function calculateHotScore(post: any): number {
 export async function translateContent(text: string): Promise<string> {
     if (!process.env.GROQ_API_KEY) return "Translation unavailable (No API Key)";
 
+    const settings = await getSettings();
+
     try {
         const completion = await groq.chat.completions.create({
             messages: [
                 {
                     role: "system",
-                    content: `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable).
-                    
-                    RULES:
-                    1. Output ONLY the translated text. Do NOT add "Here is the translation" or any conversational filler.
-                    2. Do NOT translate the username, date code (e.g., 2d, 10/07/24), or engagement numbers (e.g., 604, 197) if they appear at the start or end. Try to identify the main body of the post and translate that.
-                    3. Maintain the tone and brevity.`
+                    content: settings.translationPrompt
                 },
                 {
                     role: "user",

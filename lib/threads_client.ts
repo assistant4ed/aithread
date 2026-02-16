@@ -36,6 +36,11 @@ export async function createContainer(
     const endpoint = `https://graph.threads.net/v1.0/${userId}/threads`;
 
     const body = new URLSearchParams();
+    // Safety check: if URL ends in .mp4, treat as VIDEO
+    if (url && (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().includes('video'))) {
+        mediaType = 'VIDEO';
+    }
+
     body.append('access_token', accessToken);
     body.append('media_type', mediaType);
 

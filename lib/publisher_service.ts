@@ -35,6 +35,31 @@ export async function checkAndPublishApprovedPosts() {
         // 0: Timestamp, 1: Account, 2: Hot Score, 3: Original Content, 4: Translated Content, 
         // 5: Media Drive Link, 6: Original URL, 7: Status, 8: Threads URL (New)
 
+
+        // Count posts published *today* from Column J (Index 9)
+        // Check existing rows for PUBLISHED status and today's date
+        let postsToday = 0;
+        const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const status = row[7]; // Status column
+            const publishedAt = row[9]; // New timestamp column for published time
+
+            if (status === 'PUBLISHED' && publishedAt) {
+                if (publishedAt.startsWith(todayStr)) {
+                    postsToday++;
+                }
+            }
+        }
+
+        console.log(`Posts published today so far: ${postsToday}`);
+
+        if (postsToday >= 3) {
+            console.log("Daily limit (3) reached. Skipping further posts until tomorrow.");
+            return;
+        }
+
         const statusColIndex = 7;
 
         // Skip header row
@@ -60,7 +85,14 @@ export async function checkAndPublishApprovedPosts() {
 
 async function processRow(rowIndex: number, row: any[]) {
     try {
-        const text = row[4]; // Translated Content
+        const account = row[1]; // Account username
+        let text = row[4]; // Translated Content
+
+        // Append Credit
+        if (text && account) {
+            text += `\n\nCredit: @${account}`;
+        }
+
         const driveLink = row[5]; // Media Drive Link
 
         // 2. Process Drive Link
@@ -143,7 +175,7 @@ async function processRow(rowIndex: number, row: any[]) {
             range: `Sheet1!H${rowIndex}:I${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
-                values: [['PUBLISHED', threadsUrl]] // threadsUrl goes to column I
+                values: [['PUBLISHED', threadsUrl, new Date().toISOString()]] // threadsUrl goes to column I, Timestamp to J
             }
         });
 
