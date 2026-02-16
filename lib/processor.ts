@@ -10,7 +10,11 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY
 });
 
-export async function processPost(postData: any, accountId: string) {
+export interface ProcessPostOptions {
+    skipTranslation?: boolean;
+}
+
+export async function processPost(postData: any, accountId: string, options: ProcessPostOptions = {}) {
     const settings = await getSettings();
 
     // 1. Check if post exists
@@ -35,9 +39,9 @@ export async function processPost(postData: any, accountId: string) {
     // 2. Score
     const score = calculateHotScore(postData);
 
-    // 3. Translate if hot (threshold from sheet)
+    // 3. Translate if hot (threshold from sheet) and translation is not skipped
     let translated = "";
-    if (score > settings.hotScoreThreshold) {
+    if (!options.skipTranslation && score > settings.hotScoreThreshold) {
         translated = await translateContent(postData.content);
     }
 

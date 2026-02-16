@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { ThreadsScraper } from "./scraper";
 import { processPost } from "./processor";
 import { logToSheets } from "./sheets_logger";
-import { checkAndPublishApprovedPosts } from "./publisher_service";
+import { checkAndPublishApprovedPosts, getDailyPublishCount } from "./publisher_service";
 
 const prisma = new PrismaClient();
 const scraper = new ThreadsScraper();
@@ -16,6 +16,13 @@ export function startPolling() {
         console.log("Running scheduled scrape...");
 
         try {
+            // Check daily limit — if reached, skip translation to save API quota
+            const postsToday = await getDailyPublishCount();
+            const limitReached = postsToday >= 3;
+            if (limitReached) {
+                console.log(`Daily publish limit reached (${postsToday}/3). Scraping will continue but translation will be skipped.`);
+            }
+
             const accounts = await prisma.account.findMany();
 
             for (const account of accounts) {
@@ -28,7 +35,7 @@ export function startPolling() {
                     console.log(`Found ${posts.length} posts for ${account.username}`);
 
                     for (const post of posts) {
-                        const savedPost = await processPost(post, account.id);
+                        const savedPost = await processPost(post, account.id, { skipTranslation: limitReached });
                         if (!savedPost) {
                             console.log(`- Post ${post.threadId} already exists (Updated stats).`);
                         } else {

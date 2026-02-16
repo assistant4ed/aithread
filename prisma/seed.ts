@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { initialAccounts } from "../lib/accounts";
+
 const prisma = new PrismaClient({
     log: ['info'],
 });
@@ -7,23 +7,8 @@ const prisma = new PrismaClient({
 async function main() {
     console.log("Start seeding...");
 
-    for (const account of initialAccounts) {
-        const existingAccount = await prisma.account.findUnique({
-            where: { username: account.username },
-        });
-
-        if (!existingAccount) {
-            await prisma.account.create({
-                data: {
-                    username: account.username,
-                    profile_pic: account.profile_pic,
-                },
-            });
-            console.log(`Created account: ${account.username}`);
-        } else {
-            console.log(`Account already exists: ${account.username}`);
-        }
-    }
+    // Initial accounts are now managed via Google Sheets.
+    // This script can be used for other database seeding tasks if needed.
 
     console.log("Seeding finished.");
 }

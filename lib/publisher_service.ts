@@ -6,6 +6,46 @@ const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
 const THREADS_USER_ID = process.env.THREADS_USER_ID;
 const THREADS_ACCESS_TOKEN = process.env.THREADS_ACCESS_TOKEN;
 
+const DAILY_LIMIT = 3;
+
+/**
+ * Returns the number of posts published today by checking the sheet.
+ */
+export async function getDailyPublishCount(): Promise<number> {
+    if (!SPREADSHEET_ID) return 0;
+
+    try {
+        const range = 'Sheet1!A:J';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range,
+        });
+
+        const rows = response.data.values;
+        if (!rows || rows.length === 0) return 0;
+
+        let postsToday = 0;
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const status = row[7];
+            const publishedAt = row[9];
+
+            if (status === 'PUBLISHED' && publishedAt) {
+                if (publishedAt.startsWith(todayStr)) {
+                    postsToday++;
+                }
+            }
+        }
+
+        return postsToday;
+    } catch (error) {
+        console.error('Error getting daily publish count:', error);
+        return 0;
+    }
+}
+
 export async function checkAndPublishApprovedPosts() {
     if (!SPREADSHEET_ID || !THREADS_USER_ID || !THREADS_ACCESS_TOKEN) {
         console.error('Missing required environment variables (GOOGLE_SPREADSHEET_ID, THREADS_USER_ID, THREADS_ACCESS_TOKEN).');
@@ -15,9 +55,16 @@ export async function checkAndPublishApprovedPosts() {
     console.log('Checking for APPROVED posts...');
 
     try {
-        // 1. Read Sheet Data
-        // Reading up to I to check if already processed or to ensure we have context
-        // I is the 'Threads URL' column
+        const postsToday = await getDailyPublishCount();
+
+        console.log(`Posts published today so far: ${postsToday}`);
+
+        if (postsToday >= DAILY_LIMIT) {
+            console.log(`Daily limit (${DAILY_LIMIT}) reached. Skipping further posts until tomorrow.`);
+            return;
+        }
+
+        // Read sheet data for publishing
         const range = 'Sheet1!A:I';
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
@@ -27,36 +74,6 @@ export async function checkAndPublishApprovedPosts() {
         const rows = response.data.values;
         if (!rows || rows.length === 0) {
             console.log('No data found in sheet.');
-            return;
-        }
-
-        // Headers are in row 0
-        // Indices based on ensureHeaders in sheets_logger.ts:
-        // 0: Timestamp, 1: Account, 2: Hot Score, 3: Original Content, 4: Translated Content, 
-        // 5: Media Drive Link, 6: Original URL, 7: Status, 8: Threads URL (New)
-
-
-        // Count posts published *today* from Column J (Index 9)
-        // Check existing rows for PUBLISHED status and today's date
-        let postsToday = 0;
-        const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const status = row[7]; // Status column
-            const publishedAt = row[9]; // New timestamp column for published time
-
-            if (status === 'PUBLISHED' && publishedAt) {
-                if (publishedAt.startsWith(todayStr)) {
-                    postsToday++;
-                }
-            }
-        }
-
-        console.log(`Posts published today so far: ${postsToday}`);
-
-        if (postsToday >= 3) {
-            console.log("Daily limit (3) reached. Skipping further posts until tomorrow.");
             return;
         }
 
@@ -83,10 +100,32 @@ export async function checkAndPublishApprovedPosts() {
     }
 }
 
+import { translateContent } from './processor';
+
+// ... (existing imports)
+
 async function processRow(rowIndex: number, row: any[]) {
     try {
         const account = row[1]; // Account username
         let text = row[4]; // Translated Content
+        const originalContent = row[3]; // Original Content
+
+        // 0. Check for missing translation (backlog item)
+        if (!text && originalContent) {
+            console.log(`  Row ${rowIndex}: Missing translation. Generating now...`);
+            text = await translateContent(originalContent);
+
+            // Update Sheet with translation (Col E / Index 4)
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `Sheet1!E${rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: {
+                    values: [[text]]
+                }
+            });
+            console.log(`  Row ${rowIndex}: Translation saved to sheet.`);
+        }
 
         // Append Credit
         if (text && account) {
@@ -95,7 +134,7 @@ async function processRow(rowIndex: number, row: any[]) {
 
         const driveLink = row[5]; // Media Drive Link
 
-        // 2. Process Drive Link
+        // 2. Process Drive Link (continued...)
         let mediaUrl = '';
         let mediaType: 'IMAGE' | 'VIDEO' = 'IMAGE';
 
@@ -169,10 +208,11 @@ async function processRow(rowIndex: number, row: any[]) {
         // 5. Update Sheet
         // Status -> PUBLISHED (Col H / Index 7)
         // Threads URL -> Col I / Index 8
+        // Timestamp -> Col J / Index 9
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Sheet1!H${rowIndex}:I${rowIndex}`,
+            range: `Sheet1!H${rowIndex}:J${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [['PUBLISHED', threadsUrl, new Date().toISOString()]] // threadsUrl goes to column I, Timestamp to J

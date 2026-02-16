@@ -1,5 +1,4 @@
 import { sheets } from "./google_client";
-import { initialAccounts } from "./accounts";
 
 const CONFIG_SPREADSHEET_ID = process.env.CONFIG_SHEET_ID;
 
@@ -46,8 +45,8 @@ export async function ensureConfigSheets() {
                 }
             });
 
-            // Seed with initial accounts
-            const accountRows = [["Username"], ...initialAccounts.map(a => [a.username])];
+            // Add header
+            const accountRows = [["Username"]];
             await sheets.spreadsheets.values.update({
                 spreadsheetId: CONFIG_SPREADSHEET_ID,
                 range: "Accounts!A1",
@@ -87,7 +86,7 @@ export async function ensureConfigSheets() {
 
 export async function getAccounts(): Promise<string[]> {
     if (cachedAccounts) return cachedAccounts;
-    if (!CONFIG_SPREADSHEET_ID) return initialAccounts.map(a => a.username);
+    if (!CONFIG_SPREADSHEET_ID) return [];
 
     try {
         const response = await sheets.spreadsheets.values.get({
@@ -105,7 +104,7 @@ export async function getAccounts(): Promise<string[]> {
         return accounts;
     } catch (error) {
         console.error("Error fetching accounts from sheet:", error);
-        return initialAccounts.map(a => a.username); // Fallback
+        return []; // Fallback empty
     }
 }
 

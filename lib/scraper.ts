@@ -77,8 +77,14 @@ export class ThreadsScraper {
                     // Extract Text
                     const text = el.textContent || "";
 
-                    // Extract Images
-                    const images = Array.from(el.querySelectorAll('img')).map((img: any) => img.src).filter((src: string) => src.startsWith('http'));
+                    // Extract Images (exclude profile pictures)
+                    const images = Array.from(el.querySelectorAll('img'))
+                        .filter((img: any) => {
+                            const alt = (img.alt || '').toLowerCase();
+                            return !alt.includes('profile picture');
+                        })
+                        .map((img: any) => img.src)
+                        .filter((src: string) => src.startsWith('http'));
 
                     // Extract Links (to find post URL)
                     const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
