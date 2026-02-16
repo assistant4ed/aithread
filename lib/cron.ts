@@ -12,7 +12,6 @@ const scraper = new ThreadsScraper();
 export function startPolling() {
     console.log("Starting polling service...");
 
-    // Schedule task to run every 5 minutes (Scraping)
     cron.schedule("*/5 * * * *", async () => {
         console.log("Running scheduled scrape...");
 
