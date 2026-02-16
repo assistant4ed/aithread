@@ -1,11 +1,8 @@
-import { sheets, drive } from "./google_client";
+import { sheets } from "./google_client";
 import { Post } from "@prisma/client";
-import fs from "fs";
-import path from "path";
-import axios from "axios";
+import { uploadMediaToGCS } from "./storage";
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
-const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
 export async function logToSheets(post: Post & { account: { username: string } }) {
     if (!SPREADSHEET_ID) {
@@ -15,21 +12,28 @@ export async function logToSheets(post: Post & { account: { username: string } }
 
     try {
         await ensureHeaders();
-        // Upload media to Drive if present
-        let driveLink = "";
+
+        // Upload media to GCS if present
+        let gcsUrl = "";
         if (post.media_urls) {
-            const mediaUrls = JSON.parse(post.media_urls);
-            if (mediaUrls.length > 0) {
-                // Determine media type (image or video)
-                // For MVP, simplistic check or default to first image
-                driveLink = await uploadMediaToDrive(mediaUrls[0], post.id);
+            const mediaItems = JSON.parse(post.media_urls);
+            if (mediaItems.length > 0) {
+                const firstItem = mediaItems[0];
+                const mediaUrl = typeof firstItem === 'string' ? firstItem : firstItem.url;
+                const mediaType = typeof firstItem === 'string' ? 'image' : firstItem.type;
+
+                // Include file extension based on media type so publisher can detect it
+                const extension = mediaType === 'video' ? '.mp4' : '.jpg';
+                const filename = `scraped/${Date.now()}_post_${post.id}${extension}`;
+
+                gcsUrl = await uploadMediaToGCS(mediaUrl, filename);
             }
         }
 
         // Append to Sheet
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: "Sheet1!A:H", // Adjust based on actual sheet name
+            range: "Sheet1!A:H",
             valueInputOption: "USER_ENTERED",
             requestBody: {
                 values: [[
@@ -38,14 +42,14 @@ export async function logToSheets(post: Post & { account: { username: string } }
                     post.hot_score.toString(),
                     post.content_original,
                     post.content_translated || "",
-                    driveLink,
+                    gcsUrl,
                     post.url || "",
                     "PENDING_REVIEW"
                 ]]
             }
         });
 
-        console.log(`Logged post ${post.id} to Sheets.`);
+        console.log(`Logged post ${post.id} to Sheets with GCS URL.`);
     } catch (error) {
         console.error("Error logging to Google Sheets:", error);
     }
@@ -74,7 +78,7 @@ async function ensureHeaders() {
                         "Hot Score",
                         "Original Content",
                         "Translated Content (HK)",
-                        "Media Drive Link",
+                        "Media GCS URL",
                         "Original URL",
                         "Status"
                     ]]
@@ -83,44 +87,5 @@ async function ensureHeaders() {
         }
     } catch (e) {
         console.error("Error ensuring headers:", e);
-    }
-}
-
-async function uploadMediaToDrive(url: string, postId: string): Promise<string> {
-    if (!DRIVE_FOLDER_ID) {
-        console.warn("GOOGLE_DRIVE_FOLDER_ID not set, skipping upload.");
-        return "";
-    }
-
-    try {
-        // 1. Download the file to a temp location
-        const response = await axios({
-            url,
-            method: 'GET',
-            responseType: 'stream'
-        });
-
-        // 2. Upload to Drive
-        const fileMetadata = {
-            name: `post_${postId}_${Date.now()}`,
-            parents: [DRIVE_FOLDER_ID]
-        };
-
-        const media = {
-            mimeType: response.headers['content-type'],
-            body: response.data
-        };
-
-        const file = await drive.files.create({
-            requestBody: fileMetadata,
-            media: media,
-            fields: 'id, webViewLink'
-        });
-
-        return file.data.webViewLink || "";
-
-    } catch (error) {
-        console.error("Error uploading to Drive:", error);
-        return "";
     }
 }

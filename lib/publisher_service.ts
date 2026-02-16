@@ -1,6 +1,7 @@
 
-import { sheets, drive } from './google_client';
-import { createContainer, publishContainer } from './threads_client';
+import { sheets } from './google_client';
+import { createContainer, publishContainer, waitForContainer } from './threads_client';
+import { translateContent } from './processor';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
 const THREADS_USER_ID = process.env.THREADS_USER_ID;
@@ -64,7 +65,6 @@ export async function checkAndPublishApprovedPosts() {
             return;
         }
 
-        // Read sheet data for publishing
         const range = 'Sheet1!A:I';
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
@@ -77,19 +77,14 @@ export async function checkAndPublishApprovedPosts() {
             return;
         }
 
-        const statusColIndex = 7;
-
-        // Skip header row
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            // Ensure row has enough columns
-            const status = row[statusColIndex];
+            const status = row[7];
 
             if (status === 'APPROVED') {
                 console.log(`Processing row ${i + 1} (APPROVED)...`);
                 await processRow(i + 1, row);
 
-                // Throttled Loop: Wait 30 seconds between posts to avoid rate limits
                 console.log("Waiting 30 seconds before next post...");
                 await new Promise(resolve => setTimeout(resolve, 30000));
             }
@@ -100,98 +95,68 @@ export async function checkAndPublishApprovedPosts() {
     }
 }
 
-import { translateContent } from './processor';
-
-// ... (existing imports)
-
 async function processRow(rowIndex: number, row: any[]) {
     try {
-        const account = row[1]; // Account username
+        const account = row[1];
         let text = row[4]; // Translated Content
-        const originalContent = row[3]; // Original Content
+        const originalContent = row[3];
 
-        // 0. Check for missing translation (backlog item)
+        // Auto-translate if missing
         if (!text && originalContent) {
             console.log(`  Row ${rowIndex}: Missing translation. Generating now...`);
             text = await translateContent(originalContent);
 
-            // Update Sheet with translation (Col E / Index 4)
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
                 range: `Sheet1!E${rowIndex}`,
                 valueInputOption: 'USER_ENTERED',
-                requestBody: {
-                    values: [[text]]
-                }
+                requestBody: { values: [[text]] }
             });
-            console.log(`  Row ${rowIndex}: Translation saved to sheet.`);
+            console.log(`  Row ${rowIndex}: Translation saved.`);
         }
 
-        // Append Credit
         if (text && account) {
             text += `\n\nCredit: @${account}`;
         }
 
-        const driveLink = row[5]; // Media Drive Link
-
-        // 2. Process Drive Link (continued...)
-        let mediaUrl = '';
+        // Media GCS URL is already in the sheet (column F)
+        const gcsUrl = row[5] || '';
         let mediaType: 'IMAGE' | 'VIDEO' = 'IMAGE';
 
-        if (driveLink) {
-            const fileId = extractFileId(driveLink);
-            if (fileId) {
-                console.log(`  Found Drive File ID: ${fileId}`);
-
-                // Make public so Threads can access it
-                await drive.permissions.create({
-                    fileId: fileId,
-                    requestBody: {
-                        role: 'reader',
-                        type: 'anyone',
-                    },
-                });
-
-                // Get Metadata to determine type
-                const fileMeta = await drive.files.get({
-                    fileId: fileId,
-                    fields: 'mimeType, webViewLink'
-                });
-
-                const mimeType = fileMeta.data.mimeType || '';
-                if (mimeType.startsWith('video/')) {
-                    mediaType = 'VIDEO';
-                }
-
-                // Construct direct download link which Threads API can ingest
-                // Using lh3.googleusercontent.com/d/ID as it is more reliable for direct image access
-                mediaUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
-            } else {
-                console.warn(`  Could not extract ID from link: ${driveLink}`);
+        if (gcsUrl) {
+            // Determine media type from URL or assume VIDEO for .mp4
+            if (gcsUrl.toLowerCase().includes('.mp4') || gcsUrl.toLowerCase().includes('video')) {
+                mediaType = 'VIDEO';
             }
+            console.log(`  Using GCS URL: ${gcsUrl} (${mediaType})`);
         }
 
-        if (!mediaUrl && !text) {
+        if (!gcsUrl && !text) {
             console.log(`  Row ${rowIndex}: No text or media, skipping.`);
             return;
         }
 
-        // 3. Create Container
+        // Create Threads container
         console.log(`  Creating Threads container (${mediaType})...`);
-        console.log(`  Media URL: ${mediaUrl}`);
         const containerId = await createContainer(
             THREADS_USER_ID!,
             THREADS_ACCESS_TOKEN!,
             mediaType,
-            mediaUrl,
+            gcsUrl,
             text
         );
 
         console.log(`  Container ID: ${containerId}`);
-        console.log('  Waiting 10 seconds for container to be ready...');
-        await new Promise(resolve => setTimeout(resolve, 10000));
 
-        // 4. Publish
+        if (mediaType === 'VIDEO') {
+            console.log('  Waiting for video container to finish processing...');
+            await waitForContainer(containerId, THREADS_ACCESS_TOKEN!);
+        } else {
+            console.log('  Waiting 10 seconds for container to be ready...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+        }
+
+        // Publish
         console.log(`  Publishing container ${containerId}...`);
         const publishedId = await publishContainer(
             THREADS_USER_ID!,
@@ -200,44 +165,25 @@ async function processRow(rowIndex: number, row: any[]) {
         );
 
         console.log(`  Published! ID: ${publishedId}`);
-        // Construct a plausible URL. 
-        // Note: The real URL might need fetching the post object from Threads API if ID isn't enough, 
-        // but typically threads.net/@user/post/ID works or redirects.
         const threadsUrl = `https://www.threads.net/post/${publishedId}`;
 
-        // 5. Update Sheet
-        // Status -> PUBLISHED (Col H / Index 7)
-        // Threads URL -> Col I / Index 8
-        // Timestamp -> Col J / Index 9
-
+        // Update Sheet: PUBLISHED + URL + timestamp
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
             range: `Sheet1!H${rowIndex}:J${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
-                values: [['PUBLISHED', threadsUrl, new Date().toISOString()]] // threadsUrl goes to column I, Timestamp to J
+                values: [['PUBLISHED', threadsUrl, new Date().toISOString()]]
             }
         });
 
     } catch (err) {
         console.error(`  Failed to process row ${rowIndex}:`, err);
-        // Optional: Update status to ERROR?
-        // Let's mark it as ERROR so we don't keep retrying infinitely if it's a permanent failure
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
             range: `Sheet1!H${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
-            requestBody: {
-                values: [['ERROR']]
-            }
+            requestBody: { values: [['ERROR']] }
         });
     }
-}
-
-function extractFileId(url: string): string | null {
-    // Matches patterns like:
-    // https://drive.google.com/file/d/1hUJm7EaMAnKgvBTUbhMZ-Qy5X7dP4nWd/view?usp=drivesdk
-    // https://drive.google.com/open?id=1hUJm7EaMAnKgvBTUbhMZ-Qy5X7dP4nWd
-    const match = url.match(/[-\w]{25,}/);
-    return match ? match[0] : null;
 }

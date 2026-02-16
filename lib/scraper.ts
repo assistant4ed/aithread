@@ -2,10 +2,15 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page } from 'puppeteer';
 
+export interface MediaItem {
+    url: string;
+    type: 'image' | 'video';
+}
+
 export interface ThreadPost {
     threadId: string;
     content: string;
-    mediaUrls: string[];
+    mediaUrls: MediaItem[];
     likes: number;
     replies: number;
     reposts: number;
@@ -55,7 +60,26 @@ export class ThreadsScraper {
             console.log(`Navigating to https://www.threads.net/@${username}`);
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
 
-            await page.waitForSelector('main', { timeout: 10000 }).catch(() => console.log("Timeout waiting for main"));
+            await page.waitForSelector('body', { timeout: 10000 });
+
+            // Scroll down to trigger lazy loading of media/videos
+            await page.evaluate(async () => {
+                await new Promise<void>((resolve) => {
+                    let totalHeight = 0;
+                    const distance = 100;
+                    const timer = setInterval(() => {
+                        const scrollHeight = document.body.scrollHeight;
+                        window.scrollBy(0, distance);
+                        totalHeight += distance;
+                        if (totalHeight >= 2000) {
+                            clearInterval(timer);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             const posts = await page.evaluate(() => {
                 const potentialSelectors = [
@@ -74,21 +98,25 @@ export class ThreadsScraper {
                 }
 
                 return postElements.map((el: any) => {
-                    // Extract Text
                     const text = el.textContent || "";
 
-                    // Extract Images (exclude profile pictures)
+                    const videos = Array.from(el.querySelectorAll('video'))
+                        .map((vid: any) => vid.src || '')
+                        .filter((src: string) => src.startsWith('http'))
+                        .map((src: string) => ({ url: src, type: 'video' as const }));
+
                     const images = Array.from(el.querySelectorAll('img'))
                         .filter((img: any) => {
                             const alt = (img.alt || '').toLowerCase();
                             return !alt.includes('profile picture');
                         })
                         .map((img: any) => img.src)
-                        .filter((src: string) => src.startsWith('http'));
+                        .filter((src: string) => src.startsWith('http'))
+                        .map((src: string) => ({ url: src, type: 'image' as const }));
 
-                    // Extract Links (to find post URL)
+                    const media = videos.length > 0 ? videos : images;
+
                     const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
-                    // Find the link that looks like a post link
                     const postUrl = links.find((l: string) => l.includes('/post/')) || "";
 
                     let likes = 0;
@@ -98,7 +126,6 @@ export class ThreadsScraper {
                     const innerText = el.innerText || "";
                     const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
 
-                    // Strategy 1: Look for aria-labels on descendants
                     const likeEl = el.querySelector('[aria-label*="likes"]');
                     if (likeEl) {
                         const str = likeEl.getAttribute('aria-label');
@@ -189,7 +216,7 @@ export class ThreadsScraper {
                         likes,
                         replies,
                         reposts,
-                        mediaUrls: images,
+                        mediaUrls: media,
                         postUrl
                     };
                 });

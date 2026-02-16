@@ -111,3 +111,54 @@ export async function publishContainer(
     const data = (await response.json()) as ThreadsSuccessResponse;
     return data.id;
 }
+
+/**
+ * Polls a media container's status until it is FINISHED (required for VIDEO).
+ * 
+ * @param containerId The container ID to check.
+ * @param accessToken The long-lived access token.
+ * @param maxAttempts Maximum number of polling attempts (default 30).
+ * @param intervalMs Milliseconds between polls (default 5000).
+ * @returns The final status string.
+ */
+export async function waitForContainer(
+    containerId: string,
+    accessToken: string,
+    maxAttempts: number = 30,
+    intervalMs: number = 10000
+): Promise<string> {
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+
+        const endpoint = `https://graph.threads.net/v1.0/${containerId}?fields=status,error_message&access_token=${accessToken}`;
+
+        try {
+            const response = await fetch(endpoint);
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.warn(`  Status check failed (attempt ${i + 1}/${maxAttempts}), HTTP ${response.status}: ${errorBody}`);
+                continue;
+            }
+
+            const data = await response.json() as any;
+            const status = data.status;
+            console.log(`  Container status (attempt ${i + 1}/${maxAttempts}): ${status}${data.error_message ? ' — ' + data.error_message : ''}`);
+
+            if (status === 'FINISHED') {
+                return status;
+            }
+
+            if (status === 'ERROR') {
+                throw new Error(`Container processing failed: ${data.error_message || 'Unknown error'}`);
+            }
+
+            // IN_PROGRESS or EXPIRED — continue polling
+        } catch (err: any) {
+            if (err.message.startsWith('Container processing failed')) throw err;
+            console.warn(`  Status check exception (attempt ${i + 1}/${maxAttempts}):`, err.message);
+        }
+    }
+
+    throw new Error(`Container ${containerId} did not finish after ${maxAttempts} attempts`);
+}

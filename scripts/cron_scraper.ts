@@ -16,11 +16,10 @@ function calculateScore(likes: number, replies: number, reposts: number): number
 function createPostObject(threadPost: any, username: string) {
     const score = calculateScore(threadPost.likes, threadPost.replies, threadPost.reposts);
     return {
-        id: threadPost.threadId, // Use threadId as ID
+        id: threadPost.threadId,
         thread_id: threadPost.threadId,
         content_original: threadPost.content,
         content_translated: "",
-        // mediaUrls is array, Prisma expects JSON string
         media_urls: JSON.stringify(threadPost.mediaUrls),
         likes: threadPost.likes,
         replies: threadPost.replies,

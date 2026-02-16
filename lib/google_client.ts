@@ -22,3 +22,5 @@ if (fs.existsSync(CREDENTIALS_PATH)) {
 
 export const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 export const drive = google.drive({ version: 'v3', auth: oauth2Client });
+export const storage = google.storage({ version: 'v1', auth: oauth2Client });
+export { oauth2Client };

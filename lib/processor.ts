@@ -5,7 +5,6 @@ import { getSettings } from "./sheet_config";
 
 const prisma = new PrismaClient();
 
-// Initialize Groq
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY
 });
