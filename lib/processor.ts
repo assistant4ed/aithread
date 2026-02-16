@@ -63,7 +63,15 @@ async function translateContent(text: string): Promise<string> {
     if (!process.env.GEMINI_API) return "Translation unavailable (No API Key)";
 
     try {
-        const prompt = `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable). Maintain the tone and brevity.\n\n${text}`;
+        const prompt = `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable). 
+        
+        RULES:
+        1. Output ONLY the translated text. Do NOT add "Here is the translation" or any conversational filler.
+        2. Do NOT translate the username, date code (e.g., 2d, 10/07/24), or engagement numbers (e.g., 604, 197) if they appear at the start or end. Try to identify the main body of the post and translate that.
+        3. Maintain the tone and brevity.
+        
+        TEXT TO TRANSLATE:
+        ${text}`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;

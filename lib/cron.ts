@@ -28,15 +28,20 @@ export function startPolling() {
 
                     for (const post of posts) {
                         const savedPost = await processPost(post, account.id);
-                        console.log(`Processed post ${savedPost?.thread_id} with hot_score: ${savedPost?.hot_score}`);
-                        if (savedPost && savedPost.hot_score >= 0) { // Lowered for trial to ensure logging works
-                            // Fetch full post object including account for logging
-                            const fullPost = await prisma.post.findUnique({
-                                where: { id: savedPost.id },
-                                include: { account: true }
-                            });
-                            if (fullPost) {
-                                await logToSheets(fullPost);
+                        if (!savedPost) {
+                            console.log(`- Post ${post.threadId} already exists (Updated stats).`);
+                        } else {
+                            console.log(`+ New Post ${savedPost.thread_id} processed. Hot Score: ${savedPost.hot_score}`);
+
+                            if (savedPost.hot_score >= 0) {
+                                // Fetch full post object including account for logging
+                                const fullPost = await prisma.post.findUnique({
+                                    where: { id: savedPost.id },
+                                    include: { account: true }
+                                });
+                                if (fullPost) {
+                                    await logToSheets(fullPost);
+                                }
                             }
                         }
                     }
