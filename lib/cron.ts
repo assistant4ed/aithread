@@ -4,6 +4,7 @@ import { ThreadsScraper } from "./scraper";
 import { processPost } from "./processor";
 import { logToSheets } from "./sheets_logger";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "./publisher_service";
+import { getAccounts } from "./sheet_config";
 
 const prisma = new PrismaClient();
 const scraper = new ThreadsScraper();
@@ -23,16 +24,29 @@ export function startPolling() {
                 console.log(`Daily publish limit reached (${postsToday}/3). Scraping will continue but translation will be skipped.`);
             }
 
-            const accounts = await prisma.account.findMany();
+            const usernames = await getAccounts();
+            console.log(`Found ${usernames.length} accounts to scrape from config sheet.`);
 
-            for (const account of accounts) {
-                console.log(`Scraping ${account.username}...`);
+            if (usernames.length === 0) {
+                console.log("No accounts configured. Add usernames to the 'Accounts' sheet in your config spreadsheet.");
+                return;
+            }
+
+            for (const username of usernames) {
+                console.log(`Scraping ${username}...`);
                 // Add artificial delay to avoid rate limits
                 await new Promise(r => setTimeout(r, 5000 + Math.random() * 5000));
 
                 try {
-                    const posts = await scraper.scrapeAccount(account.username);
-                    console.log(`Found ${posts.length} posts for ${account.username}`);
+                    // Upsert account in Prisma DB so Post foreign key is satisfied
+                    const account = await prisma.account.upsert({
+                        where: { username },
+                        update: { last_polled: new Date() },
+                        create: { username },
+                    });
+
+                    const posts = await scraper.scrapeAccount(username);
+                    console.log(`Found ${posts.length} posts for ${username}`);
 
                     for (const post of posts) {
                         const savedPost = await processPost(post, account.id, { skipTranslation: limitReached });
@@ -55,7 +69,7 @@ export function startPolling() {
                     }
 
                 } catch (err) {
-                    console.error(`Failed to scrape ${account.username}`, err);
+                    console.error(`Failed to scrape ${username}`, err);
                 }
             }
 
