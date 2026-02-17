@@ -24,6 +24,7 @@ export default function NewWorkspacePage() {
         threadsToken: "",
         dailyPostLimit: 3,
         topicFilter: "",
+        maxPostAgeHours: 48,
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -43,6 +44,7 @@ export default function NewWorkspacePage() {
                         .filter(Boolean),
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
+                    maxPostAgeHours: Number(form.maxPostAgeHours),
                     topicFilter: form.topicFilter || null,
                 }),
             });
@@ -116,7 +118,7 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                     {/* Hot Score Threshold */}
                     <Field label="Hot Score Threshold">
                         <input
@@ -125,6 +127,17 @@ export default function NewWorkspacePage() {
                             onChange={(e) => setForm({ ...form, hotScoreThreshold: Number(e.target.value) })}
                             className="input"
                             min={0}
+                        />
+                    </Field>
+
+                    {/* Max Post Age */}
+                    <Field label="Max Post Age (hours)" hint="Skip posts older than this">
+                        <input
+                            type="number"
+                            value={form.maxPostAgeHours}
+                            onChange={(e) => setForm({ ...form, maxPostAgeHours: Number(e.target.value) })}
+                            className="input"
+                            min={1}
                         />
                     </Field>
 

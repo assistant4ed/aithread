@@ -4,6 +4,7 @@ import { SCRAPE_QUEUE_NAME, ScrapeJobData, redisConnection } from "../lib/queue"
 import { ThreadsScraper } from "../lib/scraper";
 import { processPost } from "../lib/processor";
 import { uploadMediaToGCS } from "../lib/storage";
+import { prisma } from "../lib/prisma";
 
 const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "3", 10);
 
@@ -68,6 +69,15 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     const filename = `scraped/${Date.now()}_${savedPost.id}${extension}`;
                     const gcsUrl = await uploadMediaToGCS(firstItem.url, filename);
                     console.log(`[ScrapeWorker]   📎 Media uploaded: ${gcsUrl}`);
+
+                    // Persist the GCS URL so the publisher uses it instead of the expired CDN URL
+                    const updatedMedia = mediaItems.map((item: any, idx: number) =>
+                        idx === 0 ? { ...item, url: gcsUrl } : item
+                    );
+                    await prisma.post.update({
+                        where: { id: savedPost.id },
+                        data: { mediaUrls: updatedMedia },
+                    });
                 } catch (mediaErr) {
                     console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr);
                 }

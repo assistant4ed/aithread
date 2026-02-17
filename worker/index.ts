@@ -46,6 +46,7 @@ cron.schedule("*/5 * * * *", async () => {
                 translationPrompt: ws.translationPrompt,
                 hotScoreThreshold: ws.hotScoreThreshold,
                 topicFilter: ws.topicFilter,
+                maxPostAgeHours: ws.maxPostAgeHours,
             };
 
             // Enqueue one job per target account

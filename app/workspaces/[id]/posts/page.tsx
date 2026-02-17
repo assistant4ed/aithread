@@ -28,18 +28,25 @@ export default function PostsPage() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [total, setTotal] = useState(0);
     const [activeTab, setActiveTab] = useState<string>("PENDING_REVIEW");
+    const [sortBy, setSortBy] = useState("createdAt");
     const [loading, setLoading] = useState(true);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
         const status = activeTab === "ALL" ? "" : activeTab;
-        const qs = new URLSearchParams({ workspaceId, ...(status && { status }), limit: "50" });
+        const qs = new URLSearchParams({
+            workspaceId,
+            ...(status && { status }),
+            limit: "50",
+            sortBy,
+            sortOrder: "desc",
+        });
         const res = await fetch(`/api/posts?${qs}`);
         const data = await res.json();
         setPosts(data.posts);
         setTotal(data.total);
         setLoading(false);
-    }, [workspaceId, activeTab]);
+    }, [workspaceId, activeTab, sortBy]);
 
     useEffect(() => {
         fetchPosts();
@@ -73,7 +80,18 @@ export default function PostsPage() {
                     </a>
                     <h1 className="text-2xl font-bold tracking-tight mt-1">Post Review Queue</h1>
                 </div>
-                <span className="text-sm text-muted">{total} posts</span>
+                <div className="flex items-center gap-3">
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="text-xs font-mono bg-surface border border-border rounded-md px-2 py-1 text-muted outline-none focus:border-accent"
+                    >
+                        <option value="createdAt">Newest</option>
+                        <option value="hotScore">Highest Score</option>
+                        <option value="likes">Most Likes</option>
+                    </select>
+                    <span className="text-sm text-muted">{total} posts</span>
+                </div>
             </div>
 
             {/* Status Tabs */}

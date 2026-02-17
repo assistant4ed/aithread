@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         const allowedFields = [
             "name", "isActive", "targetAccounts", "translationPrompt",
             "hotScoreThreshold", "threadsAppId", "threadsToken", "dailyPostLimit",
-            "topicFilter",
+            "topicFilter", "maxPostAgeHours",
         ];
 
         const data: Record<string, any> = {};

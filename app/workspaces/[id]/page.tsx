@@ -113,6 +113,10 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                             <dd className="font-mono">{workspace.hotScoreThreshold}</dd>
                         </div>
                         <div className="flex justify-between">
+                            <dt className="text-muted">Max Post Age</dt>
+                            <dd className="font-mono">{workspace.maxPostAgeHours}h</dd>
+                        </div>
+                        <div className="flex justify-between">
                             <dt className="text-muted">Daily Post Limit</dt>
                             <dd className="font-mono">{workspace.dailyPostLimit}</dd>
                         </div>

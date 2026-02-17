@@ -23,6 +23,7 @@ model Workspace {
   translationPrompt String   @db.Text
   topicFilter       String?  // Optional topic/keyword filter for AI relevance check
   hotScoreThreshold Float    @default(50)
+  maxPostAgeHours   Int      @default(48) // Skip posts older than this (hours)
 
   // Threads API credentials (per workspace)
   threadsAppId      String?
@@ -82,5 +83,6 @@ model Post {
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
 
   createdAt         DateTime  @default(now())
+  postedAt          DateTime? // When the post was originally posted on Threads
   publishedAt       DateTime?
 }

@@ -9,6 +9,7 @@ export interface WorkspaceSettings {
     translationPrompt: string;
     hotScoreThreshold: number;
     topicFilter?: string | null;
+    maxPostAgeHours?: number;
 }
 
 export interface ProcessPostOptions {
@@ -27,6 +28,7 @@ export async function processPost(
         likes: number;
         replies: number;
         reposts: number;
+        postedAt?: Date;
         postUrl: string;
     },
     sourceAccount: string,
@@ -34,7 +36,17 @@ export async function processPost(
     settings: WorkspaceSettings,
     options: ProcessPostOptions = {}
 ) {
-    // 1. Check if post exists
+    // 1. Freshness gate — skip posts older than maxPostAgeHours
+    if (settings.maxPostAgeHours && postData.postedAt) {
+        const ageMs = Date.now() - postData.postedAt.getTime();
+        const ageHours = ageMs / (1000 * 60 * 60);
+        if (ageHours > settings.maxPostAgeHours) {
+            console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
+            return undefined;
+        }
+    }
+
+    // 2. Check if post exists
     const existing = await prisma.post.findUnique({
         where: { threadId: postData.threadId },
     });
@@ -54,7 +66,7 @@ export async function processPost(
         return undefined; // Not new
     }
 
-    // 2. Topic Filter Check
+    // 3. Topic Filter Check
     if (settings.topicFilter && postData.content) {
         const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter);
         if (!isRelevant) {
@@ -80,16 +92,22 @@ export async function processPost(
         }
     }
 
-    // 3. Score
+    // 4. Score
     const score = calculateHotScore(postData);
 
-    // 4. Translate if hot and not skipped
+    // 5. Hot score gate — skip low-engagement posts entirely
+    if (score < settings.hotScoreThreshold) {
+        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${score.toFixed(0)}, threshold: ${settings.hotScoreThreshold})`);
+        return undefined;
+    }
+
+    // 6. Translate if not skipped
     let translated = "";
-    if (!options.skipTranslation && score > settings.hotScoreThreshold) {
+    if (!options.skipTranslation) {
         translated = await translateContent(postData.content, settings.translationPrompt);
     }
 
-    // 5. Save
+    // 7. Save
     const savedPost = await prisma.post.create({
         data: {
             threadId: postData.threadId,
@@ -102,6 +120,7 @@ export async function processPost(
             reposts: postData.reposts,
             hotScore: score,
             sourceUrl: postData.postUrl,
+            postedAt: postData.postedAt || null,
             status: "PENDING_REVIEW",
             workspaceId,
         },
@@ -110,8 +129,20 @@ export async function processPost(
     return savedPost;
 }
 
-export function calculateHotScore(post: { likes: number; replies: number; reposts: number }): number {
-    return (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+/**
+ * Calculate hot score with time-decay.
+ * Base score = likes×1.5 + replies×2 + reposts×1
+ * Decay: score halves every 24 hours since posting.
+ * If postedAt is missing, no decay is applied.
+ */
+export function calculateHotScore(post: { likes: number; replies: number; reposts: number; postedAt?: Date }): number {
+    const baseScore = (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+
+    if (!post.postedAt) return baseScore;
+
+    const ageHours = (Date.now() - post.postedAt.getTime()) / (1000 * 60 * 60);
+    const decayFactor = Math.pow(0.5, ageHours / 24); // Half-life = 24 hours
+    return baseScore * decayFactor;
 }
 
 export async function checkTopicRelevance(content: string, topic: string): Promise<boolean> {

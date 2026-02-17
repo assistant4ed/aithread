@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/posts — query posts with optional filters
-// Query params: status, workspaceId, limit, offset
+// Query params: status, workspaceId, limit, offset, sortBy, sortOrder
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
@@ -15,10 +15,17 @@ export async function GET(request: NextRequest) {
     if (status) where.status = status;
     if (workspaceId) where.workspaceId = workspaceId;
 
+    // Sorting: default by createdAt desc, allow hotScore sorting
+    const sortBy = searchParams.get("sortBy") || "createdAt";
+    const sortOrder = searchParams.get("sortOrder") || "desc";
+    const allowedSortFields = ["createdAt", "hotScore", "likes", "postedAt"];
+    const orderByField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+    const orderByDir = sortOrder === "asc" ? "asc" : "desc";
+
     const [posts, total] = await Promise.all([
         prisma.post.findMany({
             where,
-            orderBy: { createdAt: "desc" },
+            orderBy: { [orderByField]: orderByDir },
             take: Math.min(limit, 100),
             skip: offset,
             include: {

@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
             threadsToken,
             dailyPostLimit,
             topicFilter,
+            maxPostAgeHours,
         } = await request.json();
 
         if (!name || !translationPrompt) {
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
                 threadsToken: threadsToken || null,
                 dailyPostLimit: dailyPostLimit || 3,
                 topicFilter: topicFilter || null,
+                maxPostAgeHours: maxPostAgeHours ?? 48,
             },
         });
 
