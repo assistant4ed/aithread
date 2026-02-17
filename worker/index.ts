@@ -1,20 +1,19 @@
 import "dotenv/config";
 import cron from "node-cron";
 import { prisma } from "../lib/prisma";
-import { ThreadsScraper } from "../lib/scraper";
-import { processPost, WorkspaceSettings } from "../lib/processor";
+import { scrapeQueue, ScrapeJobData } from "../lib/queue";
+import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
-import { uploadMediaToGCS } from "../lib/storage";
 
-const scraper = new ThreadsScraper();
-
-console.log("=== Threads Monitor Worker ===");
+console.log("=== Threads Monitor Worker (Producer) ===");
 console.log("Starting worker process...");
 
-// ─── Scraping Job (every 5 minutes) ─────────────────────────────────────────
+// ─── Scraping Job (every 5 minutes) — PRODUCER ──────────────────────────────
+// Instead of scraping directly, this job enqueues one BullMQ job per account.
+// The actual scraping happens in worker/scrape-worker.ts (the consumer).
 
 cron.schedule("*/5 * * * *", async () => {
-    console.log("\n[Scraper] Running scheduled scrape...");
+    console.log("\n[Producer] Enqueuing scrape jobs...");
 
     try {
         const workspaces = await prisma.workspace.findMany({
@@ -22,15 +21,17 @@ cron.schedule("*/5 * * * *", async () => {
         });
 
         if (workspaces.length === 0) {
-            console.log("[Scraper] No active workspaces. Nothing to do.");
+            console.log("[Producer] No active workspaces. Nothing to do.");
             return;
         }
 
+        let totalJobs = 0;
+
         for (const ws of workspaces) {
-            console.log(`\n[Scraper] === Workspace: ${ws.name} ===`);
+            console.log(`\n[Producer] === Workspace: ${ws.name} ===`);
 
             if (ws.targetAccounts.length === 0) {
-                console.log(`[Scraper] No target accounts configured. Skipping.`);
+                console.log(`[Producer] No target accounts configured. Skipping.`);
                 continue;
             }
 
@@ -38,7 +39,7 @@ cron.schedule("*/5 * * * *", async () => {
             const postsToday = await getDailyPublishCount(ws.id);
             const limitReached = postsToday >= ws.dailyPostLimit;
             if (limitReached) {
-                console.log(`[Scraper] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
+                console.log(`[Producer] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
             }
 
             const settings: WorkspaceSettings = {
@@ -47,60 +48,35 @@ cron.schedule("*/5 * * * *", async () => {
                 topicFilter: ws.topicFilter,
             };
 
+            // Enqueue one job per target account
             for (const username of ws.targetAccounts) {
-                console.log(`[Scraper] Scraping @${username}...`);
+                const jobData: ScrapeJobData = {
+                    username,
+                    workspaceId: ws.id,
+                    settings,
+                    skipTranslation: limitReached,
+                };
 
-                // Rate limit delay
-                await new Promise(r => setTimeout(r, 3000 + Math.random() * 4000));
-
-                try {
-                    const posts = await scraper.scrapeAccount(username);
-                    console.log(`[Scraper] Found ${posts.length} posts for @${username}`);
-
-                    for (const post of posts) {
-                        if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
-
-                        const savedPost = await processPost(
-                            post,
-                            username,
-                            ws.id,
-                            settings,
-                            { skipTranslation: limitReached }
-                        );
-
-                        if (!savedPost) {
-                            console.log(`[Scraper]   - ${post.threadId} already exists (stats updated)`);
-                        } else {
-                            console.log(`[Scraper]   + New: ${savedPost.threadId} (score: ${savedPost.hotScore})`);
-
-                            // Upload media to GCS if present
-                            if (savedPost.mediaUrls) {
-                                const mediaItems = Array.isArray(savedPost.mediaUrls) ? savedPost.mediaUrls : [];
-                                if (mediaItems.length > 0) {
-                                    try {
-                                        const firstItem = mediaItems[0] as { url: string; type: string };
-                                        const extension = firstItem.type === "video" ? ".mp4" : ".jpg";
-                                        const filename = `scraped/${Date.now()}_${savedPost.id}${extension}`;
-                                        const gcsUrl = await uploadMediaToGCS(firstItem.url, filename);
-                                        console.log(`[Scraper]   📎 Media uploaded: ${gcsUrl}`);
-                                    } catch (mediaErr) {
-                                        console.error(`[Scraper]   ⚠ Media upload failed:`, mediaErr);
-                                    }
-                                }
-                            }
-                        }
+                await scrapeQueue.add(
+                    "scrape-account",
+                    jobData,
+                    {
+                        // Deduplicate: if a job for this account is already in the queue, skip it
+                        jobId: `scrape-${ws.id}-${username}`,
                     }
-                } catch (err) {
-                    console.error(`[Scraper] Failed to scrape @${username}:`, err);
-                }
+                );
+                totalJobs++;
             }
         }
+
+        console.log(`[Producer] Enqueued ${totalJobs} scrape jobs.`);
     } catch (error) {
-        console.error("[Scraper] Error in scraping job:", error);
+        console.error("[Producer] Error enqueuing scrape jobs:", error);
     }
 });
 
 // ─── Publishing Job (every 10 minutes) ──────────────────────────────────────
+// Publisher stays as-is — low volume, no parallelism needed.
 
 cron.schedule("*/10 * * * *", async () => {
     console.log("\n[Publisher] Running scheduled publish check...");
@@ -133,6 +109,6 @@ cron.schedule("*/10 * * * *", async () => {
 });
 
 console.log("Worker started. Cron jobs:");
-console.log("  - Scraper:   every 5 minutes");
+console.log("  - Producer:   every 5 minutes (enqueues scrape jobs to Redis)");
 console.log("  - Publisher:  every 10 minutes");
 console.log("Waiting for next scheduled run...\n");

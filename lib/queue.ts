@@ -1,0 +1,55 @@
+import { Queue, ConnectionOptions } from "bullmq";
+import { WorkspaceSettings } from "./processor";
+
+// ─── Redis Connection ────────────────────────────────────────────────────────
+
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+
+/**
+ * Parse REDIS_URL into a BullMQ-compatible ConnectionOptions object.
+ * Works with Upstash, Railway, local Redis, etc.
+ */
+function parseRedisUrl(url: string): ConnectionOptions {
+    const parsed = new URL(url);
+    return {
+        host: parsed.hostname,
+        port: parseInt(parsed.port || "6379", 10),
+        password: parsed.password || undefined,
+        username: parsed.username || undefined,
+        tls: parsed.protocol === "rediss:" ? {} : undefined,
+        maxRetriesPerRequest: null, // Required by BullMQ
+        enableReadyCheck: false,
+    };
+}
+
+/**
+ * Shared connection options for BullMQ Queue and Worker.
+ */
+export const redisConnection: ConnectionOptions = parseRedisUrl(REDIS_URL);
+
+// ─── Queue Definitions ──────────────────────────────────────────────────────
+
+export const SCRAPE_QUEUE_NAME = "scrape-accounts";
+
+export interface ScrapeJobData {
+    username: string;
+    workspaceId: string;
+    settings: WorkspaceSettings;
+    skipTranslation: boolean;
+}
+
+/**
+ * The producer-side queue. Use this to add jobs.
+ */
+export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
+    connection: redisConnection,
+    defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+            type: "exponential",
+            delay: 30_000, // 30s, 60s, 120s
+        },
+        removeOnComplete: { count: 500 },  // Keep last 500 completed
+        removeOnFail: { count: 200 },       // Keep last 200 failed for debugging
+    },
+});
