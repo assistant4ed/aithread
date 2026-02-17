@@ -210,6 +210,12 @@ export class ThreadsScraper {
                         }
                     }
 
+                    let postedAt: string | null = null;
+                    const timeEl = el.querySelector('time');
+                    if (timeEl) {
+                        postedAt = timeEl.getAttribute('datetime');
+                    }
+
                     return {
                         content: innerText.slice(0, 300),
                         threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
@@ -217,7 +223,8 @@ export class ThreadsScraper {
                         replies,
                         reposts,
                         mediaUrls: media,
-                        postUrl
+                        postUrl,
+                        postedAt: postedAt ? new Date(postedAt) : undefined,
                     };
                 });
             });
