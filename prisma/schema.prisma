@@ -1,23 +1,50 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma schema — PostgreSQL, Multi-Workspace Architecture
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Account {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  profile_pic  String?
-  last_polled  DateTime?
-  posts        Post[]
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+// ─── Workspace ───────────────────────────────────────────────────────────────
+
+model Workspace {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  isActive          Boolean  @default(true)
+
+  // Accounts to scrape
+  targetAccounts    String[] // PostgreSQL native array, e.g. ["openai", "nvidia"]
+
+  // AI / Translation
+  translationPrompt String   @db.Text
+  hotScoreThreshold Float    @default(50)
+
+  // Threads API credentials (per workspace)
+  threadsAppId      String?
+  threadsToken      String?
+
+  // Publishing limits
+  dailyPostLimit    Int      @default(3)
+
+  // Relations
+  posts             Post[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ─── Post ────────────────────────────────────────────────────────────────────
+
+enum PostStatus {
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  ERROR
 }
 
 enum CoherenceStatus {
@@ -27,25 +54,32 @@ enum CoherenceStatus {
 }
 
 model Post {
-  id                 String   @id @default(cuid())
-  thread_id          String   @unique // The ID on Threads
-  content_original   String?
-  content_translated String?
-  media_urls         String?  // Stored as JSON string
-  likes              Int      @default(0)
-  replies            Int      @default(0)
-  reposts            Int      @default(0)
-  hot_score          Float    @default(0)
-  url                String?  // Link to the post
-  
-  account_id         String
-  account            Account  @relation(fields: [account_id], references: [id])
-  
-  created_at         DateTime @default(now())
-  posted_at          DateTime? // When it was posted on Threads
+  id                String    @id @default(cuid())
+  threadId          String    @unique // Original ID on Threads
+  sourceAccount     String    // Username this was scraped from
 
-  // Trend Analysis Fields
-  coherence_status   CoherenceStatus @default(PENDING)
-  topic_cluster_id   String?
-  last_coherence_check DateTime?
+  contentOriginal   String?   @db.Text
+  contentTranslated String?   @db.Text
+  mediaUrls         Json?     // [{url: string, type: "image"|"video"}]
+
+  likes             Int       @default(0)
+  replies           Int       @default(0)
+  reposts           Int       @default(0)
+  hotScore          Float     @default(0)
+
+  sourceUrl         String?   // Link to the original post
+  status            PostStatus @default(PENDING_REVIEW)
+  publishedUrl      String?   // Threads URL after publishing
+
+  // Trend Analysis
+  coherenceStatus   CoherenceStatus @default(PENDING)
+  topicClusterId    String?
+  lastCoherenceCheck DateTime?
+
+  // Relations
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+
+  createdAt         DateTime  @default(now())
+  publishedAt       DateTime?
 }

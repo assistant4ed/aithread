@@ -1,137 +1,100 @@
-import { PrismaClient, CoherenceStatus } from "@prisma/client";
+import { prisma } from "./prisma";
 import Groq from "groq-sdk";
 
-import { getSettings } from "./sheet_config";
-
-const prisma = new PrismaClient();
-
 const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
+    apiKey: process.env.GROQ_API_KEY,
 });
+
+export interface WorkspaceSettings {
+    translationPrompt: string;
+    hotScoreThreshold: number;
+}
 
 export interface ProcessPostOptions {
     skipTranslation?: boolean;
 }
 
-export async function processPost(postData: any, accountId: string, options: ProcessPostOptions = {}) {
-    const settings = await getSettings();
-
+/**
+ * Process a scraped post: check for duplicates, score, translate if hot, and save.
+ * Returns the saved post if new, undefined if it already existed (stats updated).
+ */
+export async function processPost(
+    postData: {
+        threadId: string;
+        content: string;
+        mediaUrls: { url: string; type: string }[];
+        likes: number;
+        replies: number;
+        reposts: number;
+        postUrl: string;
+    },
+    sourceAccount: string,
+    workspaceId: string,
+    settings: WorkspaceSettings,
+    options: ProcessPostOptions = {}
+) {
     // 1. Check if post exists
     const existing = await prisma.post.findUnique({
-        where: { thread_id: postData.threadId },
+        where: { threadId: postData.threadId },
     });
 
     if (existing) {
-        // Update stats
+        // Update engagement stats
+        const newScore = calculateHotScore(postData);
         await prisma.post.update({
             where: { id: existing.id },
             data: {
                 likes: postData.likes,
                 replies: postData.replies,
                 reposts: postData.reposts,
-                hot_score: calculateHotScore(postData),
+                hotScore: newScore,
             },
         });
-        return;
+        return undefined; // Not new
     }
 
     // 2. Score
     const score = calculateHotScore(postData);
 
-    // 3. Filtering
-    // 3a. Engagement Filter
-    if (postData.likes < settings.minLikes) {
-        console.log(`Skipping post ${postData.threadId}: Likes ${postData.likes} < ${settings.minLikes}`);
-        return;
+    // 3. Translate if hot and not skipped
+    let translated = "";
+    if (!options.skipTranslation && score > settings.hotScoreThreshold) {
+        translated = await translateContent(postData.content, settings.translationPrompt);
     }
 
-    // 3b. Word Count Filter
-    const wordCount = postData.content.split(/\s+/).length;
-    if (wordCount < settings.minWords) {
-        console.log(`Skipping post ${postData.threadId}: Word count ${wordCount} < ${settings.minWords}`);
-        return;
-    }
-
-    // 3c. Topic Filter (AI)
-    const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilterPrompt);
-    if (!isRelevant) {
-        console.log(`Skipping post ${postData.threadId}: Irrelevant topic`);
-        return;
-    }
-
-    // 4. Coherence/Trend Flow
-    // Instead of immediate translation/publishing, we mark as PENDING coherence check.
-    // Unless we do an "optimistic" check here, but simplest is to just save as PENDING.
-
-    const coherenceStatus = CoherenceStatus.PENDING;
-
-    // 5. Save
+    // 4. Save
     const savedPost = await prisma.post.create({
         data: {
-            thread_id: postData.threadId,
-            content_original: postData.content,
-            content_translated: "", // Empty for now, will translate when coherent
-            media_urls: JSON.stringify(postData.mediaUrls),
+            threadId: postData.threadId,
+            sourceAccount,
+            contentOriginal: postData.content,
+            contentTranslated: translated || null,
+            mediaUrls: postData.mediaUrls,
             likes: postData.likes,
             replies: postData.replies,
             reposts: postData.reposts,
-            hot_score: score,
-            url: postData.postUrl,
-            account_id: accountId,
-            posted_at: new Date(), // Approximate
-            coherence_status: coherenceStatus
+            hotScore: score,
+            sourceUrl: postData.postUrl,
+            status: "PENDING_REVIEW",
+            workspaceId,
         },
     });
+
     return savedPost;
 }
 
-function calculateHotScore(post: any): number {
+export function calculateHotScore(post: { likes: number; replies: number; reposts: number }): number {
     return (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
 }
 
-export async function checkTopicRelevance(text: string, prompt: string): Promise<boolean> {
-    if (!process.env.GROQ_API_KEY) return true;
-
-    try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: prompt
-                },
-                {
-                    role: "user",
-                    content: text
-                }
-            ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0.1,
-        });
-
-        const result = completion.choices[0]?.message?.content?.trim().toLowerCase();
-        return result === "true";
-    } catch (e: any) {
-        console.error("Topic check failed:", e.message);
-        return true; // Fail open
-    }
-}
-
-export async function translateContent(text: string): Promise<string> {
+export async function translateContent(text: string, translationPrompt: string): Promise<string> {
     if (!process.env.GROQ_API_KEY) return "Translation unavailable (No API Key)";
 
-    const settings = await getSettings();
-
     try {
         const completion = await groq.chat.completions.create({
             messages: [
-                {
-                    role: "system",
-                    content: settings.translationPrompt
-                },
-                {
-                    role: "user",
-                    content: text
-                }
+                { role: "system", content: translationPrompt },
+                { role: "user", content: text },
             ],
             model: "llama-3.3-70b-versatile",
             temperature: 0.1,

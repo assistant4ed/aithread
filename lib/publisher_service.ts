@@ -1,189 +1,163 @@
+import { prisma } from "./prisma";
+import { createContainer, publishContainer, waitForContainer } from "./threads_client";
+import { translateContent } from "./processor";
 
-import { sheets } from './google_client';
-import { createContainer, publishContainer, waitForContainer } from './threads_client';
-import { translateContent } from './processor';
-
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
-const THREADS_USER_ID = process.env.THREADS_USER_ID;
-const THREADS_ACCESS_TOKEN = process.env.THREADS_ACCESS_TOKEN;
-
-const DAILY_LIMIT = 3;
-
-/**
- * Returns the number of posts published today by checking the sheet.
- */
-export async function getDailyPublishCount(): Promise<number> {
-    if (!SPREADSHEET_ID) return 0;
-
-    try {
-        const range = 'Sheet1!A:J';
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range,
-        });
-
-        const rows = response.data.values;
-        if (!rows || rows.length === 0) return 0;
-
-        let postsToday = 0;
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const status = row[7];
-            const publishedAt = row[9];
-
-            if (status === 'PUBLISHED' && publishedAt) {
-                if (publishedAt.startsWith(todayStr)) {
-                    postsToday++;
-                }
-            }
-        }
-
-        return postsToday;
-    } catch (error) {
-        console.error('Error getting daily publish count:', error);
-        return 0;
-    }
+export interface PublisherConfig {
+    workspaceId: string;
+    threadsUserId: string;
+    threadsAccessToken: string;
+    translationPrompt: string;
+    dailyLimit: number;
 }
 
-export async function checkAndPublishApprovedPosts() {
-    if (!SPREADSHEET_ID || !THREADS_USER_ID || !THREADS_ACCESS_TOKEN) {
-        console.error('Missing required environment variables (GOOGLE_SPREADSHEET_ID, THREADS_USER_ID, THREADS_ACCESS_TOKEN).');
+/**
+ * Returns the number of posts published today for a given workspace.
+ */
+export async function getDailyPublishCount(workspaceId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    return prisma.post.count({
+        where: {
+            workspaceId,
+            status: "PUBLISHED",
+            publishedAt: { gte: todayStart },
+        },
+    });
+}
+
+/**
+ * Find and publish all APPROVED posts for a workspace.
+ */
+export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
+    const { workspaceId, threadsUserId, threadsAccessToken, translationPrompt, dailyLimit } = config;
+
+    console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED posts...`);
+
+    const postsToday = await getDailyPublishCount(workspaceId);
+    console.log(`[Publisher] Posts published today: ${postsToday}/${dailyLimit}`);
+
+    if (postsToday >= dailyLimit) {
+        console.log(`[Publisher] Daily limit reached. Skipping.`);
         return;
     }
 
-    console.log('Checking for APPROVED posts...');
+    const remaining = dailyLimit - postsToday;
 
-    try {
-        const postsToday = await getDailyPublishCount();
+    const approvedPosts = await prisma.post.findMany({
+        where: {
+            workspaceId,
+            status: "APPROVED",
+        },
+        orderBy: { createdAt: "asc" },
+        take: remaining,
+    });
 
-        console.log(`Posts published today so far: ${postsToday}`);
+    if (approvedPosts.length === 0) {
+        console.log(`[Publisher] No APPROVED posts found.`);
+        return;
+    }
 
-        if (postsToday >= DAILY_LIMIT) {
-            console.log(`Daily limit (${DAILY_LIMIT}) reached. Skipping further posts until tomorrow.`);
-            return;
+    console.log(`[Publisher] Found ${approvedPosts.length} posts to publish.`);
+
+    for (const post of approvedPosts) {
+        try {
+            await publishPost(post, threadsUserId, threadsAccessToken, translationPrompt);
+
+            // Wait between posts to avoid rate limits
+            console.log("[Publisher] Waiting 30 seconds before next post...");
+            await new Promise(resolve => setTimeout(resolve, 30000));
+        } catch (err) {
+            console.error(`[Publisher] Failed to publish post ${post.id}:`, err);
+            await prisma.post.update({
+                where: { id: post.id },
+                data: { status: "ERROR" },
+            });
         }
-
-        const range = 'Sheet1!A:I';
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range,
-        });
-
-        const rows = response.data.values;
-        if (!rows || rows.length === 0) {
-            console.log('No data found in sheet.');
-            return;
-        }
-
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const status = row[7];
-
-            if (status === 'APPROVED') {
-                console.log(`Processing row ${i + 1} (APPROVED)...`);
-                await processRow(i + 1, row);
-
-                console.log("Waiting 30 seconds before next post...");
-                await new Promise(resolve => setTimeout(resolve, 30000));
-            }
-        }
-
-    } catch (error) {
-        console.error('Error running checkAndPublishApprovedPosts:', error);
     }
 }
 
-async function processRow(rowIndex: number, row: any[]) {
-    try {
-        const account = row[1];
-        let text = row[4]; // Translated Content
-        const originalContent = row[3];
+async function publishPost(
+    post: { id: string; contentOriginal: string | null; contentTranslated: string | null; mediaUrls: any; sourceAccount: string },
+    threadsUserId: string,
+    threadsAccessToken: string,
+    translationPrompt: string
+) {
+    let text = post.contentTranslated;
 
-        // Auto-translate if missing
-        if (!text && originalContent) {
-            console.log(`  Row ${rowIndex}: Missing translation. Generating now...`);
-            text = await translateContent(originalContent);
-
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_ID,
-                range: `Sheet1!E${rowIndex}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: { values: [[text]] }
-            });
-            console.log(`  Row ${rowIndex}: Translation saved.`);
-        }
-
-        if (text && account) {
-            text += `\n\nCredit: @${account}`;
-        }
-
-        // Media GCS URL is already in the sheet (column F)
-        const gcsUrl = row[5] || '';
-        let mediaType: 'IMAGE' | 'VIDEO' = 'IMAGE';
-
-        if (gcsUrl) {
-            // Determine media type from URL or assume VIDEO for .mp4
-            if (gcsUrl.toLowerCase().includes('.mp4') || gcsUrl.toLowerCase().includes('video')) {
-                mediaType = 'VIDEO';
-            }
-            console.log(`  Using GCS URL: ${gcsUrl} (${mediaType})`);
-        }
-
-        if (!gcsUrl && !text) {
-            console.log(`  Row ${rowIndex}: No text or media, skipping.`);
-            return;
-        }
-
-        // Create Threads container
-        console.log(`  Creating Threads container (${mediaType})...`);
-        const containerId = await createContainer(
-            THREADS_USER_ID!,
-            THREADS_ACCESS_TOKEN!,
-            mediaType,
-            gcsUrl,
-            text
-        );
-
-        console.log(`  Container ID: ${containerId}`);
-
-        if (mediaType === 'VIDEO') {
-            console.log('  Waiting for video container to finish processing...');
-            await waitForContainer(containerId, THREADS_ACCESS_TOKEN!);
-        } else {
-            console.log('  Waiting 10 seconds for container to be ready...');
-            await new Promise(resolve => setTimeout(resolve, 10000));
-        }
-
-        // Publish
-        console.log(`  Publishing container ${containerId}...`);
-        const publishedId = await publishContainer(
-            THREADS_USER_ID!,
-            THREADS_ACCESS_TOKEN!,
-            containerId
-        );
-
-        console.log(`  Published! ID: ${publishedId}`);
-        const threadsUrl = `https://www.threads.net/post/${publishedId}`;
-
-        // Update Sheet: PUBLISHED + URL + timestamp
-        await sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `Sheet1!H${rowIndex}:J${rowIndex}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: {
-                values: [['PUBLISHED', threadsUrl, new Date().toISOString()]]
-            }
-        });
-
-    } catch (err) {
-        console.error(`  Failed to process row ${rowIndex}:`, err);
-        await sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `Sheet1!H${rowIndex}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['ERROR']] }
+    // Auto-translate if missing
+    if (!text && post.contentOriginal) {
+        console.log(`[Publisher] Post ${post.id}: Missing translation. Generating now...`);
+        text = await translateContent(post.contentOriginal, translationPrompt);
+        await prisma.post.update({
+            where: { id: post.id },
+            data: { contentTranslated: text },
         });
     }
+
+    // Add credit
+    if (text && post.sourceAccount) {
+        text += `\n\nCredit: @${post.sourceAccount}`;
+    }
+
+    // Determine media
+    let mediaUrl = "";
+    let mediaType: "IMAGE" | "VIDEO" | "TEXT" = "TEXT";
+
+    if (post.mediaUrls) {
+        const mediaItems = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
+        if (mediaItems.length > 0) {
+            const firstItem = mediaItems[0];
+            mediaUrl = typeof firstItem === "string" ? firstItem : firstItem.url;
+            const itemType = typeof firstItem === "string" ? "image" : firstItem.type;
+
+            if (itemType === "video" || mediaUrl.toLowerCase().includes(".mp4")) {
+                mediaType = "VIDEO";
+            } else {
+                mediaType = "IMAGE";
+            }
+        }
+    }
+
+    if (!mediaUrl && !text) {
+        console.log(`[Publisher] Post ${post.id}: No text or media, skipping.`);
+        return;
+    }
+
+    // Create container
+    console.log(`[Publisher] Creating Threads container (${mediaType})...`);
+    const containerId = await createContainer(
+        threadsUserId,
+        threadsAccessToken,
+        mediaType,
+        mediaUrl || undefined,
+        text || undefined
+    );
+    console.log(`[Publisher] Container ID: ${containerId}`);
+
+    // Wait for processing
+    if (mediaType === "VIDEO") {
+        console.log("[Publisher] Waiting for video container to finish processing...");
+        await waitForContainer(containerId, threadsAccessToken);
+    } else {
+        console.log("[Publisher] Waiting 10 seconds for container to be ready...");
+        await new Promise(resolve => setTimeout(resolve, 10000));
+    }
+
+    // Publish
+    console.log(`[Publisher] Publishing container ${containerId}...`);
+    const publishedId = await publishContainer(threadsUserId, threadsAccessToken, containerId);
+    const threadsUrl = `https://www.threads.net/post/${publishedId}`;
+
+    console.log(`[Publisher] Published! URL: ${threadsUrl}`);
+
+    // Update DB
+    await prisma.post.update({
+        where: { id: post.id },
+        data: {
+            status: "PUBLISHED",
+            publishedUrl: threadsUrl,
+            publishedAt: new Date(),
+        },
+    });
 }
