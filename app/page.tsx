@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function HomePage() {
 
     return (
         <div className="space-y-8">
+            <AutoRefresh />
             {/* Header */}
             <div className="flex items-end justify-between">
                 <div>

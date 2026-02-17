@@ -43,6 +43,13 @@ export default function PostsPage() {
 
     useEffect(() => {
         fetchPosts();
+
+        // Polling: refresh posts every 20 seconds
+        const interval = setInterval(() => {
+            fetchPosts();
+        }, 20000);
+
+        return () => clearInterval(interval);
     }, [fetchPosts]);
 
     const updateStatus = async (postId: string, newStatus: string) => {
@@ -76,8 +83,8 @@ export default function PostsPage() {
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`flex-1 text-xs font-mono py-2 px-3 rounded-md transition-colors ${activeTab === tab
-                                ? "bg-accent text-white"
-                                : "text-muted hover:text-foreground"
+                            ? "bg-accent text-white"
+                            : "text-muted hover:text-foreground"
                             }`}
                     >
                         {tab.replace("_", " ")}

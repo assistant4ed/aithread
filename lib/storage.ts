@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Storage } from "@google-cloud/storage";
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 
@@ -16,6 +17,10 @@ export async function uploadMediaToGCS(url: string, filename: string): Promise<s
 
     console.log(`[Storage] Downloading and uploading to GCS: ${filename}`);
 
+    const storage = new Storage({
+        projectId: process.env.GOOGLE_PROJECT_ID,
+    });
+
     try {
         // 1. Download the file
         const response = await axios({
@@ -27,14 +32,14 @@ export async function uploadMediaToGCS(url: string, filename: string): Promise<s
         const mimeType = response.headers["content-type"] || "application/octet-stream";
         const buffer = Buffer.from(response.data);
 
-        // 2. Upload to GCS using JSON API
-        const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${GCS_BUCKET_NAME}/o?uploadType=media&name=${encodeURIComponent(filename)}&predefinedAcl=publicRead`;
+        // 2. Upload to GCS using SDK
+        const bucket = storage.bucket(GCS_BUCKET_NAME);
+        const file = bucket.file(filename);
 
-        await axios.put(uploadUrl, buffer, {
-            headers: {
-                "Content-Type": mimeType,
-                "Content-Length": buffer.length.toString(),
-            },
+        await file.save(buffer, {
+            contentType: mimeType,
+            resumable: false,
+            predefinedAcl: "publicRead",
         });
 
         const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${filename}`;

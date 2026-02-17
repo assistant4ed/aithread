@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import WorkspaceActions from "./actions";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
     return (
         <div className="space-y-8 animate-fade-in">
+            <AutoRefresh />
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
