@@ -44,10 +44,10 @@ export default function PostsPage() {
     useEffect(() => {
         fetchPosts();
 
-        // Polling: refresh posts every 20 seconds
+        // Polling: refresh posts every 60 seconds
         const interval = setInterval(() => {
             fetchPosts();
-        }, 20000);
+        }, 60000);
 
         return () => clearInterval(interval);
     }, [fetchPosts]);
