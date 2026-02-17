@@ -16,9 +16,16 @@ export async function GET() {
 // POST /api/workspaces — create a new workspace
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-
-        const { name, targetAccounts, translationPrompt, hotScoreThreshold, threadsAppId, threadsToken, dailyPostLimit } = body;
+        const {
+            name,
+            targetAccounts,
+            translationPrompt,
+            hotScoreThreshold,
+            threadsAppId,
+            threadsToken,
+            dailyPostLimit,
+            topicFilter,
+        } = await request.json();
 
         if (!name || !translationPrompt) {
             return NextResponse.json(
@@ -35,7 +42,8 @@ export async function POST(request: NextRequest) {
                 hotScoreThreshold: hotScoreThreshold ?? 50,
                 threadsAppId: threadsAppId || null,
                 threadsToken: threadsToken || null,
-                dailyPostLimit: dailyPostLimit ?? 3,
+                dailyPostLimit: dailyPostLimit || 3,
+                topicFilter: topicFilter || null,
             },
         });
 

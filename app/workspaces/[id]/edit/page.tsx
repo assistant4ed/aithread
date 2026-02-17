@@ -21,6 +21,7 @@ export default function EditWorkspacePage() {
         threadsAppId: "",
         threadsToken: "",
         dailyPostLimit: 3,
+        topicFilter: "",
     });
 
     useEffect(() => {
@@ -39,6 +40,7 @@ export default function EditWorkspacePage() {
                     threadsAppId: data.threadsAppId || "",
                     threadsToken: data.threadsToken || "",
                     dailyPostLimit: data.dailyPostLimit,
+                    topicFilter: data.topicFilter || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -72,6 +74,7 @@ export default function EditWorkspacePage() {
                     threadsAppId: form.threadsAppId || null,
                     threadsToken: form.threadsToken || null,
                     dailyPostLimit: Number(form.dailyPostLimit),
+                    topicFilter: form.topicFilter || null,
                 }),
             });
 
@@ -140,6 +143,17 @@ export default function EditWorkspacePage() {
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
                         rows={6}
                         className="input font-mono text-xs"
+                    />
+                </Field>
+
+                {/* Topic Filter */}
+                <Field label="Topic Filter (Optional)" hint="e.g. 'AI, Artificial Intelligence, LLMs'. If set, posts must be relevant to this topic.">
+                    <input
+                        type="text"
+                        value={form.topicFilter}
+                        onChange={(e) => setForm({ ...form, topicFilter: e.target.value })}
+                        placeholder="Leave empty to process all posts"
+                        className="input"
                     />
                 </Field>
 

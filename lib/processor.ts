@@ -8,6 +8,7 @@ const groq = new Groq({
 export interface WorkspaceSettings {
     translationPrompt: string;
     hotScoreThreshold: number;
+    topicFilter?: string | null;
 }
 
 export interface ProcessPostOptions {
@@ -53,16 +54,42 @@ export async function processPost(
         return undefined; // Not new
     }
 
-    // 2. Score
+    // 2. Topic Filter Check
+    if (settings.topicFilter && postData.content) {
+        const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter);
+        if (!isRelevant) {
+            console.log(`[Processor] Post rejected by topic filter: "${settings.topicFilter}"`);
+
+            // Save as REJECTED so we don't process it again
+            await prisma.post.create({
+                data: {
+                    threadId: postData.threadId,
+                    sourceAccount,
+                    contentOriginal: postData.content,
+                    mediaUrls: postData.mediaUrls,
+                    likes: postData.likes,
+                    replies: postData.replies,
+                    reposts: postData.reposts,
+                    hotScore: 0,
+                    sourceUrl: postData.postUrl,
+                    status: "REJECTED",
+                    workspaceId,
+                },
+            });
+            return undefined;
+        }
+    }
+
+    // 3. Score
     const score = calculateHotScore(postData);
 
-    // 3. Translate if hot and not skipped
+    // 4. Translate if hot and not skipped
     let translated = "";
     if (!options.skipTranslation && score > settings.hotScoreThreshold) {
         translated = await translateContent(postData.content, settings.translationPrompt);
     }
 
-    // 4. Save
+    // 5. Save
     const savedPost = await prisma.post.create({
         data: {
             threadId: postData.threadId,
@@ -85,6 +112,37 @@ export async function processPost(
 
 export function calculateHotScore(post: { likes: number; replies: number; reposts: number }): number {
     return (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+}
+
+export async function checkTopicRelevance(content: string, topic: string): Promise<boolean> {
+    if (!process.env.GROQ_API_KEY) return true; // Fail open if no API key
+
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: `You are a content filter. Check if the user's post is relevant to the topic: "${topic}".
+Output ONLY "YES" if relevant, or "NO" if not.
+Criteria:
+- Broadly related key concepts are acceptable.
+- If the post is completely unrelated, output NO.
+- If unsure, lean towards YES.`
+                },
+                { role: "user", content: `Post content: "${content}"` },
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.0,
+            max_tokens: 5,
+        });
+
+        const answer = completion.choices[0]?.message?.content?.trim().toUpperCase();
+        console.log(`[Topic Check] Topic: "${topic}" | Answer: ${answer}`);
+        return answer === "YES";
+    } catch (e: any) {
+        console.error("Topic check failed:", e.message);
+        return true; // Fail open on error
+    }
 }
 
 export async function translateContent(text: string, translationPrompt: string): Promise<string> {

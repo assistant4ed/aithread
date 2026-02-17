@@ -99,6 +99,16 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                     <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Settings</h2>
                     <dl className="space-y-2 text-sm">
                         <div className="flex justify-between">
+                            <dt className="text-muted">Topic Filter</dt>
+                            <dd className="font-mono text-right max-w-[200px] truncate">
+                                {workspace.topicFilter ? (
+                                    <span className="text-accent" title={workspace.topicFilter}>{workspace.topicFilter}</span>
+                                ) : (
+                                    <span className="text-muted/50 italic">None</span>
+                                )}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between">
                             <dt className="text-muted">Hot Score Threshold</dt>
                             <dd className="font-mono">{workspace.hotScoreThreshold}</dd>
                         </div>

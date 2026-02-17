@@ -21,6 +21,7 @@ model Workspace {
 
   // AI / Translation
   translationPrompt String   @db.Text
+  topicFilter       String?  // Optional topic/keyword filter for AI relevance check
   hotScoreThreshold Float    @default(50)
 
   // Threads API credentials (per workspace)

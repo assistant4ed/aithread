@@ -44,6 +44,7 @@ cron.schedule("*/5 * * * *", async () => {
             const settings: WorkspaceSettings = {
                 translationPrompt: ws.translationPrompt,
                 hotScoreThreshold: ws.hotScoreThreshold,
+                topicFilter: ws.topicFilter,
             };
 
             for (const username of ws.targetAccounts) {
