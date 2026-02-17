@@ -5,7 +5,9 @@ import { Browser, Page } from 'puppeteer';
 export interface MediaItem {
     url: string;
     type: 'image' | 'video';
+    coverUrl?: string;
 }
+
 
 export interface ThreadPost {
     threadId: string;
@@ -234,6 +236,64 @@ export class ThreadsScraper {
         } catch (error) {
             console.error(`Error scraping ${username}:`, error);
             return [];
+            await page.close();
+        } finally {
+            await page.close();
+        }
+    }
+
+    async enrichPost(postUrl: string): Promise<{ videoUrl?: string; coverUrl?: string } | null> {
+        if (!this.browser) await this.init();
+        const page = await this.browser!.newPage();
+
+        try {
+            console.log(`[Enricher] Visiting ${postUrl}`);
+            await page.goto(postUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+            const html = await page.content();
+
+            const videoRegex = /"video_versions":\s*(\[[^\]]+\])/g;
+            const imageRegex = /"image_versions2":\s*({"candidates":\[[^\]]+\]})/g;
+
+            let match;
+            let bestVideoUrl: string | undefined;
+            let bestCoverUrl: string | undefined;
+
+            // Find video
+            while ((match = videoRegex.exec(html)) !== null) {
+                try {
+                    const videoVersions = JSON.parse(match[1]);
+                    if (videoVersions && videoVersions.length > 0) {
+                        const candidate = videoVersions.find((v: any) => v.type === 101) || videoVersions[0];
+                        if (candidate && candidate.url) {
+                            bestVideoUrl = candidate.url.replace(/\\u0026/g, '&');
+                            break;
+                        }
+                    }
+                } catch (e) { }
+            }
+
+            // Find cover
+            while ((match = imageRegex.exec(html)) !== null) {
+                try {
+                    const imageVersions = JSON.parse(match[1]);
+                    if (imageVersions && imageVersions.candidates && imageVersions.candidates.length > 0) {
+                        const candidate = imageVersions.candidates[0];
+                        if (candidate && candidate.url) {
+                            bestCoverUrl = candidate.url.replace(/\\u0026/g, '&');
+                            break;
+                        }
+                    }
+                } catch (e) { }
+            }
+
+            if (bestVideoUrl) {
+                return { videoUrl: bestVideoUrl, coverUrl: bestCoverUrl };
+            }
+
+            return null;
+        } catch (error) {
+            console.error(`[Enricher] Failed to enrich ${postUrl}:`, error);
+            return null;
         } finally {
             await page.close();
         }

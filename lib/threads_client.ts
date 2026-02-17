@@ -31,7 +31,8 @@ export async function createContainer(
     url?: string,
     text?: string,
     children?: string[],
-    isCarouselItem?: boolean
+    isCarouselItem?: boolean,
+    coverUrl?: string
 ): Promise<string> {
     const endpoint = `https://graph.threads.net/v1.0/${userId}/threads`;
 
@@ -50,6 +51,7 @@ export async function createContainer(
         body.append('image_url', url);
     } else if (mediaType === 'VIDEO' && url) {
         body.append('video_url', url);
+        if (coverUrl) body.append('image_url', coverUrl);
     }
 
     if (mediaType === 'CAROUSEL' && children && children.length > 0) {
@@ -60,6 +62,7 @@ export async function createContainer(
     if (isCarouselItem) {
         body.append('is_carousel_item', 'true');
     }
+
 
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -150,6 +153,7 @@ export async function waitForContainer(
             }
 
             if (status === 'ERROR') {
+                console.error(`  Container ERROR details:`, JSON.stringify(data, null, 2));
                 throw new Error(`Container processing failed: ${data.error_message || 'Unknown error'}`);
             }
 

@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { createContainer, publishContainer, waitForContainer } from "./threads_client";
-import { translateContent } from "./processor";
+
 
 export interface PublisherConfig {
     workspaceId: string;
@@ -10,14 +10,15 @@ export interface PublisherConfig {
     dailyLimit: number;
 }
 
+
 /**
- * Returns the number of posts published today for a given workspace.
+ * Returns the number of ARTICLES published today for a given workspace.
  */
 export async function getDailyPublishCount(workspaceId: string): Promise<number> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    return prisma.post.count({
+    return prisma.synthesizedArticle.count({
         where: {
             workspaceId,
             status: "PUBLISHED",
@@ -27,24 +28,24 @@ export async function getDailyPublishCount(workspaceId: string): Promise<number>
 }
 
 /**
- * Find and publish all APPROVED posts for a workspace.
+ * Find and publish APPROVED synthesized articles for a workspace.
  */
 export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
-    const { workspaceId, threadsUserId, threadsAccessToken, translationPrompt, dailyLimit } = config;
+    const { workspaceId, threadsUserId, threadsAccessToken, dailyLimit } = config;
 
-    console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED posts...`);
+    console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
 
-    const postsToday = await getDailyPublishCount(workspaceId);
-    console.log(`[Publisher] Posts published today: ${postsToday}/${dailyLimit}`);
+    const articlesToday = await getDailyPublishCount(workspaceId);
+    console.log(`[Publisher] Articles published today: ${articlesToday}/${dailyLimit}`);
 
-    if (postsToday >= dailyLimit) {
+    if (articlesToday >= dailyLimit) {
         console.log(`[Publisher] Daily limit reached. Skipping.`);
         return;
     }
 
-    const remaining = dailyLimit - postsToday;
+    const remaining = dailyLimit - articlesToday;
 
-    const approvedPosts = await prisma.post.findMany({
+    const approvedArticles = await prisma.synthesizedArticle.findMany({
         where: {
             workspaceId,
             status: "APPROVED",
@@ -53,79 +54,80 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
         take: remaining,
     });
 
-    if (approvedPosts.length === 0) {
-        console.log(`[Publisher] No APPROVED posts found.`);
+    if (approvedArticles.length === 0) {
+        console.log(`[Publisher] No APPROVED articles found.`);
         return;
     }
 
-    console.log(`[Publisher] Found ${approvedPosts.length} posts to publish.`);
+    console.log(`[Publisher] Found ${approvedArticles.length} articles to publish.`);
 
-    for (const post of approvedPosts) {
+    for (const article of approvedArticles) {
         try {
-            await publishPost(post, threadsUserId, threadsAccessToken, translationPrompt);
+            await publishArticle(article, threadsUserId, threadsAccessToken);
 
             // Wait between posts to avoid rate limits
             console.log("[Publisher] Waiting 30 seconds before next post...");
             await new Promise(resolve => setTimeout(resolve, 30000));
         } catch (err) {
-            console.error(`[Publisher] Failed to publish post ${post.id}:`, err);
-            await prisma.post.update({
-                where: { id: post.id },
+            console.error(`[Publisher] Failed to publish article ${article.id}:`, err);
+            await prisma.synthesizedArticle.update({
+                where: { id: article.id },
                 data: { status: "ERROR" },
             });
         }
     }
 }
 
-async function publishPost(
-    post: { id: string; contentOriginal: string | null; contentTranslated: string | null; mediaUrls: any; sourceAccount: string },
+export async function publishArticle(
+    article: { id: string; articleContent: string; sourcePostIds: string[] },
     threadsUserId: string,
-    threadsAccessToken: string,
-    translationPrompt: string
+    threadsAccessToken: string
 ) {
-    let text = post.contentTranslated;
+    let text = article.articleContent;
 
-    // Auto-translate if missing
-    if (!text && post.contentOriginal) {
-        console.log(`[Publisher] Post ${post.id}: Missing translation. Generating now...`);
-        text = await translateContent(post.contentOriginal, translationPrompt);
-        await prisma.post.update({
-            where: { id: post.id },
-            data: { contentTranslated: text },
-        });
-    }
-
-    // Add credit
-    if (text && post.sourceAccount) {
-        text += `\n\nCredit: @${post.sourceAccount}`;
-    }
-
-    // Determine media
+    // Determine media from source posts
     let mediaUrl = "";
     let mediaType: "IMAGE" | "VIDEO" | "TEXT" = "TEXT";
 
-    if (post.mediaUrls) {
-        const mediaItems = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
-        if (mediaItems.length > 0) {
-            const firstItem = mediaItems[0];
-            mediaUrl = typeof firstItem === "string" ? firstItem : firstItem.url;
-            const itemType = typeof firstItem === "string" ? "image" : firstItem.type;
+    if (article.sourcePostIds.length > 0) {
+        const sourcePosts = await prisma.post.findMany({
+            where: { id: { in: article.sourcePostIds } },
+            select: { mediaUrls: true }
+        });
 
-            if (itemType === "video" || mediaUrl.toLowerCase().includes(".mp4")) {
-                mediaType = "VIDEO";
-            } else {
-                mediaType = "IMAGE";
+        // Find first valid media
+        for (const post of sourcePosts) {
+            if (post.mediaUrls && Array.isArray(post.mediaUrls)) {
+                for (const item of post.mediaUrls) {
+                    if (!item) continue;
+                    const mediaItem = item as any;
+                    const url = typeof mediaItem === "string" ? mediaItem : mediaItem.url;
+                    const type = typeof mediaItem === "string" ? "image" : mediaItem.type;
+
+                    if (!url) continue;
+
+                    if (type === "video" || url.toLowerCase().includes(".mp4")) {
+                        mediaUrl = url;
+                        mediaType = "VIDEO";
+                        break; // Prefer video
+                    } else if (!mediaUrl) {
+                        mediaUrl = url;
+                        mediaType = "IMAGE";
+                    }
+                }
             }
+            if (mediaType === "VIDEO") break; // Found video, stop looking
         }
     }
 
     if (!mediaUrl && !text) {
-        console.log(`[Publisher] Post ${post.id}: No text or media, skipping.`);
+        console.log(`[Publisher] Article ${article.id}: No text or media, skipping.`);
         return;
     }
 
     // Create container
     console.log(`[Publisher] Creating Threads container (${mediaType})...`);
+    console.log(`[Publisher] Media URL: ${mediaUrl}`);
     const containerId = await createContainer(
         threadsUserId,
         threadsAccessToken,
@@ -152,8 +154,8 @@ async function publishPost(
     console.log(`[Publisher] Published! URL: ${threadsUrl}`);
 
     // Update DB
-    await prisma.post.update({
-        where: { id: post.id },
+    await prisma.synthesizedArticle.update({
+        where: { id: article.id },
         data: {
             status: "PUBLISHED",
             publishedUrl: threadsUrl,

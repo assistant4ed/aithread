@@ -33,8 +33,9 @@ export async function processPost(
     postData: {
         threadId: string;
         content: string;
-        mediaUrls: { url: string; type: string }[];
+        mediaUrls: { url: string; type: string; coverUrl?: string }[];
         likes: number;
+
         replies: number;
         reposts: number;
         postedAt?: Date;

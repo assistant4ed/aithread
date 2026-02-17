@@ -41,8 +41,33 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
 
     let newCount = 0;
 
+
     for (const post of posts) {
+        // Skip empty posts
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
+
+        // Enrich video posts (only if they look like low-quality dash urls or we just want better metadata)
+        // We do this BEFORE processPost so the DB gets the high-quality URL immediately
+        const hasVideo = post.mediaUrls.some(m => m.type === 'video');
+        if (hasVideo && post.postUrl) {
+            console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
+            const enriched = await scraper.enrichPost(post.postUrl);
+            if (enriched && enriched.videoUrl) {
+                console.log(`[ScrapeWorker]   -> Found HQ video: ${enriched.videoUrl.substring(0, 50)}...`);
+                post.mediaUrls = post.mediaUrls.map(m => {
+                    if (m.type === 'video') {
+                        return {
+                            ...m,
+                            url: enriched.videoUrl!, // guaranteed by check
+                            coverUrl: enriched.coverUrl
+                        };
+                    }
+                    return m;
+                });
+            } else {
+                console.log(`[ScrapeWorker]   -> No better video found.`);
+            }
+        }
 
         const savedPost = await processPost(
             {
@@ -66,27 +91,50 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
         if (savedPost.mediaUrls) {
             const mediaItems = Array.isArray(savedPost.mediaUrls) ? savedPost.mediaUrls : [];
             if (mediaItems.length > 0) {
-                try {
-                    const firstItem = mediaItems[0] as { url: string; type: string };
-                    const extension = firstItem.type === "video" ? ".mp4" : ".jpg";
-                    const filename = `scraped/${Date.now()}_${savedPost.id}${extension}`;
-                    const gcsUrl = await uploadMediaToGCS(firstItem.url, filename);
-                    console.log(`[ScrapeWorker]   📎 Media uploaded: ${gcsUrl}`);
+                let mediaUpdated = false;
 
-                    // Persist the GCS URL so the publisher uses it instead of the expired CDN URL
-                    const updatedMedia = mediaItems.map((item: any, idx: number) =>
-                        idx === 0 ? { ...item, url: gcsUrl } : item
-                    );
+                const updatedMedia = await Promise.all(mediaItems.map(async (item: any, idx: number) => {
+                    let newItem = { ...item };
+
+                    // Upload main URL (Video or Image)
+                    if (item.url && !item.url.includes('storage.googleapis.com')) {
+                        try {
+                            const extension = item.type === "video" ? ".mp4" : ".jpg";
+                            const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}${extension}`;
+                            const gcsUrl = await uploadMediaToGCS(item.url, filename);
+                            console.log(`[ScrapeWorker]   📎 Media uploaded: ${gcsUrl}`);
+                            newItem.url = gcsUrl;
+                            mediaUpdated = true;
+                        } catch (mediaErr: any) {
+                            console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr.message);
+                        }
+                    }
+
+                    // Upload cover URL if present and valid
+                    if (item.coverUrl && !item.coverUrl.includes('storage.googleapis.com')) {
+                        try {
+                            const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}_cover.jpg`;
+                            const gcsUrl = await uploadMediaToGCS(item.coverUrl, filename);
+                            console.log(`[ScrapeWorker]   📎 Cover uploaded: ${gcsUrl}`);
+                            newItem.coverUrl = gcsUrl;
+                            mediaUpdated = true;
+                        } catch (mediaErr: any) {
+                            console.error(`[ScrapeWorker]   ⚠ Cover upload failed:`, mediaErr.message);
+                        }
+                    }
+                    return newItem;
+                }));
+
+                if (mediaUpdated) {
                     await prisma.post.update({
                         where: { id: savedPost.id },
                         data: { mediaUrls: updatedMedia },
                     });
-                } catch (mediaErr) {
-                    console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr);
                 }
             }
         }
     }
+
 
     console.log(`[ScrapeWorker] Done @${username}: ${newCount} new posts`);
     return { username, newCount, total: posts.length };
