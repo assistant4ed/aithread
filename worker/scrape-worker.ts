@@ -8,7 +8,6 @@ import { prisma } from "../lib/prisma";
 
 const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "3", 10);
 
-// Each concurrent worker slot gets its own scraper (own Puppeteer browser)
 const scraperPool: Map<number, ThreadsScraper> = new Map();
 
 async function getScraperForSlot(slotId: number): Promise<ThreadsScraper> {
@@ -46,8 +45,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
         // Skip empty posts
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
 
-        // Enrich video posts (only if they look like low-quality dash urls or we just want better metadata)
-        // We do this BEFORE processPost so the DB gets the high-quality URL immediately
+
         const hasVideo = post.mediaUrls.some(m => m.type === 'video');
         if (hasVideo && post.postUrl) {
             console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
@@ -58,7 +56,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     if (m.type === 'video') {
                         return {
                             ...m,
-                            url: enriched.videoUrl!, // guaranteed by check
+                            url: enriched.videoUrl!,
                             coverUrl: enriched.coverUrl
                         };
                     }

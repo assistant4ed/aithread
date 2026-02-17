@@ -23,6 +23,7 @@ export default function EditWorkspacePage() {
         threadsToken: "",
         dailyPostLimit: 3,
         topicFilter: "",
+        maxPostAgeHours: 48,
     });
 
     useEffect(() => {
@@ -43,6 +44,7 @@ export default function EditWorkspacePage() {
                     threadsToken: data.threadsToken || "",
                     dailyPostLimit: data.dailyPostLimit,
                     topicFilter: data.topicFilter || "",
+                    maxPostAgeHours: data.maxPostAgeHours || 48,
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -78,6 +80,7 @@ export default function EditWorkspacePage() {
                     threadsToken: form.threadsToken || null,
                     dailyPostLimit: Number(form.dailyPostLimit),
                     topicFilter: form.topicFilter || null,
+                    maxPostAgeHours: Number(form.maxPostAgeHours),
                 }),
             });
 
@@ -180,6 +183,17 @@ export default function EditWorkspacePage() {
                             onChange={(e) => setForm({ ...form, hotScoreThreshold: Number(e.target.value) })}
                             className="input"
                             min={0}
+                        />
+                    </Field>
+
+                    {/* Max Post Age */}
+                    <Field label="Max Post Age (hours)" hint="Skip posts older than this">
+                        <input
+                            type="number"
+                            value={form.maxPostAgeHours}
+                            onChange={(e) => setForm({ ...form, maxPostAgeHours: Number(e.target.value) })}
+                            className="input"
+                            min={1}
                         />
                     </Field>
 
