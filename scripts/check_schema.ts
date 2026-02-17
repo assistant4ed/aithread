@@ -1,14 +1,21 @@
+import "dotenv/config";
+import { prisma } from "../lib/prisma";
 
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
 async function main() {
+    console.log("Checking Prisma Client schema...");
     try {
-        const count = await prisma.synthesizedArticle.count();
-        console.log(`Table exists! SynthesizedArticles: ${count}`);
-    } catch (e: any) {
-        console.log(`Table does not exist. Error: ${e.message}`);
+        const workspace = await prisma.workspace.findFirst();
+        console.log("Workspace found:", workspace);
+        if (workspace && 'synthesisLanguage' in workspace) {
+            console.log("✅ synthesisLanguage exists in Prisma Client");
+        } else {
+            console.log("❌ synthesisLanguage MISSING in Prisma Client");
+        }
+    } catch (e) {
+        console.error("Error:", e);
     } finally {
         await prisma.$disconnect();
     }
 }
+
 main();

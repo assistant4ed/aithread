@@ -123,6 +123,7 @@ cron.schedule("*/30 * * * *", async () => {
         for (const ws of workspaces) {
             await runSynthesisEngine(ws.id, {
                 translationPrompt: ws.translationPrompt,
+                synthesisLanguage: ws.synthesisLanguage,
             });
         }
     } catch (error) {
