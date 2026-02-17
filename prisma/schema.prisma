@@ -20,6 +20,12 @@ model Account {
   updated_at   DateTime @updatedAt
 }
 
+enum CoherenceStatus {
+  PENDING
+  COHERENT
+  ISOLATED
+}
+
 model Post {
   id                 String   @id @default(cuid())
   thread_id          String   @unique // The ID on Threads
@@ -37,4 +43,9 @@ model Post {
   
   created_at         DateTime @default(now())
   posted_at          DateTime? // When it was posted on Threads
+
+  // Trend Analysis Fields
+  coherence_status   CoherenceStatus @default(PENDING)
+  topic_cluster_id   String?
+  last_coherence_check DateTime?
 }

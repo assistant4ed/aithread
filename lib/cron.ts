@@ -5,6 +5,7 @@ import { processPost } from "./processor";
 import { logToSheets } from "./sheets_logger";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "./publisher_service";
 import { getAccounts } from "./sheet_config";
+import { runTrendAnalysis } from "./trend_engine";
 
 const prisma = new PrismaClient();
 const scraper = new ThreadsScraper();
@@ -12,6 +13,7 @@ const scraper = new ThreadsScraper();
 export function startPolling() {
     console.log("Starting polling service...");
 
+    // 1. Scraping Job (Every 5 mins)
     cron.schedule("*/5 * * * *", async () => {
         console.log("Running scheduled scrape...");
 
@@ -77,7 +79,17 @@ export function startPolling() {
         }
     });
 
-    // Schedule task to run every 10 minutes (Publishing - Pulse)
+    // 2. Trend Analysis Job (Every 30 mins)
+    cron.schedule("*/30 * * * *", async () => {
+        console.log("Running scheduled trend analysis...");
+        try {
+            await runTrendAnalysis();
+        } catch (error) {
+            console.error("Error in trend analysis job:", error);
+        }
+    });
+
+    // 3. Publishing Job - Pulse (Every 10 mins)
     cron.schedule("*/10 * * * *", async () => {
         console.log("Running scheduled publisher check...");
         await checkAndPublishApprovedPosts();

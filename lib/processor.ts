@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, CoherenceStatus } from "@prisma/client";
 import Groq from "groq-sdk";
 
 import { getSettings } from "./sheet_config";
@@ -38,18 +38,39 @@ export async function processPost(postData: any, accountId: string, options: Pro
     // 2. Score
     const score = calculateHotScore(postData);
 
-    // 3. Translate if hot (threshold from sheet) and translation is not skipped
-    let translated = "";
-    if (!options.skipTranslation && score > settings.hotScoreThreshold) {
-        translated = await translateContent(postData.content);
+    // 3. Filtering
+    // 3a. Engagement Filter
+    if (postData.likes < settings.minLikes) {
+        console.log(`Skipping post ${postData.threadId}: Likes ${postData.likes} < ${settings.minLikes}`);
+        return;
     }
 
-    // 4. Save
+    // 3b. Word Count Filter
+    const wordCount = postData.content.split(/\s+/).length;
+    if (wordCount < settings.minWords) {
+        console.log(`Skipping post ${postData.threadId}: Word count ${wordCount} < ${settings.minWords}`);
+        return;
+    }
+
+    // 3c. Topic Filter (AI)
+    const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilterPrompt);
+    if (!isRelevant) {
+        console.log(`Skipping post ${postData.threadId}: Irrelevant topic`);
+        return;
+    }
+
+    // 4. Coherence/Trend Flow
+    // Instead of immediate translation/publishing, we mark as PENDING coherence check.
+    // Unless we do an "optimistic" check here, but simplest is to just save as PENDING.
+
+    const coherenceStatus = CoherenceStatus.PENDING;
+
+    // 5. Save
     const savedPost = await prisma.post.create({
         data: {
             thread_id: postData.threadId,
             content_original: postData.content,
-            content_translated: translated,
+            content_translated: "", // Empty for now, will translate when coherent
             media_urls: JSON.stringify(postData.mediaUrls),
             likes: postData.likes,
             replies: postData.replies,
@@ -58,6 +79,7 @@ export async function processPost(postData: any, accountId: string, options: Pro
             url: postData.postUrl,
             account_id: accountId,
             posted_at: new Date(), // Approximate
+            coherence_status: coherenceStatus
         },
     });
     return savedPost;
@@ -65,6 +87,33 @@ export async function processPost(postData: any, accountId: string, options: Pro
 
 function calculateHotScore(post: any): number {
     return (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+}
+
+export async function checkTopicRelevance(text: string, prompt: string): Promise<boolean> {
+    if (!process.env.GROQ_API_KEY) return true;
+
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: prompt
+                },
+                {
+                    role: "user",
+                    content: text
+                }
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.1,
+        });
+
+        const result = completion.choices[0]?.message?.content?.trim().toLowerCase();
+        return result === "true";
+    } catch (e: any) {
+        console.error("Topic check failed:", e.message);
+        return true; // Fail open
+    }
 }
 
 export async function translateContent(text: string): Promise<string> {

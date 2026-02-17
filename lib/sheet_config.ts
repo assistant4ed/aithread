@@ -11,10 +11,20 @@ RULES:
 3. Maintain the tone and brevity.`;
 
 const DEFAULT_HOT_SCORE_THRESHOLD = "50";
+const DEFAULT_MIN_LIKES = "300";
+const DEFAULT_MIN_WORDS = "5";
+const DEFAULT_TREND_CONSENSUS_COUNT = "3";
+const DEFAULT_TOPIC_FILTER_PROMPT = `You are a content curator for an AI & Tech news feed. 
+Evaluate if the following Threads post is relevant to "Artificial Intelligence, Machine Learning, Technology News, or Software Development".
+Return "true" if it is relevant. Return "false" if it is personal life, random thoughts, politics (unrelated to tech), or other non-tech topics.`;
 
 interface AppSettings {
     translationPrompt: string;
+    topicFilterPrompt: string;
     hotScoreThreshold: number;
+    minLikes: number;
+    minWords: number;
+    trendConsensusCount: number;
 }
 
 // Simple in-memory cache
@@ -69,7 +79,11 @@ export async function ensureConfigSheets() {
             const settingsRows = [
                 ["Key", "Value"],
                 ["TRANSLATION_PROMPT", DEFAULT_TRANSLATION_PROMPT],
-                ["HOT_SCORE_THRESHOLD", DEFAULT_HOT_SCORE_THRESHOLD]
+                ["TOPIC_FILTER_PROMPT", DEFAULT_TOPIC_FILTER_PROMPT],
+                ["HOT_SCORE_THRESHOLD", DEFAULT_HOT_SCORE_THRESHOLD],
+                ["MIN_LIKES", DEFAULT_MIN_LIKES],
+                ["MIN_WORDS", DEFAULT_MIN_WORDS],
+                ["TREND_CONSENSUS_COUNT", DEFAULT_TREND_CONSENSUS_COUNT]
             ];
             await sheets.spreadsheets.values.update({
                 spreadsheetId: CONFIG_SPREADSHEET_ID,
@@ -111,9 +125,13 @@ export async function getAccounts(): Promise<string[]> {
 export async function getSettings(): Promise<AppSettings> {
     if (cachedSettings) return cachedSettings;
 
-    const defaults = {
+    const defaults: AppSettings = {
         translationPrompt: DEFAULT_TRANSLATION_PROMPT,
-        hotScoreThreshold: parseFloat(DEFAULT_HOT_SCORE_THRESHOLD)
+        topicFilterPrompt: DEFAULT_TOPIC_FILTER_PROMPT,
+        hotScoreThreshold: parseFloat(DEFAULT_HOT_SCORE_THRESHOLD),
+        minLikes: parseInt(DEFAULT_MIN_LIKES),
+        minWords: parseInt(DEFAULT_MIN_WORDS),
+        trendConsensusCount: parseInt(DEFAULT_TREND_CONSENSUS_COUNT)
     };
 
     if (!CONFIG_SPREADSHEET_ID) return defaults;
@@ -137,12 +155,27 @@ export async function getSettings(): Promise<AppSettings> {
         });
 
         const prompt = settingsMap.get("TRANSLATION_PROMPT") || DEFAULT_TRANSLATION_PROMPT;
+        const topicPrompt = settingsMap.get("TOPIC_FILTER_PROMPT") || DEFAULT_TOPIC_FILTER_PROMPT;
+
         const thresholdStr = settingsMap.get("HOT_SCORE_THRESHOLD") || DEFAULT_HOT_SCORE_THRESHOLD;
         const threshold = parseFloat(thresholdStr);
 
+        const minLikesStr = settingsMap.get("MIN_LIKES") || DEFAULT_MIN_LIKES;
+        const minLikes = parseInt(minLikesStr);
+
+        const minWordsStr = settingsMap.get("MIN_WORDS") || DEFAULT_MIN_WORDS;
+        const minWords = parseInt(minWordsStr);
+
+        const consensusStr = settingsMap.get("TREND_CONSENSUS_COUNT") || DEFAULT_TREND_CONSENSUS_COUNT;
+        const consensus = parseInt(consensusStr);
+
         cachedSettings = {
             translationPrompt: prompt,
-            hotScoreThreshold: isNaN(threshold) ? 50 : threshold
+            topicFilterPrompt: topicPrompt,
+            hotScoreThreshold: isNaN(threshold) ? 50 : threshold,
+            minLikes: isNaN(minLikes) ? 300 : minLikes,
+            minWords: isNaN(minWords) ? 5 : minWords,
+            trendConsensusCount: isNaN(consensus) ? 3 : consensus
         };
         return cachedSettings;
 
