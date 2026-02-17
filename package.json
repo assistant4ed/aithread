@@ -10,7 +10,9 @@
     "worker:dev": "tsx watch worker/index.ts",
     "worker:producer": "tsx worker/index.ts",
     "worker:scraper": "tsx worker/scrape-worker.ts",
+    "worker:publish-now": "tsx scripts/publish_now.ts",
     "db:migrate": "prisma migrate dev",
+
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "synthesis": "tsx lib/synthesis_engine.ts",

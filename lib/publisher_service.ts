@@ -87,6 +87,7 @@ export async function publishArticle(
 
     // Determine media from source posts
     let mediaUrl = "";
+    let coverUrl = "";
     let mediaType: "IMAGE" | "VIDEO" | "TEXT" = "TEXT";
 
     if (article.sourcePostIds.length > 0) {
@@ -94,6 +95,7 @@ export async function publishArticle(
             where: { id: { in: article.sourcePostIds } },
             select: { mediaUrls: true }
         });
+
 
         // Find first valid media
         for (const post of sourcePosts) {
@@ -103,11 +105,13 @@ export async function publishArticle(
                     const mediaItem = item as any;
                     const url = typeof mediaItem === "string" ? mediaItem : mediaItem.url;
                     const type = typeof mediaItem === "string" ? "image" : mediaItem.type;
+                    const itemCover = typeof mediaItem === "string" ? undefined : mediaItem.coverUrl;
 
                     if (!url) continue;
 
                     if (type === "video" || url.toLowerCase().includes(".mp4")) {
                         mediaUrl = url;
+                        coverUrl = itemCover || "";
                         mediaType = "VIDEO";
                         break; // Prefer video
                     } else if (!mediaUrl) {
@@ -128,13 +132,19 @@ export async function publishArticle(
     // Create container
     console.log(`[Publisher] Creating Threads container (${mediaType})...`);
     console.log(`[Publisher] Media URL: ${mediaUrl}`);
+    if (coverUrl) console.log(`[Publisher] Cover URL: ${coverUrl}`);
+
     const containerId = await createContainer(
         threadsUserId,
         threadsAccessToken,
         mediaType,
         mediaUrl || undefined,
-        text || undefined
+        text || undefined,
+        undefined, // children
+        undefined, // isCarouselItem
+        coverUrl || undefined
     );
+
     console.log(`[Publisher] Container ID: ${containerId}`);
 
     // Wait for processing
