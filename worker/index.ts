@@ -62,8 +62,13 @@ cron.schedule("*/5 * * * *", async () => {
                     "scrape-account",
                     jobData,
                     {
-                        // Deduplicate: if a job for this account is already in the queue, skip it
-                        jobId: `scrape-${ws.id}-${username}`,
+                        // Deduplicate: if a job for this account is already in the queue, skip it?
+                        // FIX: Previously we used a static ID, which meant after one success, 
+                        // subsequent jobs were ignored by BullMQ as duplicates.
+                        // Now using a timestamp to ensure a fresh job is added every cycle.
+                        jobId: `scrape-${ws.id}-${username}-${Date.now()}`,
+                        removeOnComplete: true, // Auto-remove to keep Redis clean
+                        removeOnFail: { count: 100 }, // Keep last 100 failures
                     }
                 );
                 totalJobs++;
