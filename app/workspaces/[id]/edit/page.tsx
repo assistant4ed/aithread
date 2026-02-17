@@ -17,6 +17,7 @@ export default function EditWorkspacePage() {
         name: "",
         targetAccounts: "",
         translationPrompt: "",
+        synthesisLanguage: "",
         hotScoreThreshold: 50,
         threadsAppId: "",
         threadsToken: "",
@@ -36,6 +37,7 @@ export default function EditWorkspacePage() {
                     name: data.name,
                     targetAccounts: data.targetAccounts.join(", "),
                     translationPrompt: data.translationPrompt,
+                    synthesisLanguage: data.synthesisLanguage || "Traditional Chinese (HK/TW)",
                     hotScoreThreshold: data.hotScoreThreshold,
                     threadsAppId: data.threadsAppId || "",
                     threadsToken: data.threadsToken || "",
@@ -70,6 +72,7 @@ export default function EditWorkspacePage() {
                         .map((a) => a.trim().replace(/^@/, ""))
                         .filter(Boolean),
                     translationPrompt: form.translationPrompt,
+                    synthesisLanguage: form.synthesisLanguage,
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     threadsAppId: form.threadsAppId || null,
                     threadsToken: form.threadsToken || null,
@@ -143,6 +146,17 @@ export default function EditWorkspacePage() {
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
                         rows={6}
                         className="input font-mono text-xs"
+                    />
+                </Field>
+
+                {/* Synthesis Language */}
+                <Field label="Synthesis Language" hint="Target language for synthesized articles">
+                    <input
+                        type="text"
+                        value={form.synthesisLanguage}
+                        onChange={(e) => setForm({ ...form, synthesisLanguage: e.target.value })}
+                        placeholder="e.g. Traditional Chinese (HK/TW)"
+                        className="input"
                     />
                 </Field>
 

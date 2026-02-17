@@ -45,7 +45,10 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
 
         const savedPost = await processPost(
-            post,
+            {
+                ...post,
+                postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
+            },
             username,
             workspaceId,
             settings,

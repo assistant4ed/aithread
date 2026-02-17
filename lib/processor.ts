@@ -17,6 +17,15 @@ export interface ProcessPostOptions {
 }
 
 /**
+ * Helper to ensure we have a valid Date or undefined
+ */
+function safeDate(d: any): Date | undefined {
+    if (!d) return undefined;
+    const date = new Date(d);
+    return isNaN(date.getTime()) ? undefined : date;
+}
+
+/**
  * Process a scraped post: check for duplicates, score, translate if hot, and save.
  * Returns the saved post if new, undefined if it already existed (stats updated).
  */
@@ -36,9 +45,11 @@ export async function processPost(
     settings: WorkspaceSettings,
     options: ProcessPostOptions = {}
 ) {
+    const validPostedAt = safeDate(postData.postedAt);
+
     // 1. Freshness gate — skip posts older than maxPostAgeHours
-    if (settings.maxPostAgeHours && postData.postedAt) {
-        const ageMs = Date.now() - postData.postedAt.getTime();
+    if (settings.maxPostAgeHours && validPostedAt) {
+        const ageMs = Date.now() - validPostedAt.getTime();
         const ageHours = ageMs / (1000 * 60 * 60);
         if (ageHours > settings.maxPostAgeHours) {
             console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
@@ -53,14 +64,14 @@ export async function processPost(
 
     if (existing) {
         // Update engagement stats
-        const newScore = calculateHotScore(postData);
+        const newScore = calculateHotScore({ ...postData, postedAt: validPostedAt });
         await prisma.post.update({
             where: { id: existing.id },
             data: {
                 likes: postData.likes,
                 replies: postData.replies,
                 reposts: postData.reposts,
-                hotScore: newScore,
+                hotScore: isNaN(newScore) ? 0 : newScore,
             },
         });
         return undefined; // Not new
@@ -93,19 +104,22 @@ export async function processPost(
     }
 
     // 4. Score
-    const score = calculateHotScore(postData);
+    const score = calculateHotScore({ ...postData, postedAt: validPostedAt });
+    const finalScore = isNaN(score) ? 0 : score;
 
     // 5. Hot score gate — skip low-engagement posts entirely
-    if (score < settings.hotScoreThreshold) {
-        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${score.toFixed(0)}, threshold: ${settings.hotScoreThreshold})`);
+    if (finalScore < settings.hotScoreThreshold) {
+        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(0)}, threshold: ${settings.hotScoreThreshold})`);
         return undefined;
     }
 
     // 6. Translate if not skipped
-    let translated = "";
-    if (!options.skipTranslation) {
-        translated = await translateContent(postData.content, settings.translationPrompt);
-    }
+    // USER REQUEST: Scraped posts are NOT to be translated, only original is kept.
+    // Translation happens during synthesis.
+    // let translated = "";
+    // if (!options.skipTranslation) {
+    //    translated = await translateContent(postData.content, settings.translationPrompt);
+    // }
 
     // 7. Save
     const savedPost = await prisma.post.create({
@@ -113,14 +127,14 @@ export async function processPost(
             threadId: postData.threadId,
             sourceAccount,
             contentOriginal: postData.content,
-            contentTranslated: translated || null,
+            contentTranslated: null, // No individual post translation
             mediaUrls: postData.mediaUrls,
             likes: postData.likes,
             replies: postData.replies,
             reposts: postData.reposts,
-            hotScore: score,
+            hotScore: finalScore,
             sourceUrl: postData.postUrl,
-            postedAt: postData.postedAt || null,
+            postedAt: validPostedAt || null,
             status: "PENDING_REVIEW",
             workspaceId,
         },
@@ -138,11 +152,13 @@ export async function processPost(
 export function calculateHotScore(post: { likes: number; replies: number; reposts: number; postedAt?: Date }): number {
     const baseScore = (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
 
-    if (!post.postedAt) return baseScore;
+    const validDate = safeDate(post.postedAt);
+    if (!validDate) return baseScore;
 
-    const ageHours = (Date.now() - post.postedAt.getTime()) / (1000 * 60 * 60);
+    const ageHours = (Date.now() - validDate.getTime()) / (1000 * 60 * 60);
     const decayFactor = Math.pow(0.5, ageHours / 24); // Half-life = 24 hours
-    return baseScore * decayFactor;
+    const result = baseScore * decayFactor;
+    return isNaN(result) ? baseScore : result;
 }
 
 export async function checkTopicRelevance(content: string, topic: string): Promise<boolean> {

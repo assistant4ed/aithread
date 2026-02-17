@@ -109,6 +109,27 @@ cron.schedule("*/10 * * * *", async () => {
     }
 });
 
+// ─── Synthesis Job (every 30 minutes) ──────────────────────────────────────
+import { runSynthesisEngine } from "../lib/synthesis_engine";
+
+cron.schedule("*/30 * * * *", async () => {
+    console.log("\n[Synthesis] Running scheduled synthesis check...");
+
+    try {
+        const workspaces = await prisma.workspace.findMany({
+            where: { isActive: true },
+        });
+
+        for (const ws of workspaces) {
+            await runSynthesisEngine(ws.id, {
+                translationPrompt: ws.translationPrompt,
+            });
+        }
+    } catch (error) {
+        console.error("[Synthesis] Error in synthesis job:", error);
+    }
+});
+
 console.log("Worker started. Cron jobs:");
 console.log("  - Producer:   every 5 minutes (enqueues scrape jobs to Redis)");
 console.log("  - Publisher:  every 10 minutes");

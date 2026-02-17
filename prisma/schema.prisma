@@ -7,6 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") 
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ model Workspace {
 
   // AI / Translation
   translationPrompt String   @db.Text
+  synthesisLanguage String   @default("Traditional Chinese (HK/TW)")
   topicFilter       String?  // Optional topic/keyword filter for AI relevance check
   hotScoreThreshold Float    @default(50)
   maxPostAgeHours   Int      @default(48) // Skip posts older than this (hours)
@@ -34,6 +36,7 @@ model Workspace {
 
   // Relations
   posts             Post[]
+  articles          SynthesizedArticle[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -85,4 +88,27 @@ model Post {
   createdAt         DateTime  @default(now())
   postedAt          DateTime? // When the post was originally posted on Threads
   publishedAt       DateTime?
+}
+
+// ─── Synthesis ──────────────────────────────────────────────────────────────
+
+model SynthesizedArticle {
+  id              String    @id @default(cuid())
+  topicName       String    // e.g. "OpenAI Sora V2 Launch"
+  articleContent  String    @db.Text // The synthesized article (Traditional Chinese)
+  articleOriginal String?   @db.Text // English draft before translation
+  
+  sourcePostIds   String[]  // IDs of posts that contributed
+  sourceAccounts  String[]  // Unique authors who mentioned this
+  authorCount     Int       // How many distinct authors
+  postCount       Int       // How many posts in the cluster
+  
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  
+  status          PostStatus @default(PENDING_REVIEW)
+  publishedUrl    String?
+  
+  createdAt       DateTime  @default(now())
+  publishedAt     DateTime?
 }

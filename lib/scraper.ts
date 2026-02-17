@@ -224,7 +224,7 @@ export class ThreadsScraper {
                         reposts,
                         mediaUrls: media,
                         postUrl,
-                        postedAt: postedAt ? new Date(postedAt) : undefined,
+                        postedAt: postedAt && !isNaN(new Date(postedAt).getTime()) ? new Date(postedAt) : undefined,
                     };
                 });
             });

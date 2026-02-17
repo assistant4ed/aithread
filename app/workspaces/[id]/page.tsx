@@ -17,23 +17,23 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
         where: { id },
         include: {
             _count: {
-                select: { posts: true },
+                select: { articles: true },
             },
         },
     });
 
     if (!workspace) notFound();
 
-    // Post stats
+    // Article stats (replacing Post stats)
     const [pendingCount, approvedCount, publishedCount, errorCount] = await Promise.all([
-        prisma.post.count({ where: { workspaceId: id, status: "PENDING_REVIEW" } }),
-        prisma.post.count({ where: { workspaceId: id, status: "APPROVED" } }),
-        prisma.post.count({ where: { workspaceId: id, status: "PUBLISHED" } }),
-        prisma.post.count({ where: { workspaceId: id, status: "ERROR" } }),
+        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "PENDING_REVIEW" } }),
+        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "APPROVED" } }),
+        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "PUBLISHED" } }),
+        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "ERROR" } }),
     ]);
 
-    // Recent posts
-    const recentPosts = await prisma.post.findMany({
+    // Recent articles
+    const recentArticles = await prisma.synthesizedArticle.findMany({
         where: { workspaceId: id },
         orderBy: { createdAt: "desc" },
         take: 10,
@@ -99,7 +99,6 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                     <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Settings</h2>
                     <dl className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                            <dt className="text-muted">Topic Filter</dt>
                             <dd className="font-mono text-right max-w-[200px] truncate">
                                 {workspace.topicFilter ? (
                                     <span className="text-accent" title={workspace.topicFilter}>{workspace.topicFilter}</span>
@@ -107,6 +106,10 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                                     <span className="text-muted/50 italic">None</span>
                                 )}
                             </dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-muted">Synthesis Language</dt>
+                            <dd className="font-mono text-right">{workspace.synthesisLanguage}</dd>
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-muted">Hot Score Threshold</dt>
@@ -144,45 +147,56 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                 </pre>
             </section>
 
-            {/* Recent Posts */}
+            {/* Recent Articles */}
             <section>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">Recent Posts</h2>
+                    <h2 className="text-lg font-semibold">Recent Synthesized Articles</h2>
                     <Link
-                        href={`/workspaces/${workspace.id}/posts`}
+                        href={`/workspaces/${workspace.id}/articles`}
                         className="text-sm text-accent hover:text-accent-hover transition-colors"
                     >
                         View All →
                     </Link>
                 </div>
 
-                {recentPosts.length === 0 ? (
+                {recentArticles.length === 0 ? (
                     <div className="border border-dashed border-border rounded-xl p-8 text-center">
-                        <p className="text-muted">No posts yet. The worker will start scraping when active.</p>
+                        <p className="text-muted">No articles synthesized yet. The engine runs every 30 minutes.</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        {recentPosts.map((post) => (
+                    <div className="space-y-3">
+                        {recentArticles.map((article) => (
                             <div
-                                key={post.id}
-                                className="border border-border rounded-lg p-4 hover:bg-surface-hover transition-colors"
+                                key={article.id}
+                                className="border border-border rounded-lg p-5 hover:bg-surface-hover transition-colors"
                             >
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs font-mono text-muted">@{post.sourceAccount}</span>
-                                        <StatusBadge status={post.status} />
+                                        <span className="text-sm font-semibold bg-surface border border-border px-2 py-0.5 rounded text-foreground">
+                                            {article.topicName}
+                                        </span>
+                                        <StatusBadge status={article.status} />
                                     </div>
                                     <span className="text-xs text-muted font-mono">
-                                        Score: {post.hotScore.toFixed(0)}
+                                        {new Date(article.createdAt).toLocaleDateString()}
                                     </span>
                                 </div>
-                                <p className="text-sm text-foreground line-clamp-2">
-                                    {post.contentTranslated || post.contentOriginal || "No content"}
+                                <p className="text-sm text-foreground line-clamp-3 mb-3 whitespace-pre-wrap">
+                                    {article.articleContent}
                                 </p>
-                                <div className="flex items-center gap-4 mt-2 text-xs text-muted">
-                                    <span>❤️ {post.likes}</span>
-                                    <span>💬 {post.replies}</span>
-                                    <span>🔄 {post.reposts}</span>
+                                <div className="flex items-center gap-4 text-xs text-muted">
+                                    <span>👥 {article.authorCount} sources</span>
+                                    <span>📄 {article.postCount} posts</span>
+                                    {article.publishedUrl && (
+                                        <a
+                                            href={article.publishedUrl}
+                                            target="_blank"
+                                            rel="noopener"
+                                            className="text-success hover:underline"
+                                        >
+                                            View Published ↗
+                                        </a>
+                                    )}
                                 </div>
                             </div>
                         ))}
