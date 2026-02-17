@@ -1,0 +1,260 @@
+"use client";
+
+import { useRouter, useParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+
+export default function EditWorkspacePage() {
+    const router = useRouter();
+    const params = useParams();
+    const workspaceId = params.id as string;
+
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+
+    const [form, setForm] = useState({
+        name: "",
+        targetAccounts: "",
+        translationPrompt: "",
+        hotScoreThreshold: 50,
+        threadsAppId: "",
+        threadsToken: "",
+        dailyPostLimit: 3,
+    });
+
+    useEffect(() => {
+        // Fetch existing workspace data
+        const fetchWorkspace = async () => {
+            try {
+                const res = await fetch(`/api/workspaces/${workspaceId}`);
+                if (!res.ok) throw new Error("Failed to load workspace");
+                const data = await res.json();
+
+                setForm({
+                    name: data.name,
+                    targetAccounts: data.targetAccounts.join(", "),
+                    translationPrompt: data.translationPrompt,
+                    hotScoreThreshold: data.hotScoreThreshold,
+                    threadsAppId: data.threadsAppId || "",
+                    threadsToken: data.threadsToken || "",
+                    dailyPostLimit: data.dailyPostLimit,
+                });
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (workspaceId) {
+            fetchWorkspace();
+        }
+    }, [workspaceId]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setError("");
+
+        try {
+            const res = await fetch(`/api/workspaces/${workspaceId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: form.name,
+                    targetAccounts: form.targetAccounts
+                        .split(",")
+                        .map((a) => a.trim().replace(/^@/, ""))
+                        .filter(Boolean),
+                    translationPrompt: form.translationPrompt,
+                    hotScoreThreshold: Number(form.hotScoreThreshold),
+                    threadsAppId: form.threadsAppId || null,
+                    threadsToken: form.threadsToken || null,
+                    dailyPostLimit: Number(form.dailyPostLimit),
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to update workspace");
+            }
+
+            router.push(`/workspaces/${workspaceId}`);
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
+
+    return (
+        <div className="max-w-2xl mx-auto animate-fade-in">
+            <div className="mb-6">
+                <Link
+                    href={`/workspaces/${workspaceId}`}
+                    className="text-sm text-muted hover:text-foreground transition-colors mb-2 block"
+                >
+                    ← Back to Workspace
+                </Link>
+                <h1 className="text-2xl font-bold tracking-tight">Edit Workspace</h1>
+            </div>
+
+            {error && (
+                <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
+                    {error}
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Name */}
+                <Field label="Workspace Name" required>
+                    <input
+                        type="text"
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder="e.g. Tech News HK"
+                        className="input"
+                        required
+                    />
+                </Field>
+
+                {/* Target Accounts */}
+                <Field label="Target Accounts" hint="Comma-separated Threads usernames to scrape">
+                    <input
+                        type="text"
+                        value={form.targetAccounts}
+                        onChange={(e) => setForm({ ...form, targetAccounts: e.target.value })}
+                        placeholder="@openai, @nvidia, @meta"
+                        className="input"
+                    />
+                </Field>
+
+                {/* Translation Prompt */}
+                <Field label="Translation Prompt">
+                    <textarea
+                        value={form.translationPrompt}
+                        onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
+                        rows={6}
+                        className="input font-mono text-xs"
+                    />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Hot Score Threshold */}
+                    <Field label="Hot Score Threshold">
+                        <input
+                            type="number"
+                            value={form.hotScoreThreshold}
+                            onChange={(e) => setForm({ ...form, hotScoreThreshold: Number(e.target.value) })}
+                            className="input"
+                            min={0}
+                        />
+                    </Field>
+
+                    {/* Daily Post Limit */}
+                    <Field label="Daily Post Limit">
+                        <input
+                            type="number"
+                            value={form.dailyPostLimit}
+                            onChange={(e) => setForm({ ...form, dailyPostLimit: Number(e.target.value) })}
+                            className="input"
+                            min={1}
+                        />
+                    </Field>
+                </div>
+
+                {/* Threads Credentials */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Threads API Credentials
+                        <span className="text-xs font-normal ml-2">(optional — needed for publishing)</span>
+                    </h3>
+
+                    <Field label="Threads User ID">
+                        <input
+                            type="text"
+                            value={form.threadsAppId}
+                            onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
+                            placeholder="e.g. 25909735278694109"
+                            className="input"
+                        />
+                    </Field>
+
+                    <Field label="Threads Access Token">
+                        <input
+                            type="password"
+                            value={form.threadsToken}
+                            onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
+                            placeholder="Long-lived access token"
+                            className="input"
+                        />
+                    </Field>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                        {saving ? "Saving..." : "Save Changes"}
+                    </button>
+                    <Link
+                        href={`/workspaces/${workspaceId}`}
+                        className="px-6 py-2.5 border border-border text-muted hover:text-foreground text-sm rounded-lg transition-colors inline-block text-center"
+                    >
+                        Cancel
+                    </Link>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+function Field({
+    label,
+    hint,
+    required,
+    children,
+}: {
+    label: string;
+    hint?: string;
+    required?: boolean;
+    children: React.ReactNode;
+}) {
+    return (
+        <label className="block">
+            <span className="text-sm font-medium text-foreground">
+                {label}
+                {required && <span className="text-danger ml-1">*</span>}
+            </span>
+            {hint && <span className="text-xs text-muted block mt-0.5">{hint}</span>}
+            <div className="mt-1.5">{children}</div>
+
+            <style jsx global>{`
+        .input {
+          width: 100%;
+          padding: 0.5rem 0.75rem;
+          background: var(--surface);
+          border: 1px solid var(--border-color);
+          border-radius: 0.5rem;
+          color: var(--foreground);
+          font-size: 0.875rem;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        .input:focus {
+          border-color: var(--accent);
+        }
+        .input::placeholder {
+          color: var(--muted);
+        }
+      `}</style>
+        </label>
+    );
+}
