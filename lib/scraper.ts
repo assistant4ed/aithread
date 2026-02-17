@@ -126,6 +126,7 @@ export class ThreadsScraper {
                     let reposts = 0;
 
                     const innerText = el.innerText || "";
+                    // Split lines for metric extraction if needed
                     const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
 
                     const likeEl = el.querySelector('[aria-label*="likes"]');
@@ -231,12 +232,17 @@ export class ThreadsScraper {
                 });
             });
 
-            return posts;
+            // Filter out posts without a valid date (likely pinned or ad garbage)
+            return posts.filter((p: any) => {
+                if (!p.postedAt) return false;
+                const d = new Date(p.postedAt);
+                return !isNaN(d.getTime());
+            });
 
         } catch (error) {
             console.error(`Error scraping ${username}:`, error);
+            // return []; // Changed to return what we have so far? No, just empty array on main error.
             return [];
-            await page.close();
         } finally {
             await page.close();
         }

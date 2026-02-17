@@ -49,7 +49,13 @@ export async function processPost(
     const validPostedAt = safeDate(postData.postedAt);
 
     // 1. Freshness gate — skip posts older than maxPostAgeHours
-    if (settings.maxPostAgeHours && validPostedAt) {
+    // STRICT MODE: If maxPostAgeHours is set, we MUST have a valid date.
+    if (settings.maxPostAgeHours) {
+        if (!validPostedAt) {
+            console.log(`[Processor] Skipping post ${postData.threadId} (missing valid timestamp, likely old/pinned)`);
+            return undefined;
+        }
+
         const ageMs = Date.now() - validPostedAt.getTime();
         const ageHours = ageMs / (1000 * 60 * 60);
         if (ageHours > settings.maxPostAgeHours) {
@@ -84,22 +90,8 @@ export async function processPost(
         if (!isRelevant) {
             console.log(`[Processor] Post rejected by topic filter: "${settings.topicFilter}"`);
 
-            // Save as REJECTED so we don't process it again
-            await prisma.post.create({
-                data: {
-                    threadId: postData.threadId,
-                    sourceAccount,
-                    contentOriginal: postData.content,
-                    mediaUrls: postData.mediaUrls,
-                    likes: postData.likes,
-                    replies: postData.replies,
-                    reposts: postData.reposts,
-                    hotScore: 0,
-                    sourceUrl: postData.postUrl,
-                    status: "REJECTED",
-                    workspaceId,
-                },
-            });
+            // USER REQUEST: Do not save rejected posts to DB to save space/calls.
+            // We rely on the fact that if we scrape it again, we'll just check filter again (cost of API vs cost of DB).
             return undefined;
         }
     }

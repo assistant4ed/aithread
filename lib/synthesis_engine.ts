@@ -2,6 +2,7 @@
 import { prisma } from "./prisma";
 import Groq from "groq-sdk";
 import { clusterPosts, Document } from "./clustering";
+import { sanitizeText } from "./sanitizer";
 
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
@@ -16,7 +17,7 @@ export interface SynthesisSettings {
  * Run synthesis engine for a specific workspace.
  * 1. Fetch posts from last 72 hours
  * 2. Cluster them using TF-IDF + Cosine Similarity
- * 3. Filter clusters by 5% author threshold
+ * 3. Filter clusters by 5% author threshold (min 2)
  * 4. Synthesize articles using Groq
  */
 export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings) {
@@ -69,9 +70,11 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
     const totalTracked = allAuthors.size || 1; // Avoid divide by zero, though logically should be >0
-    const thresholdCount = Math.ceil(totalTracked * 0.05);
 
-    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Threshold: ${thresholdCount} authors (5% of ${totalTracked}).`);
+    // FIX: Minimum 2 authors required (or 5%, whichever is higher) to avoid 1-author "trends"
+    const thresholdCount = Math.max(2, Math.ceil(totalTracked * 0.05));
+
+    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Threshold: ${thresholdCount} authors (5% of ${totalTracked}, min 2).`);
 
     let newArticles = 0;
 
@@ -102,10 +105,19 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             continue;
         }
 
-        // 5. Translate & Persist
+        // 5. Translate & Persist & Sanitize
         // Translate title and content to Target Language
-        const translatedContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}. Maintain the journalistic tone.`);
-        const translatedTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}. Keep it punchy.`);
+        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}. Maintain the journalistic tone. Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
+        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}. Keep it punchy. Output ONLY the translated text.`);
+
+        // Sanitize output to remove LLM artifacts
+        const translatedContent = sanitizeText(rawContent);
+        const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
+
+        if (!translatedContent || !translatedTitle) {
+            console.log("  -> Synthesis rejected by sanitizer (empty/broken output).");
+            continue;
+        }
 
         // Create the article
         const article = await prisma.synthesizedArticle.create({
@@ -154,6 +166,7 @@ async function synthesizeCluster(textContext: string): Promise<SynthesisResult |
     2. Ignore personal opinions/chatter unless relevant context.
     3. Output JSON: { "headline": "...", "content": "..." }
     4. "content" should be a 2-3 paragraph summary.
+    5. JSON ONLY. No preamble. No "Here is the JSON".
     `;
 
     try {
