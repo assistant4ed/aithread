@@ -408,72 +408,71 @@ export default function EditWorkspacePage() {
 
                 {/* Instagram Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
-                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-                        Instagram API Credentials
-                        <span className="text-xs font-normal ml-2">(optional)</span>
-                    </h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            Instagram Connection
+                        </h3>
+                        {form.instagramAccessToken ? (
+                            <span className="text-xs bg-success/10 text-success px-2 py-1 rounded border border-success/20 font-medium flex items-center gap-1">
+                                ✓ Connected
+                            </span>
+                        ) : (
+                            <span className="text-xs bg-surface text-muted px-2 py-1 rounded border border-border font-medium">
+                                Not Connected
+                            </span>
+                        )}
+                    </div>
 
-                    <Field label="Instagram Account ID">
-                        <input
-                            type="text"
-                            value={form.instagramAccountId}
-                            onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
-                            placeholder="e.g. 17841400000000000"
-                            className="input"
-                        />
-                    </Field>
+                    <p className="text-xs text-muted">
+                        Connect your Instagram account to enable auto-publishing.
+                    </p>
 
-                    <Field label="Instagram Access Token">
-                        <input
-                            type="password"
-                            value={form.instagramAccessToken}
-                            onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
-                            placeholder="Page Access Token"
-                            className="input"
-                        />
-                    </Field>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
+                                window.location.href = `/api/auth/signin/instagram?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                            }}
+                            className="px-4 py-2 bg-[#E1306C] hover:bg-[#C13584] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                        >
+                            {form.instagramAccessToken ? "Reconnect Instagram" : "Connect Instagram"}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Twitter Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
-                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-                        X (Twitter) API Credentials
-                        <span className="text-xs font-normal ml-2">(optional)</span>
-                    </h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            X (Twitter) Connection
+                        </h3>
+                        {form.twitterAccessToken ? (
+                            <span className="text-xs bg-success/10 text-success px-2 py-1 rounded border border-success/20 font-medium flex items-center gap-1">
+                                ✓ Connected
+                            </span>
+                        ) : (
+                            <span className="text-xs bg-surface text-muted px-2 py-1 rounded border border-border font-medium">
+                                Not Connected
+                            </span>
+                        )}
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <Field label="API Key">
-                            <input
-                                type="text"
-                                value={form.twitterApiKey}
-                                onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="API Secret">
-                            <input
-                                type="password"
-                                value={form.twitterApiSecret}
-                                onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="Access Token">
-                            <input
-                                type="text"
-                                value={form.twitterAccessToken}
-                                onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="Access Secret">
-                            <input
-                                type="password"
-                                value={form.twitterAccessSecret}
-                                onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
+                    <p className="text-xs text-muted">
+                        Connect your X (Twitter) account to enable auto-publishing.
+                    </p>
+
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
+                                window.location.href = `/api/auth/signin/twitter?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                            }}
+                            className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                        >
+                            {form.twitterAccessToken ? "Reconnect X (Twitter)" : "Connect X (Twitter)"}
+                        </button>
                     </div>
                 </div>
 

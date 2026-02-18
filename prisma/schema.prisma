@@ -36,12 +36,16 @@ model Workspace {
 
   // Instagram API credentials
   instagramAccessToken String?
+  instagramRefreshToken String?
+  instagramExpiresAt   Int?     // Unix timestamp
   instagramAccountId   String?
 
   // X (Twitter) API credentials
   twitterApiKey       String?
   twitterApiSecret    String?
   twitterAccessToken  String?
+  twitterRefreshToken String?
+  twitterExpiresAt    Int?      // Unix timestamp
   twitterAccessSecret String?
 
   // Publishing limits

@@ -5,22 +5,28 @@ import fs from 'fs';
 import path from 'path';
 
 export interface TwitterConfig {
-    appKey: string;
-    appSecret: string;
+    appKey?: string;
+    appSecret?: string;
     accessToken: string;
-    accessSecret: string;
+    accessSecret?: string;
 }
 
 /**
  * Creates a Twitter client instance.
+ * Supports both OAuth 1.0a (Legacy) and OAuth 2.0 (Bearer Token).
  */
 function getClient(config: TwitterConfig) {
-    return new TwitterApi({
-        appKey: config.appKey,
-        appSecret: config.appSecret,
-        accessToken: config.accessToken,
-        accessSecret: config.accessSecret,
-    });
+    if (config.accessSecret && config.appKey && config.appSecret) {
+        return new TwitterApi({
+            appKey: config.appKey,
+            appSecret: config.appSecret,
+            accessToken: config.accessToken,
+            accessSecret: config.accessSecret,
+        });
+    } else {
+        // OAuth 2.0 User Context (Bearer Token)
+        return new TwitterApi(config.accessToken);
+    }
 }
 
 /**

@@ -263,15 +263,26 @@ export async function publishArticle(
     }
 
     // --- TWITTER ---
-    if (config.twitterApiKey && config.twitterApiSecret && config.twitterAccessToken && config.twitterAccessSecret) {
+    // Check for either OAuth 1.0 (Legacy) or OAuth 2.0 (Bearer)
+    const hasTwitterV1 = config.twitterApiKey && config.twitterApiSecret && config.twitterAccessToken && config.twitterAccessSecret;
+    // For OAuth 2.0, we just need the access token (bearer). We don't check for accessSecret existence to allow mixed but valid states, 
+    // but typically it will be missing. Key is we have an accessToken.
+    const hasTwitterV2 = !!config.twitterAccessToken;
+
+    if (hasTwitterV1 || hasTwitterV2) {
         try {
             console.log(`[Publisher] Publishing to X (Twitter)...`);
-            const twitterConfig = {
-                appKey: config.twitterApiKey,
-                appSecret: config.twitterApiSecret,
-                accessToken: config.twitterAccessToken,
-                accessSecret: config.twitterAccessSecret
+
+            // Construct config based on available credentials
+            const twitterConfig: any = {
+                accessToken: config.twitterAccessToken!,
             };
+
+            if (hasTwitterV1) {
+                twitterConfig.appKey = config.twitterApiKey!;
+                twitterConfig.appSecret = config.twitterApiSecret!;
+                twitterConfig.accessSecret = config.twitterAccessSecret!;
+            }
 
             let mediaIds: string[] = [];
             if (mediaUrl) { // Twitter requires upload first
