@@ -378,30 +378,37 @@ export default function EditWorkspacePage() {
 
                 {/* Threads Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
-                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-                        Threads API Credentials
-                        <span className="text-xs font-normal ml-2">(optional — needed for publishing)</span>
-                    </h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            Threads Connection
+                        </h3>
+                        {form.threadsToken ? (
+                            <span className="text-xs bg-success/10 text-success px-2 py-1 rounded border border-success/20 font-medium flex items-center gap-1">
+                                ✓ Connected
+                            </span>
+                        ) : (
+                            <span className="text-xs bg-surface text-muted px-2 py-1 rounded border border-border font-medium">
+                                Not Connected
+                            </span>
+                        )}
+                    </div>
 
-                    <Field label="Threads User ID">
-                        <input
-                            type="text"
-                            value={form.threadsAppId}
-                            onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
-                            placeholder="e.g. 25909735278694109"
-                            className="input"
-                        />
-                    </Field>
+                    <p className="text-xs text-muted">
+                        Connect your Threads account to enable auto-publishing.
+                    </p>
 
-                    <Field label="Threads Access Token">
-                        <input
-                            type="password"
-                            value={form.threadsToken}
-                            onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
-                            placeholder="Long-lived access token"
-                            className="input"
-                        />
-                    </Field>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
+                                window.location.href = `/api/auth/signin/threads?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                            }}
+                            className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                        >
+                            {form.threadsToken ? "Reconnect Threads" : "Connect Threads"}
+                        </button>
+                    </div>
                 </div>
 
 

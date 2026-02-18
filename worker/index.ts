@@ -1,7 +1,7 @@
 import "dotenv/config";
 import cron from "node-cron";
 import { prisma } from "../lib/prisma";
-import { scrapeQueue, ScrapeJobData } from "../lib/queue";
+import { scrapeQueue, ScrapeJobData, removePendingScrapes } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
 import { runSynthesisEngine } from "../lib/synthesis_engine";
@@ -143,6 +143,9 @@ async function runScrape(ws: any) {
 }
 
 async function runSynthesis(ws: any, targetPublishTime: string) {
+    console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
+    await removePendingScrapes(ws.id);
+
     await prisma.workspace.update({
         where: { id: ws.id },
         data: { lastSynthesizedAt: new Date() }

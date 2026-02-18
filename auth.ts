@@ -17,10 +17,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientSecret: process.env.AUTH_INSTAGRAM_SECRET,
             // Standard scopes for Basic Display. 
             // Note: Publishing usually requires "Instagram Graph API" via Facebook Login or specialized scopes.
-            // NextAuth's default Instagram provider is often for Basic Display. 
             // We will start with this and adjust if we need the Facebook provider for business publishing.
             authorization: { params: { scope: "user_profile,user_media" } },
         }),
+        {
+            id: "threads",
+            name: "Threads",
+            type: "oauth",
+            clientId: process.env.AUTH_THREADS_ID,
+            clientSecret: process.env.AUTH_THREADS_SECRET,
+            wellKnown: "https://threads.net/.well-known/openid-configuration",
+            authorization: {
+                url: "https://threads.net/oauth/authorize",
+                params: { scope: "threads_basic,threads_content_publish" }, // Scopes for basic profile + publishing
+            },
+            token: "https://graph.threads.net/oauth/access_token",
+            userinfo: "https://graph.threads.net/v1/me",
+            profile(profile) {
+                return {
+                    id: profile.id,
+                    name: profile.username,
+                    image: profile.threads_profile_picture_url,
+                    email: null,
+                }
+            },
+        },
     ],
     callbacks: {
         async signIn({ user, account, profile }) {
@@ -62,6 +83,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         },
                     })
                     console.log(`Updated Instagram tokens for workspace ${workspaceId}`)
+                } else if (account.provider === "threads") {
+                    await prisma.workspace.update({
+                        where: { id: workspaceId },
+                        data: {
+                            threadsToken: account.access_token, // Map access_token to our existing threadsToken field
+                            threadsRefreshToken: account.refresh_token,
+                            threadsExpiresAt: account.expires_at,
+                            threadsAppId: account.providerAccountId, // Store the Threads user ID in existing threadsAppId field (or creates a new one if pref)
+                        },
+                    })
+                    console.log(`Updated Threads tokens for workspace ${workspaceId}`)
                 }
 
                 // 3. Prevent actual "login" to the app. We just wanted the tokens.

@@ -58,3 +58,30 @@ export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
         removeOnFail: { count: 200 },       // Keep last 200 failed for debugging
     },
 });
+
+/**
+ * Removes all pending (waiting/delayed) scrape jobs for a specific workspace.
+ * Used to stop scraping when synthesis begins, preventing resource waste.
+ */
+export async function removePendingScrapes(workspaceId: string) {
+    // Get waiting and delayed jobs
+    // Note: getJobs returns a promise resolving to an array of jobs
+    // We check a reasonable batches (e.g. first 1000) to avoid memory issues if queue is massive
+    const jobs = await scrapeQueue.getJobs(['waiting', 'delayed'], 0, 1000, true);
+
+    let removedCount = 0;
+    const removalPromises = [];
+
+    for (const job of jobs) {
+        if (job.data && job.data.workspaceId === workspaceId) {
+            removalPromises.push(job.remove());
+            removedCount++;
+        }
+    }
+
+    await Promise.all(removalPromises);
+
+    if (removedCount > 0) {
+        console.log(`[Queue] Removed ${removedCount} pending scrape jobs for workspace ${workspaceId}`);
+    }
+}

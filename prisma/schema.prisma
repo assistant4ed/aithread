@@ -32,7 +32,9 @@ model Workspace {
 
   // Threads API credentials (per workspace)
   threadsAppId      String?
-  threadsToken      String?
+  threadsToken      String? // Acts as Access Token
+  threadsRefreshToken String?
+  threadsExpiresAt    Int?     // Unix timestamp
 
   // Instagram API credentials
   instagramAccessToken String?
