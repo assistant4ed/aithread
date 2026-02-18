@@ -10,6 +10,7 @@ const groq = new Groq({
 
 export interface SynthesisSettings {
     translationPrompt: string;
+    clusteringPrompt: string;
     synthesisLanguage: string;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
 }
@@ -17,8 +18,8 @@ export interface SynthesisSettings {
 /**
  * Run synthesis engine for a specific workspace.
  * 1. Fetch posts from last 72 hours
- * 2. Cluster them using TF-IDF + Cosine Similarity
- * 3. Filter clusters by 5% author threshold (min 2)
+ * 2. Cluster them using LLM (Llama 3)
+ * 3. Filter clusters by author threshold (min 2)
  * 4. Synthesize articles using Groq
  */
 export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings) {
@@ -67,16 +68,17 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         return;
     }
 
-    // 2. Cluster
+    // 2. Cluster using LLM
     const docs: Document[] = posts
         .filter(p => p.contentOriginal && p.contentOriginal.length > 20)
         .map(p => ({
             id: p.id,
-            text: p.contentOriginal || "",
+            text: `[Author: @${p.sourceAccount}] ${p.contentOriginal || ""}`,
         }));
 
-    console.log(`[Synthesis] Clustering ${docs.length} posts...`);
-    const rawClusters = clusterPosts(docs, 0.35);
+    console.log(`[Synthesis] Clustering ${docs.length} posts via LLM...`);
+    // const rawClusters = clusterPosts(docs, 0.35); // OLD: Algorithmic
+    const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt); // NEW: LLM
 
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
@@ -93,14 +95,23 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
         const authors = new Set(clusterPosts.map(p => p.sourceAccount));
 
+        console.log(`[Synthesis] [DEBUG] Cluster with ${clusterPosts.length} posts from ${authors.size} authors:`);
+        clusterPosts.forEach(p => {
+            console.log(`  - @${p.sourceAccount}: ${p.contentOriginal?.slice(0, 100).replace(/\n/g, " ")}...`);
+        });
+
         // 3a. Check Threshold
         if (authors.size < thresholdCount) {
+            console.log(`  -> SKIPPED: Below author threshold (${authors.size} < ${thresholdCount})`);
             continue;
         }
 
         // 3b. Check if this cluster has any "new" news
         const hasPending = clusterPosts.some(p => p.coherenceStatus === "PENDING" || p.coherenceStatus === "ISOLATED");
-        if (!hasPending) continue;
+        if (!hasPending) {
+            console.log(`  -> SKIPPED: Already processed / No pending news.`);
+            continue;
+        }
 
         console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
 
@@ -157,6 +168,61 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     console.log(`[Synthesis] Finished. Generated ${newArticles} new articles.`);
 }
 
+import { RawCluster } from "./clustering";
+
+// New LLM Clustering
+async function clusterPostsWithLLM(posts: Document[], promptInstruction: string): Promise<RawCluster[]> {
+    if (posts.length === 0) return [];
+
+    // Format posts for LLM
+    const postsText = posts.map(p => `[ID: ${p.id}] ${p.text}`).join("\n\n");
+
+    const systemPrompt = `
+    You are an AI News Editor using Llama 3.
+    Task: Group the following social media posts into thematic news clusters.
+    
+    Instructions:
+    ${promptInstruction}
+    
+    Validation Rules:
+    1. A cluster MUST share a specific news topic (e.g., "Release of Claude 3.5 Sonnet", "SpaceX Launch").
+    2. Do NOT group unrelated posts or posts about different topics.
+    3. Ignore spam or irrelevant queries.
+    
+    Output Format:
+    Return a JSON object with a "clusters" array.
+    each cluster: { "topic": "string", "postIds": ["id1", "id2"] }
+    
+    JSON ONLY. No markdown, no "Here is the JSON".
+    `;
+
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: `Posts to cluster:\n\n${postsText.slice(0, 25000)}` }, // Limit 25k chars ~ 6k tokens
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.1,
+            response_format: { type: "json_object" },
+        });
+
+        const raw = completion.choices[0]?.message?.content;
+        if (!raw) return [];
+
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.clusters)) {
+            return parsed.clusters.map((c: any) => ({
+                postIds: c.postIds || [],
+                terms: [c.topic || ""]
+            }));
+        }
+        return [];
+    } catch (e) {
+        console.error("[Synthesis] LLM Clustering failed:", e);
+        return [];
+    }
+}
 
 
 interface SynthesisResult {
@@ -226,6 +292,7 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
             for (const ws of workspaces) {
                 await runSynthesisEngine(ws.id, {
                     translationPrompt: ws.translationPrompt,
+                    clusteringPrompt: ws.clusteringPrompt,
                     synthesisLanguage: ws.synthesisLanguage,
                 });
             }

@@ -103,7 +103,9 @@ export async function publishArticle(
     // 1. User selected media (Priority)
     if (article.selectedMediaUrl) {
         mediaUrl = article.selectedMediaUrl;
-        mediaType = (article.selectedMediaType as "IMAGE" | "VIDEO") || "IMAGE";
+        const rawType = article.selectedMediaType?.toUpperCase();
+        mediaType = (rawType === "VIDEO") ? "VIDEO" : "IMAGE";
+
         if (mediaType === "VIDEO") {
             // If manual upload, we might not have a cover URL easily unless passed.
             // For now assume no cover or let Threads generate one.
