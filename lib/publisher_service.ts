@@ -184,9 +184,20 @@ export async function publishArticle(
     // Publish
     console.log(`[Publisher] Publishing container ${containerId}...`);
     const publishedId = await publishContainer(threadsUserId, threadsAccessToken, containerId);
-    const threadsUrl = `https://www.threads.net/post/${publishedId}`;
+    console.log(`[Publisher] Published! ID: ${publishedId}`);
 
-    console.log(`[Publisher] Published! URL: ${threadsUrl}`);
+    // Fetch the actual permalink
+    let threadsUrl = `https://www.threads.net/post/${publishedId}`; // Fallback
+    try {
+        const { getThread } = await import("./threads_client");
+        const threadDetails = await getThread(publishedId, threadsAccessToken);
+        if (threadDetails.permalink) {
+            threadsUrl = threadDetails.permalink;
+            console.log(`[Publisher] Retrieved Permalink: ${threadsUrl}`);
+        }
+    } catch (e: any) {
+        console.warn(`[Publisher] Failed to get permalink (using fallback): ${e.message}`);
+    }
 
     // Update DB
     await prisma.synthesizedArticle.update({

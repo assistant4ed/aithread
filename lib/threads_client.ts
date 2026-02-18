@@ -166,3 +166,20 @@ export async function waitForContainer(
 
     throw new Error(`Container ${containerId} did not finish after ${maxAttempts} attempts`);
 }
+
+/**
+ * Fetches a thread's details, including permalink.
+ */
+export async function getThread(
+    threadId: string,
+    accessToken: string
+): Promise<{ id: string; permalink: string }> {
+    const endpoint = `https://graph.threads.net/v1.0/${threadId}?fields=id,permalink&access_token=${accessToken}`;
+
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch thread details: ${response.statusText}`);
+    }
+
+    return await response.json();
+}

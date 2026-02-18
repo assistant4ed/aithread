@@ -275,52 +275,53 @@ export default function ArticlesPage() {
                                     </div>
 
                                     <div className="space-y-4">
-                                        {/* Media Preview */}
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {/* Combined list: custom media + source media */}
-                                            {(() => {
-                                                const allMedia = [...(article.mediaUrls || [])];
-                                                // If custom media is selected but not in the list, just treat it as the selected state
-                                                // Actually we want to show the list of OPTIONS.
-                                                // The selected one gets a border.
+                                        {/* Media Preview (Candidates) - Hide if PUBLISHED */}
+                                        {article.status !== "PUBLISHED" && (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {(() => {
+                                                    const allMedia = [...(article.mediaUrls || [])];
+                                                    return allMedia.slice(0, 8).map((m, i) => {
+                                                        const url = typeof m === "string" ? m : m.url;
+                                                        const type = typeof m === "string" ? "image" : m.type;
+                                                        const isSelected = article.selectedMediaUrl === url;
 
-                                                // If we uploaded custom media, it should be in `selectedMediaUrl`. 
-                                                // We can display it as a special "Selected" preview if it's not in the list.
-                                                return allMedia.slice(0, 8).map((m, i) => {
-                                                    const url = typeof m === "string" ? m : m.url;
-                                                    const type = typeof m === "string" ? "image" : m.type;
-                                                    const isSelected = article.selectedMediaUrl === url;
+                                                        return (
+                                                            <div
+                                                                key={i}
+                                                                onClick={() => handleMediaSelect(article.id, url, type)}
+                                                                className={`relative aspect-square rounded overflow-hidden cursor-pointer border-2 transition-all ${isSelected ? "border-accent ring-2 ring-accent/20" : "border-transparent opacity-70 hover:opacity-100"
+                                                                    }`}
+                                                            >
+                                                                {type === "video" ? (
+                                                                    <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white text-xs">▶</div>
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-full h-full bg-cover bg-center"
+                                                                        style={{ backgroundImage: `url(${url})` }}
+                                                                    />
+                                                                )}
+                                                                {isSelected && (
+                                                                    <div className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full mb-0.5"></div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    });
+                                                })()}
+                                            </div>
+                                        )}
 
-                                                    return (
-                                                        <div
-                                                            key={i}
-                                                            onClick={() => handleMediaSelect(article.id, url, type)}
-                                                            className={`relative aspect-square rounded overflow-hidden cursor-pointer border-2 transition-all ${isSelected ? "border-accent ring-2 ring-accent/20" : "border-transparent opacity-70 hover:opacity-100"
-                                                                }`}
-                                                        >
-                                                            {type === "video" ? (
-                                                                <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white text-xs">▶</div>
-                                                            ) : (
-                                                                <div
-                                                                    className="w-full h-full bg-cover bg-center"
-                                                                    style={{ backgroundImage: `url(${url})` }}
-                                                                />
-                                                            )}
-                                                            {isSelected && (
-                                                                <div className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full mb-0.5"></div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                });
-                                            })()}
-                                        </div>
-
-                                        {/* Show currently selected larger preview if exists */}
+                                        {/* Final Selected Media Display (Always allow seeing what was picked/published) */}
                                         {article.selectedMediaUrl && (
-                                            <div className="mt-2 text-xs text-muted flex items-center gap-2 bg-surface/30 p-2 rounded">
-                                                <span>Selected:</span>
-                                                <div className="h-8 w-8 rounded bg-cover bg-center" style={{ backgroundImage: `url(${article.selectedMediaUrl})` }}></div>
-                                                <span className="truncate flex-1 opacity-50">{article.selectedMediaUrl}</span>
+                                            <div className={`mt-2 flex items-center gap-2 bg-surface/30 p-2 rounded ${article.status === "PUBLISHED" ? "border border-success/30 bg-success/5" : ""}`}>
+                                                <span className="text-xs text-muted w-16 px-1">{article.status === "PUBLISHED" ? "Published:" : "Selected:"}</span>
+                                                {article.selectedMediaType === "video" ? (
+                                                    <div className="h-16 w-16 bg-gray-900 flex items-center justify-center rounded text-white text-xs">▶ Video</div>
+                                                ) : (
+                                                    <div className="h-16 w-16 rounded bg-cover bg-center" style={{ backgroundImage: `url(${article.selectedMediaUrl})` }}></div>
+                                                )}
+                                                <a href={article.selectedMediaUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline truncate flex-1 opacity-70">
+                                                    {article.selectedMediaUrl.split('/').pop()}
+                                                </a>
                                             </div>
                                         )}
                                     </div>
