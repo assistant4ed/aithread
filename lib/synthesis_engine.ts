@@ -15,13 +15,14 @@ export interface SynthesisSettings {
     postLookbackHours?: number;
     imagePrompt?: string;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
+    hotScoreThreshold?: number;    // "Viral" threshold
 }
 
 /**
  * Run synthesis engine for a specific workspace.
  * 1. Fetch posts from last X hours (configured via postLookbackHours)
  * 2. Cluster them using LLM (Llama 3)
- * 3. Filter clusters by author threshold (min 2)
+ * 3. Filter clusters by author threshold (min 2) OR viral score
  * 4. Synthesize articles using Groq
  */
 export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings) {
@@ -64,6 +65,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             sourceAccount: true,
             coherenceStatus: true,
             threadId: true,
+            externalUrls: true,
+            hotScore: true,
         },
     });
 
@@ -91,7 +94,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     // FIX: Minimum 2 authors required (or 5%, whichever is higher)
     const thresholdCount = Math.max(2, Math.ceil(totalTracked * 0.05));
 
-    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Threshold: ${thresholdCount} authors.`);
+    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors.`);
 
     let newArticles = 0;
 
@@ -104,9 +107,17 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             console.log(`  - @${p.sourceAccount}: ${p.contentOriginal?.slice(0, 100).replace(/\n/g, " ")}...`);
         });
 
-        // 3a. Check Threshold
-        if (authors.size < thresholdCount) {
-            console.log(`  -> SKIPPED: Below author threshold (${authors.size} < ${thresholdCount})`);
+        // 3a. Check Threshold (Strict Coherence)
+        // Logic: Keep cluster ONLY if it has enough authors (Coherence).
+        // Virality is just a metric, not a bypass.
+
+        const isCoherent = authors.size >= thresholdCount;
+        const maxScore = Math.max(...clusterPosts.map(p => p.hotScore || 0));
+
+        console.log(`  -> Audit: Coherent? ${isCoherent} (${authors.size}/${thresholdCount}), MaxScore: ${maxScore.toFixed(0)}`);
+
+        if (!isCoherent) {
+            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCount}). Virality doesn't matter.`);
             continue;
         }
 
@@ -139,6 +150,10 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             continue;
         }
 
+        // Aggregate external URLs
+        const allUrls = clusterPosts.flatMap(p => p.externalUrls || []);
+        const uniqueUrls = Array.from(new Set(allUrls));
+
         // Create the article
         const article = await prisma.synthesizedArticle.create({
             data: {
@@ -152,6 +167,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 postCount: clusterPosts.length,
                 status: "PENDING_REVIEW",
                 scheduledPublishAt: scheduledAt,
+                externalUrls: uniqueUrls,
             },
         });
 
@@ -300,6 +316,7 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     synthesisLanguage: ws.synthesisLanguage,
                     postLookbackHours: ws.postLookbackHours,
                     imagePrompt: ws.imagePrompt || undefined,
+                    hotScoreThreshold: ws.hotScoreThreshold, // Pass threshold
                 });
             }
         } catch (e) {

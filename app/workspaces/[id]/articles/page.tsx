@@ -22,6 +22,7 @@ interface SynthesizedArticle {
     selectedMediaUrl?: string | null;
     selectedMediaType?: string | null;
     scheduledPublishAt?: string | null;
+    externalUrls?: string[];
 }
 
 const STATUS_TABS = ["ALL", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "ERROR"] as const;
@@ -231,6 +232,27 @@ export default function ArticlesPage() {
                                                     </span>
                                                 )
                                             )}
+                                        </div>
+                                    )}
+                                    {article.externalUrls && article.externalUrls.length > 0 && (
+                                        <div className="mt-3 pt-2 border-t border-dashed border-border/50">
+                                            <p className="text-[10px] text-muted mb-1 font-mono uppercase">References</p>
+                                            <ul className="text-xs space-y-1">
+                                                {article.externalUrls.map((url, i) => (
+                                                    <li key={i} className="truncate">
+                                                        <a
+                                                            href={url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-accent hover:underline flex items-center gap-1"
+                                                            title={url}
+                                                        >
+                                                            <span className="opacity-50">🔗</span>
+                                                            {url.replace(/^https?:\/\/(www\.)?/, '').substring(0, 40)}{url.length > 40 ? '...' : ''}
+                                                        </a>
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
                                     )}
                                 </div>

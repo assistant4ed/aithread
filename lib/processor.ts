@@ -40,6 +40,7 @@ export async function processPost(
         reposts: number;
         postedAt?: Date;
         postUrl: string;
+        externalUrls: string[];
     },
     sourceAccount: string,
     workspaceId: string,
@@ -102,8 +103,12 @@ export async function processPost(
     const finalScore = isNaN(score) ? 0 : score;
 
     // 5. Hot score gate — skip low-engagement posts entirely
-    if (finalScore < settings.hotScoreThreshold) {
-        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(0)}, threshold: ${settings.hotScoreThreshold})`);
+    // MODIFIED: Use a lower "ingest threshold" (e.g. 10) to capture posts that might form a cluster.
+    // The "Viral Threshold" (settings.hotScoreThreshold) is now applied during Synthesis.
+    const ingestThreshold = 10;
+
+    if (finalScore < ingestThreshold) {
+        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(0)}, ingest limit: ${ingestThreshold})`);
         return undefined;
     }
 
@@ -129,6 +134,7 @@ export async function processPost(
             reposts: postData.reposts,
             hotScore: finalScore,
             sourceUrl: postData.postUrl,
+            externalUrls: postData.externalUrls || [],
             postedAt: validPostedAt || null,
             status: "PENDING_REVIEW",
             workspaceId,

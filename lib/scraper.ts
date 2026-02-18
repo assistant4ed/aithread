@@ -19,6 +19,7 @@ export interface ThreadPost {
     reposts: number;
     postedAt?: Date;
     postUrl: string;
+    externalUrls: string[];
 }
 
 export class ThreadsScraper {
@@ -122,6 +123,24 @@ export class ThreadsScraper {
                         const innerText = el.innerText || "";
                         const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
 
+                        // Extract external links
+                        const extractedLinks = Array.from(el.querySelectorAll('a'))
+                            .map((a: any) => a.href)
+                            .filter((href: string) => {
+                                if (!href) return false;
+                                try {
+                                    const url = new URL(href, 'https://www.threads.net');
+                                    const hostname = url.hostname.replace('www.', '');
+                                    return !['threads.net', 'instagram.com', 'facebook.com', 'whatsapp.com'].includes(hostname)
+                                        && !href.startsWith('mailto:')
+                                        && !href.startsWith('tel:')
+                                        && !href.includes('/post/') // exclude self links
+                                        && !href.includes('/@');    // exclude mentions usually
+                                } catch (e) { return false; }
+                            });
+                        // Unique links only
+                        const uniqueExternalLinks = Array.from(new Set(extractedLinks));
+
                         const viewEl = el.querySelector('[aria-label*="views"]');
                         if (viewEl) {
                             const str = viewEl.getAttribute('aria-label');
@@ -209,6 +228,7 @@ export class ThreadsScraper {
                             replies,
                             reposts,
                             mediaUrls: media,
+                            externalUrls: uniqueExternalLinks,
                             postUrl,
                             postedAt: postedAt
                         };

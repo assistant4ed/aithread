@@ -84,6 +84,8 @@ model Post {
   replies           Int       @default(0)
   reposts           Int       @default(0)
   hotScore          Float     @default(0)
+  
+  externalUrls      String[]  @default([]) // Reference URL Finder
 
   sourceUrl         String?   // Link to the original post
   status            PostStatus @default(PENDING_REVIEW)
@@ -125,6 +127,7 @@ model SynthesizedArticle {
   sourceAccounts  String[]  // Unique authors who mentioned this
   authorCount     Int       // How many distinct authors
   postCount       Int       // How many posts in the cluster
+  externalUrls    String[]  @default([]) // Aggregated references
   
   
   // Media
