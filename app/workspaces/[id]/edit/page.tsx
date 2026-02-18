@@ -29,6 +29,12 @@ export default function EditWorkspacePage() {
         imagePrompt: "",
         publishTimes: [] as string[],
         reviewWindowHours: 1,
+        instagramAccountId: "",
+        instagramAccessToken: "",
+        twitterApiKey: "",
+        twitterApiSecret: "",
+        twitterAccessToken: "",
+        twitterAccessSecret: "",
     });
 
     useEffect(() => {
@@ -55,6 +61,12 @@ export default function EditWorkspacePage() {
                     imagePrompt: data.imagePrompt || "",
                     publishTimes: data.publishTimes || ["12:00", "18:00", "22:00"],
                     reviewWindowHours: data.reviewWindowHours || 1,
+                    instagramAccountId: data.instagramAccountId || "",
+                    instagramAccessToken: data.instagramAccessToken || "",
+                    twitterApiKey: data.twitterApiKey || "",
+                    twitterApiSecret: data.twitterApiSecret || "",
+                    twitterAccessToken: data.twitterAccessToken || "",
+                    twitterAccessSecret: data.twitterAccessSecret || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -96,6 +108,12 @@ export default function EditWorkspacePage() {
                     imagePrompt: form.imagePrompt || null,
                     publishTimes: form.publishTimes,
                     reviewWindowHours: Number(form.reviewWindowHours),
+                    instagramAccountId: form.instagramAccountId || null,
+                    instagramAccessToken: form.instagramAccessToken || null,
+                    twitterApiKey: form.twitterApiKey || null,
+                    twitterApiSecret: form.twitterApiSecret || null,
+                    twitterAccessToken: form.twitterAccessToken || null,
+                    twitterAccessSecret: form.twitterAccessSecret || null,
                 }),
             });
 
@@ -386,6 +404,79 @@ export default function EditWorkspacePage() {
                     </Field>
                 </div>
 
+
+
+                {/* Instagram Credentials */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Instagram API Credentials
+                        <span className="text-xs font-normal ml-2">(optional)</span>
+                    </h3>
+
+                    <Field label="Instagram Account ID">
+                        <input
+                            type="text"
+                            value={form.instagramAccountId}
+                            onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
+                            placeholder="e.g. 17841400000000000"
+                            className="input"
+                        />
+                    </Field>
+
+                    <Field label="Instagram Access Token">
+                        <input
+                            type="password"
+                            value={form.instagramAccessToken}
+                            onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
+                            placeholder="Page Access Token"
+                            className="input"
+                        />
+                    </Field>
+                </div>
+
+                {/* Twitter Credentials */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        X (Twitter) API Credentials
+                        <span className="text-xs font-normal ml-2">(optional)</span>
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label="API Key">
+                            <input
+                                type="text"
+                                value={form.twitterApiKey}
+                                onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="API Secret">
+                            <input
+                                type="password"
+                                value={form.twitterApiSecret}
+                                onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Access Token">
+                            <input
+                                type="text"
+                                value={form.twitterAccessToken}
+                                onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Access Secret">
+                            <input
+                                type="password"
+                                value={form.twitterAccessSecret}
+                                onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+                </div>
+
                 {/* Actions */}
                 <div className="flex gap-3 pt-2">
                     <button
@@ -402,8 +493,8 @@ export default function EditWorkspacePage() {
                         Cancel
                     </Link>
                 </div>
-            </form>
-        </div>
+            </form >
+        </div >
     );
 }
 

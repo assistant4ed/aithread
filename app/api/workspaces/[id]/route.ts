@@ -37,6 +37,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "topicFilter", "maxPostAgeHours", "synthesisLanguage",
             "publishTimes", "reviewWindowHours", "clusteringPrompt",
             "postLookbackHours", "imagePrompt",
+            "instagramAccessToken", "instagramAccountId",
+            "twitterApiKey", "twitterApiSecret", "twitterAccessToken", "twitterAccessSecret",
         ];
 
         const data: Record<string, any> = {};

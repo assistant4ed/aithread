@@ -133,7 +133,19 @@ async function enrichAndPublish(article: any, workspace: any) {
 
     // Now call the standard publisher
     console.log(`[Publish] Invoking publisher_service...`);
-    await publishArticle(article, workspace.threadsAppId, workspace.threadsToken);
+    await publishArticle(article, {
+        workspaceId: workspace.id,
+        threadsUserId: workspace.threadsAppId,
+        threadsAccessToken: workspace.threadsToken,
+        instagramAccountId: workspace.instagramAccountId,
+        instagramAccessToken: workspace.instagramAccessToken,
+        twitterApiKey: workspace.twitterApiKey,
+        twitterApiSecret: workspace.twitterApiSecret,
+        twitterAccessToken: workspace.twitterAccessToken,
+        twitterAccessSecret: workspace.twitterAccessSecret,
+        translationPrompt: workspace.translationPrompt,
+        dailyLimit: workspace.dailyPostLimit,
+    });
 }
 
 

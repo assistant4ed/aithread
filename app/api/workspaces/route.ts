@@ -32,6 +32,12 @@ export async function POST(request: NextRequest) {
             reviewWindowHours,
             synthesisLanguage,
             imagePrompt,
+            instagramAccessToken,
+            instagramAccountId,
+            twitterApiKey,
+            twitterApiSecret,
+            twitterAccessToken,
+            twitterAccessSecret,
         } = await request.json();
 
         if (!name || !translationPrompt) {
@@ -51,6 +57,12 @@ export async function POST(request: NextRequest) {
                 hotScoreThreshold: hotScoreThreshold ?? 50,
                 threadsAppId: threadsAppId || null,
                 threadsToken: threadsToken || null,
+                instagramAccessToken: instagramAccessToken || null,
+                instagramAccountId: instagramAccountId || null,
+                twitterApiKey: twitterApiKey || null,
+                twitterApiSecret: twitterApiSecret || null,
+                twitterAccessToken: twitterAccessToken || null,
+                twitterAccessSecret: twitterAccessSecret || null,
                 dailyPostLimit: dailyPostLimit || 3,
                 topicFilter: topicFilter || null,
                 maxPostAgeHours: maxPostAgeHours ?? 48,

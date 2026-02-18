@@ -4,12 +4,31 @@ import { createContainer, publishContainer, waitForContainer } from "./threads_c
 
 export interface PublisherConfig {
     workspaceId: string;
-    threadsUserId: string;
-    threadsAccessToken: string;
+
+    // Threads
+    threadsUserId?: string;
+    threadsAccessToken?: string;
+
+    // Instagram
+    instagramAccountId?: string;
+    instagramAccessToken?: string;
+
+    // Twitter
+    twitterApiKey?: string;
+    twitterApiSecret?: string;
+    twitterAccessToken?: string;
+    twitterAccessSecret?: string;
+
     translationPrompt: string;
     dailyLimit: number;
 }
 
+
+/**
+ * Returns the number of ARTICLES published today for a given workspace.
+ */
+import { createInstagramContainer, publishInstagramContainer, waitForInstagramContainer, getInstagramMedia } from "./instagram_client";
+import { uploadTwitterMedia, postTweet } from "./twitter_client";
 
 /**
  * Returns the number of ARTICLES published today for a given workspace.
@@ -31,7 +50,7 @@ export async function getDailyPublishCount(workspaceId: string): Promise<number>
  * Find and publish APPROVED synthesized articles for a workspace.
  */
 export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
-    const { workspaceId, threadsUserId, threadsAccessToken, dailyLimit } = config;
+    const { workspaceId, dailyLimit } = config;
 
     console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
 
@@ -67,13 +86,18 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
 
     for (const article of approvedArticles) {
         try {
-            await publishArticle(article, threadsUserId, threadsAccessToken);
+            await publishArticle(article, config);
 
             // Wait between posts to avoid rate limits
             console.log("[Publisher] Waiting 30 seconds before next post...");
             await new Promise(resolve => setTimeout(resolve, 30000));
         } catch (err) {
             console.error(`[Publisher] Failed to publish article ${article.id}:`, err);
+            // We might want to mark as ERROR or PARTIAL_ERROR depending on if any platform succeeded.
+            // For now, if it throws, it means critical failure or all failed (if we handle inside).
+            // Let's rely on publishArticle to mask partial failures if needed, 
+            // but if it propagates an error, mark as ERROR.
+
             await prisma.synthesizedArticle.update({
                 where: { id: article.id },
                 data: { status: "ERROR" },
@@ -90,8 +114,7 @@ export async function publishArticle(
         selectedMediaUrl?: string | null;
         selectedMediaType?: string | null;
     },
-    threadsUserId: string,
-    threadsAccessToken: string
+    config: PublisherConfig
 ) {
     let text = article.articleContent;
 
@@ -106,10 +129,6 @@ export async function publishArticle(
         const rawType = article.selectedMediaType?.toUpperCase();
         mediaType = (rawType === "VIDEO") ? "VIDEO" : "IMAGE";
 
-        if (mediaType === "VIDEO") {
-            // If manual upload, we might not have a cover URL easily unless passed.
-            // For now assume no cover or let Threads generate one.
-        }
         console.log(`[Publisher] Using user-selected media: ${mediaType} - ${mediaUrl}`);
     }
     // 2. Auto-pick from source posts (Fallback)
@@ -153,59 +172,151 @@ export async function publishArticle(
         return;
     }
 
-    // Create container
-    // ... logic remains same ...
-    console.log(`[Publisher] Creating Threads container (${mediaType})...`);
-    console.log(`[Publisher] Media URL: ${mediaUrl}`);
-    if (coverUrl) console.log(`[Publisher] Cover URL: ${coverUrl}`);
+    const results: Record<string, string | null> = {
+        threads: null,
+        instagram: null,
+        twitter: null
+    };
 
-    const containerId = await createContainer(
-        threadsUserId,
-        threadsAccessToken,
-        mediaType,
-        mediaUrl || undefined,
-        text || undefined,
-        undefined, // children
-        undefined, // isCarouselItem
-        coverUrl || undefined
-    );
+    const dates: Record<string, Date | null> = {
+        instagram: null,
+        twitter: null
+    };
 
-    console.log(`[Publisher] Container ID: ${containerId}`);
+    // --- THREADS ---
+    if (config.threadsUserId && config.threadsAccessToken) {
+        try {
+            console.log(`[Publisher] Publishing to Threads...`);
+            const containerId = await createContainer(
+                config.threadsUserId,
+                config.threadsAccessToken,
+                mediaType === "VIDEO" ? 'VIDEO' : 'IMAGE', // Threads assumes IMAGE if simple text or IMAGE
+                mediaUrl || undefined,
+                text || undefined,
+                undefined,
+                undefined,
+                coverUrl || undefined
+            );
 
-    // Wait for processing
-    if (mediaType === "VIDEO") {
-        console.log("[Publisher] Waiting for video container to finish processing...");
-        await waitForContainer(containerId, threadsAccessToken);
-    } else {
-        console.log("[Publisher] Waiting 10 seconds for container to be ready...");
-        await new Promise(resolve => setTimeout(resolve, 10000));
-    }
+            if (mediaType === "VIDEO") {
+                await waitForContainer(containerId, config.threadsAccessToken);
+            } else {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
 
-    // Publish
-    console.log(`[Publisher] Publishing container ${containerId}...`);
-    const publishedId = await publishContainer(threadsUserId, threadsAccessToken, containerId);
-    console.log(`[Publisher] Published! ID: ${publishedId}`);
+            const publishedId = await publishContainer(config.threadsUserId, config.threadsAccessToken, containerId);
 
-    // Fetch the actual permalink
-    let threadsUrl = `https://www.threads.net/post/${publishedId}`; // Fallback
-    try {
-        const { getThread } = await import("./threads_client");
-        const threadDetails = await getThread(publishedId, threadsAccessToken);
-        if (threadDetails.permalink) {
-            threadsUrl = threadDetails.permalink;
-            console.log(`[Publisher] Retrieved Permalink: ${threadsUrl}`);
+            // Fetch the actual permalink
+            let threadsUrl = `https://www.threads.net/post/${publishedId}`;
+            try {
+                const { getThread } = await import("./threads_client");
+                const threadDetails = await getThread(publishedId, config.threadsAccessToken);
+                if (threadDetails.permalink) threadsUrl = threadDetails.permalink;
+            } catch (e) { }
+
+            results.threads = threadsUrl;
+            console.log(`[Publisher] Threads success: ${threadsUrl}`);
+        } catch (e: any) {
+            console.error(`[Publisher] Threads failed:`, e.message);
         }
-    } catch (e: any) {
-        console.warn(`[Publisher] Failed to get permalink (using fallback): ${e.message}`);
     }
 
-    // Update DB
-    await prisma.synthesizedArticle.update({
-        where: { id: article.id },
-        data: {
-            status: "PUBLISHED",
-            publishedUrl: threadsUrl,
-            publishedAt: new Date(),
-        },
-    });
+    // --- INSTAGRAM ---
+    if (config.instagramAccountId && config.instagramAccessToken && mediaUrl) {
+        try {
+            console.log(`[Publisher] Publishing to Instagram...`);
+            // IG requires unique media logic usually, but reuse createInstagramContainer
+            // Note: IG usually requires strict aspect ratios.
+            const igContainerId = await createInstagramContainer(
+                config.instagramAccountId,
+                config.instagramAccessToken,
+                mediaType === "VIDEO" ? 'VIDEO' : 'IMAGE',
+                mediaUrl,
+                text, // Caption
+                undefined,
+                undefined,
+                coverUrl
+            );
+
+            if (mediaType === "VIDEO") {
+                await waitForInstagramContainer(igContainerId, config.instagramAccessToken);
+            } else {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+
+            const publishedId = await publishInstagramContainer(config.instagramAccountId, config.instagramAccessToken, igContainerId);
+
+            // Get permalink
+            let igUrl = `https://www.instagram.com/p/${publishedId}/`;
+            try {
+                const details = await getInstagramMedia(publishedId, config.instagramAccessToken);
+                if (details.permalink) igUrl = details.permalink;
+            } catch (e) { }
+
+            results.instagram = igUrl;
+            dates.instagram = new Date();
+            console.log(`[Publisher] Instagram success: ${igUrl}`);
+
+        } catch (e: any) {
+            console.error(`[Publisher] Instagram failed:`, e.message);
+        }
+    }
+
+    // --- TWITTER ---
+    if (config.twitterApiKey && config.twitterApiSecret && config.twitterAccessToken && config.twitterAccessSecret) {
+        try {
+            console.log(`[Publisher] Publishing to X (Twitter)...`);
+            const twitterConfig = {
+                appKey: config.twitterApiKey,
+                appSecret: config.twitterApiSecret,
+                accessToken: config.twitterAccessToken,
+                accessSecret: config.twitterAccessSecret
+            };
+
+            let mediaIds: string[] = [];
+            if (mediaUrl) { // Twitter requires upload first
+                const mediaId = await uploadTwitterMedia(
+                    twitterConfig,
+                    mediaUrl,
+                    mediaType === 'VIDEO' ? 'video' : 'image'
+                );
+                mediaIds.push(mediaId);
+
+                if (mediaType === 'VIDEO') {
+                    // Give Twitter a moment to process video if needed (twitter-api-v2 usually waits for processing on uploadMedia default but sync only for images?)
+                    // The uploadMedia helper in v2 usually handles it.
+                }
+            }
+
+            const tweet = await postTweet(twitterConfig, text, mediaIds);
+            const twitterUrl = `https://twitter.com/user/status/${tweet.id}`;
+            results.twitter = twitterUrl;
+            dates.twitter = new Date();
+            console.log(`[Publisher] Twitter success: ${twitterUrl}`);
+
+        } catch (e: any) {
+            console.error(`[Publisher] Twitter failed:`, e.message);
+        }
+    }
+
+    // Determine final status
+    // If at least one succeeded, we consider it PUBLISHED (but maybe partial)
+    const anySuccess = results.threads || results.instagram || results.twitter;
+
+    if (anySuccess) {
+        await prisma.synthesizedArticle.update({
+            where: { id: article.id },
+            data: {
+                status: "PUBLISHED",
+                publishedUrl: results.threads, // Main URL still Threads
+                publishedUrlInstagram: results.instagram,
+                publishedUrlTwitter: results.twitter,
+                publishedAtInstagram: dates.instagram,
+                publishedAtTwitter: dates.twitter,
+                publishedAt: new Date(),
+            },
+        });
+    } else {
+        throw new Error("Failed to publish to any configured platform.");
+    }
 }

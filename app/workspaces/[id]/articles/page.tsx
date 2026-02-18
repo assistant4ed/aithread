@@ -17,6 +17,8 @@ interface SynthesizedArticle {
     postCount: number;
     status: string;
     publishedUrl: string | null;
+    publishedUrlInstagram?: string | null;
+    publishedUrlTwitter?: string | null;
     createdAt: string;
     mediaUrls?: any[];
     selectedMediaUrl?: string | null;
@@ -329,12 +331,29 @@ export default function ArticlesPage() {
                             </div>
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between border-t border-border pt-4 mt-4">
-                                <div className="text-xs text-muted">
-                                    {article.publishedUrl && (
-                                        <a href={article.publishedUrl} target="_blank" rel="noopener" className="text-success hover:underline">
-                                            View Published Post ↗
-                                        </a>
+                            <div className="flex items-end justify-between border-t border-border pt-4 mt-4">
+                                <div className="text-xs text-muted flex flex-col gap-1.5">
+                                    {(article.publishedUrl || article.publishedUrlInstagram || article.publishedUrlTwitter) && (
+                                        <div className="flex flex-col gap-1">
+                                            {article.publishedUrl && (
+                                                <a href={article.publishedUrl} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-accent font-medium">
+                                                    <span>Threads</span>
+                                                    <span className="text-[10px] opacity-70">↗</span>
+                                                </a>
+                                            )}
+                                            {article.publishedUrlInstagram && (
+                                                <a href={article.publishedUrlInstagram} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-purple-400 font-medium">
+                                                    <span>Instagram</span>
+                                                    <span className="text-[10px] opacity-70">↗</span>
+                                                </a>
+                                            )}
+                                            {article.publishedUrlTwitter && (
+                                                <a href={article.publishedUrlTwitter} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-blue-400 font-medium">
+                                                    <span>X (Twitter)</span>
+                                                    <span className="text-[10px] opacity-70">↗</span>
+                                                </a>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                                 <div className="flex gap-2">

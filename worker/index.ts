@@ -173,6 +173,12 @@ async function runPublish(ws: any) {
         workspaceId: ws.id,
         threadsUserId: ws.threadsAppId,
         threadsAccessToken: ws.threadsToken,
+        instagramAccountId: ws.instagramAccountId,
+        instagramAccessToken: ws.instagramAccessToken,
+        twitterApiKey: ws.twitterApiKey,
+        twitterApiSecret: ws.twitterApiSecret,
+        twitterAccessToken: ws.twitterAccessToken,
+        twitterAccessSecret: ws.twitterAccessSecret,
         translationPrompt: ws.translationPrompt,
         dailyLimit: ws.dailyPostLimit,
     });
