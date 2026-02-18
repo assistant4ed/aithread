@@ -3,12 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const DEFAULT_PROMPT = `You are a professional translator. Translate the following Threads post to Traditional Chinese (Hong Kong style, Cantonese nuances if applicable).
-
-RULES:
-1. Output ONLY the translated text. Do NOT add "Here is the translation" or any conversational filler.
-2. Do NOT translate the username, date code (e.g., 2d, 10/07/24), or engagement numbers (e.g., 604, 197) if they appear at the start or end.
-3. Maintain the tone and brevity.`;
+const DEFAULT_PROMPT = ""; // Empty by default, user can add style like "Use casual tone"
 
 export default function NewWorkspacePage() {
     const router = useRouter();
@@ -108,12 +103,13 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                {/* Translation Prompt */}
-                <Field label="Translation Prompt">
+                {/* Translation Prompt -> Style Instructions */}
+                <Field label="Translation Style / Instructions (Optional)" hint="Add specific instructions (e.g. 'Use professional tone', 'Avoid slang'). Target language is controlled below.">
                     <textarea
                         value={form.translationPrompt}
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
-                        rows={6}
+                        rows={3}
+                        placeholder="e.g. Use a formal, journalistic tone."
                         className="input font-mono text-xs"
                     />
                 </Field>

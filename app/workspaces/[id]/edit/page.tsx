@@ -157,12 +157,13 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
-                {/* Translation Prompt */}
-                <Field label="Translation Prompt">
+                {/* Translation Prompt -> Style Instructions */}
+                <Field label="Translation Style / Instructions (Optional)" hint="Add specific instructions (e.g. 'Use professional tone', 'Avoid slang'). Target language is controlled below.">
                     <textarea
                         value={form.translationPrompt}
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
-                        rows={6}
+                        rows={3}
+                        placeholder="e.g. Use a formal, journalistic tone."
                         className="input font-mono text-xs"
                     />
                 </Field>

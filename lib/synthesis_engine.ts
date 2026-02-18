@@ -139,8 +139,9 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         }
 
         // 5. Translate & Persist & Sanitize
-        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}. Maintain the journalistic tone. Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
-        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}. Keep it punchy. Output ONLY the translated text.`);
+        const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
+        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain the journalistic tone. Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
+        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Keep it punchy. Output ONLY the translated text.`);
 
         const translatedContent = sanitizeText(rawContent);
         const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
