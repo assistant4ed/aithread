@@ -150,7 +150,10 @@ async function runSynthesis(ws: any, targetPublishTime: string) {
 
     await runSynthesisEngine(ws.id, {
         translationPrompt: ws.translationPrompt,
+        clusteringPrompt: ws.clusteringPrompt,
         synthesisLanguage: ws.synthesisLanguage,
+        postLookbackHours: ws.postLookbackHours,
+        imagePrompt: ws.imagePrompt || undefined,
         targetPublishTimeStr: targetPublishTime
     });
 }
