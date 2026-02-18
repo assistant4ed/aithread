@@ -12,12 +12,14 @@ export interface SynthesisSettings {
     translationPrompt: string;
     clusteringPrompt: string;
     synthesisLanguage: string;
+    postLookbackHours?: number;
+    imagePrompt?: string;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
 }
 
 /**
  * Run synthesis engine for a specific workspace.
- * 1. Fetch posts from last 72 hours
+ * 1. Fetch posts from last X hours (configured via postLookbackHours)
  * 2. Cluster them using LLM (Llama 3)
  * 3. Filter clusters by author threshold (min 2)
  * 4. Synthesize articles using Groq
@@ -46,13 +48,15 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toLocaleString()}`);
     }
 
-    // 1. Lookback: 72 hours
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    // 1. Lookback: Configured hours or default 48h
+    const lookback = settings.postLookbackHours || 48;
+    const lookbackDate = new Date(Date.now() - lookback * 60 * 60 * 1000);
+    console.log(`[Synthesis] Looking back ${lookback} hours (since ${lookbackDate.toISOString()})...`);
 
     const posts = await prisma.post.findMany({
         where: {
             workspaceId,
-            createdAt: { gte: threeDaysAgo },
+            createdAt: { gte: lookbackDate },
         },
         select: {
             id: true,
@@ -294,6 +298,8 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     translationPrompt: ws.translationPrompt,
                     clusteringPrompt: ws.clusteringPrompt,
                     synthesisLanguage: ws.synthesisLanguage,
+                    postLookbackHours: ws.postLookbackHours,
+                    imagePrompt: ws.imagePrompt || undefined,
                 });
             }
         } catch (e) {

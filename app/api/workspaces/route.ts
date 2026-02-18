@@ -20,14 +20,18 @@ export async function POST(request: NextRequest) {
             name,
             targetAccounts,
             translationPrompt,
+            clusteringPrompt,
             hotScoreThreshold,
             threadsAppId,
             threadsToken,
             dailyPostLimit,
             topicFilter,
             maxPostAgeHours,
+            postLookbackHours,
             publishTimes,
             reviewWindowHours,
+            synthesisLanguage,
+            imagePrompt,
         } = await request.json();
 
         if (!name || !translationPrompt) {
@@ -42,14 +46,18 @@ export async function POST(request: NextRequest) {
                 name,
                 targetAccounts: targetAccounts || [],
                 translationPrompt,
+                clusteringPrompt: clusteringPrompt || undefined, // Use default if undefined
+                synthesisLanguage: synthesisLanguage || "Traditional Chinese (HK/TW)",
                 hotScoreThreshold: hotScoreThreshold ?? 50,
                 threadsAppId: threadsAppId || null,
                 threadsToken: threadsToken || null,
                 dailyPostLimit: dailyPostLimit || 3,
                 topicFilter: topicFilter || null,
                 maxPostAgeHours: maxPostAgeHours ?? 48,
+                postLookbackHours: postLookbackHours ?? 24,
                 publishTimes: publishTimes || ["12:00", "18:00", "22:00"],
                 reviewWindowHours: reviewWindowHours ?? 1,
+                imagePrompt: imagePrompt || null,
             },
         });
 

@@ -17,6 +17,7 @@ export default function EditWorkspacePage() {
         name: "",
         targetAccounts: "",
         translationPrompt: "",
+        clusteringPrompt: "",
         synthesisLanguage: "",
         hotScoreThreshold: 50,
         threadsAppId: "",
@@ -24,6 +25,8 @@ export default function EditWorkspacePage() {
         dailyPostLimit: 3,
         topicFilter: "",
         maxPostAgeHours: 48,
+        postLookbackHours: 24,
+        imagePrompt: "",
         publishTimes: [] as string[],
         reviewWindowHours: 1,
     });
@@ -40,6 +43,7 @@ export default function EditWorkspacePage() {
                     name: data.name,
                     targetAccounts: data.targetAccounts.join(", "),
                     translationPrompt: data.translationPrompt,
+                    clusteringPrompt: data.clusteringPrompt || "",
                     synthesisLanguage: data.synthesisLanguage || "Traditional Chinese (HK/TW)",
                     hotScoreThreshold: data.hotScoreThreshold,
                     threadsAppId: data.threadsAppId || "",
@@ -47,6 +51,8 @@ export default function EditWorkspacePage() {
                     dailyPostLimit: data.dailyPostLimit,
                     topicFilter: data.topicFilter || "",
                     maxPostAgeHours: data.maxPostAgeHours || 48,
+                    postLookbackHours: data.postLookbackHours || 24,
+                    imagePrompt: data.imagePrompt || "",
                     publishTimes: data.publishTimes || ["12:00", "18:00", "22:00"],
                     reviewWindowHours: data.reviewWindowHours || 1,
                 });
@@ -78,6 +84,7 @@ export default function EditWorkspacePage() {
                         .map((a) => a.trim().replace(/^@/, ""))
                         .filter(Boolean),
                     translationPrompt: form.translationPrompt,
+                    clusteringPrompt: form.clusteringPrompt,
                     synthesisLanguage: form.synthesisLanguage,
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     threadsAppId: form.threadsAppId || null,
@@ -85,6 +92,8 @@ export default function EditWorkspacePage() {
                     dailyPostLimit: Number(form.dailyPostLimit),
                     topicFilter: form.topicFilter || null,
                     maxPostAgeHours: Number(form.maxPostAgeHours),
+                    postLookbackHours: Number(form.postLookbackHours),
+                    imagePrompt: form.imagePrompt || null,
                     publishTimes: form.publishTimes,
                     reviewWindowHours: Number(form.reviewWindowHours),
                 }),
@@ -158,6 +167,27 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
+                {/* Clustering Prompt */}
+                <Field label="Clustering Prompt" hint="Instructions for the AI to group posts into news clusters">
+                    <textarea
+                        value={form.clusteringPrompt}
+                        onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
+                        rows={4}
+                        placeholder="Group these posts into news clusters..."
+                        className="input font-mono text-xs"
+                    />
+                </Field>
+
+                {/* Image Prompt */}
+                <Field label="Image Style Prompt (Optional)" hint="Style instructions for AI image generation (e.g. 'Cyberpunk style, neon colors')">
+                    <textarea
+                        value={form.imagePrompt}
+                        onChange={(e) => setForm({ ...form, imagePrompt: e.target.value })}
+                        rows={2}
+                        className="input text-sm"
+                    />
+                </Field>
+
                 {/* Synthesis Language */}
                 <Field label="Synthesis Language" hint="Target language for synthesized articles">
                     <input
@@ -192,6 +222,19 @@ export default function EditWorkspacePage() {
                         />
                     </Field>
 
+                    {/* Daily Post Limit */}
+                    <Field label="Daily Post Limit">
+                        <input
+                            type="number"
+                            value={form.dailyPostLimit}
+                            onChange={(e) => setForm({ ...form, dailyPostLimit: Number(e.target.value) })}
+                            className="input"
+                            min={1}
+                        />
+                    </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                     {/* Max Post Age */}
                     <Field label="Max Post Age (hours)" hint="Skip posts older than this">
                         <input
@@ -203,12 +246,12 @@ export default function EditWorkspacePage() {
                         />
                     </Field>
 
-                    {/* Daily Post Limit */}
-                    <Field label="Daily Post Limit">
+                    {/* Post Lookback */}
+                    <Field label="Synthesis Lookback (hours)" hint="How far back to look for clustering">
                         <input
                             type="number"
-                            value={form.dailyPostLimit}
-                            onChange={(e) => setForm({ ...form, dailyPostLimit: Number(e.target.value) })}
+                            value={form.postLookbackHours}
+                            onChange={(e) => setForm({ ...form, postLookbackHours: Number(e.target.value) })}
                             className="input"
                             min={1}
                         />

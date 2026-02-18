@@ -19,12 +19,16 @@ export default function NewWorkspacePage() {
         name: "",
         targetAccounts: "",
         translationPrompt: DEFAULT_PROMPT,
+        clusteringPrompt: "",
+        synthesisLanguage: "Traditional Chinese (HK/TW)",
         hotScoreThreshold: 50,
         threadsAppId: "",
         threadsToken: "",
         dailyPostLimit: 3,
         topicFilter: "",
         maxPostAgeHours: 48,
+        postLookbackHours: 24,
+        imagePrompt: "",
         publishTimes: ["12:00", "18:00", "22:00"],
         reviewWindowHours: 1,
     });
@@ -47,9 +51,12 @@ export default function NewWorkspacePage() {
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
                     maxPostAgeHours: Number(form.maxPostAgeHours),
+                    postLookbackHours: Number(form.postLookbackHours),
                     publishTimes: form.publishTimes,
                     reviewWindowHours: Number(form.reviewWindowHours),
                     topicFilter: form.topicFilter || null,
+                    clusteringPrompt: form.clusteringPrompt || null,
+                    imagePrompt: form.imagePrompt || null,
                 }),
             });
 
@@ -111,6 +118,38 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
+                {/* Clustering Prompt */}
+                <Field label="Clustering Prompt (Optional)" hint="Instructions for the AI to group posts into news clusters">
+                    <textarea
+                        value={form.clusteringPrompt}
+                        onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
+                        rows={4}
+                        placeholder="Group these posts into news clusters..."
+                        className="input font-mono text-xs"
+                    />
+                </Field>
+
+                {/* Image Prompt */}
+                <Field label="Image Style Prompt (Optional)" hint="Style instructions for AI image generation (e.g. 'Cyberpunk style, neon colors')">
+                    <textarea
+                        value={form.imagePrompt}
+                        onChange={(e) => setForm({ ...form, imagePrompt: e.target.value })}
+                        rows={2}
+                        className="input text-sm"
+                    />
+                </Field>
+
+                {/* Synthesis Language */}
+                <Field label="Synthesis Language" hint="Target language for synthesized articles">
+                    <input
+                        type="text"
+                        value={form.synthesisLanguage}
+                        onChange={(e) => setForm({ ...form, synthesisLanguage: e.target.value })}
+                        placeholder="e.g. Traditional Chinese (HK/TW)"
+                        className="input"
+                    />
+                </Field>
+
                 {/* Topic Filter */}
                 <Field label="Topic Filter (Optional)" hint="e.g. 'AI, Artificial Intelligence, LLMs'. If set, posts must be relevant to this topic.">
                     <input
@@ -122,7 +161,7 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     {/* Hot Score Threshold */}
                     <Field label="Hot Score Threshold">
                         <input
@@ -134,6 +173,19 @@ export default function NewWorkspacePage() {
                         />
                     </Field>
 
+                    {/* Daily Post Limit */}
+                    <Field label="Daily Post Limit">
+                        <input
+                            type="number"
+                            value={form.dailyPostLimit}
+                            onChange={(e) => setForm({ ...form, dailyPostLimit: Number(e.target.value) })}
+                            className="input"
+                            min={1}
+                        />
+                    </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                     {/* Max Post Age */}
                     <Field label="Max Post Age (hours)" hint="Skip posts older than this">
                         <input
@@ -145,12 +197,12 @@ export default function NewWorkspacePage() {
                         />
                     </Field>
 
-                    {/* Daily Post Limit */}
-                    <Field label="Daily Post Limit">
+                    {/* Post Lookback */}
+                    <Field label="Synthesis Lookback (hours)" hint="How far back to look for clustering">
                         <input
                             type="number"
-                            value={form.dailyPostLimit}
-                            onChange={(e) => setForm({ ...form, dailyPostLimit: Number(e.target.value) })}
+                            value={form.postLookbackHours}
+                            onChange={(e) => setForm({ ...form, postLookbackHours: Number(e.target.value) })}
                             className="input"
                             min={1}
                         />

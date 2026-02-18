@@ -27,6 +27,8 @@ model Workspace {
   topicFilter       String?  // Optional topic/keyword filter for AI relevance check
   hotScoreThreshold Float    @default(50)
   maxPostAgeHours   Int      @default(48) // Skip posts older than this (hours)
+  postLookbackHours Int      @default(24) // How far back to look for synthesis (hours)
+  imagePrompt       String?  // Optional mood/style prompt for image generation
 
   // Threads API credentials (per workspace)
   threadsAppId      String?
