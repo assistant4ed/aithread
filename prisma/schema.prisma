@@ -33,6 +33,15 @@ model Workspace {
 
   // Publishing limits
   dailyPostLimit    Int      @default(3)
+  
+  // Pipeline Schedule
+  publishTimes      String[] @default(["12:00", "18:00", "22:00"]) // e.g. ["12:00", "18:00"]
+  reviewWindowHours Int      @default(1) // Hours before publish time that synthesis runs
+
+  // Last run tracking
+  lastScrapedAt     DateTime?
+  lastSynthesizedAt DateTime?
+  lastPublishedAt   DateTime?
 
   // Relations
   posts             Post[]
@@ -103,6 +112,13 @@ model SynthesizedArticle {
   authorCount     Int       // How many distinct authors
   postCount       Int       // How many posts in the cluster
   
+  // Custom Media Selection
+  selectedMediaUrl   String?
+  selectedMediaType  String?   // "image" | "video"
+  
+  // Scheduling
+  scheduledPublishAt DateTime?
+
   workspaceId     String
   workspace       Workspace @relation(fields: [workspaceId], references: [id])
   

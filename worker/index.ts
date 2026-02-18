@@ -4,16 +4,27 @@ import { prisma } from "../lib/prisma";
 import { scrapeQueue, ScrapeJobData } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
+import { runSynthesisEngine } from "../lib/synthesis_engine";
 
-console.log("=== Threads Monitor Worker (Producer) ===");
+console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
 
-// ─── Scraping Job (every 5 minutes) — PRODUCER ──────────────────────────────
-// Instead of scraping directly, this job enqueues one BullMQ job per account.
-// The actual scraping happens in worker/scrape-worker.ts (the consumer).
+/**
+ * HEARTBEAT CRON: Runs every minute to check all workspaces.
+ * A workspace's schedule is derived from its `publishTimes` (e.g. ["12:00", "18:00"]).
+ * 
+ * Pipeline logic:
+ * 1. Publish Time (T)
+ * 2. Review Window (R hours) -> Synthesis Time = T - R
+ * 3. Scrape Window -> Starts at Synthesis - 2h, ends at Synthesis - 30m.
+ *    We trigger scrapes at: start, start+30m, start+60m (3 batches per window).
+ */
+cron.schedule("* * * * *", async () => {
+    const now = new Date();
+    const currentHHMM = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    // ^ "HH:MM" format (24h)
 
-cron.schedule("*/5 * * * *", async () => {
-    console.log("\n[Producer] Enqueuing scrape jobs...");
+    console.log(`\n[Heartbeat] ${currentHHMM} - Checking workspaces...`);
 
     try {
         const workspaces = await prisma.workspace.findMany({
@@ -21,122 +32,147 @@ cron.schedule("*/5 * * * *", async () => {
         });
 
         if (workspaces.length === 0) {
-            console.log("[Producer] No active workspaces. Nothing to do.");
+            console.log("[Heartbeat] No active workspaces found in DB.");
             return;
         }
 
-        let totalJobs = 0;
+        console.log(`[Heartbeat] Processing ${workspaces.length} active workspace(s)...`);
 
         for (const ws of workspaces) {
-            console.log(`\n[Producer] === Workspace: ${ws.name} ===`);
-
-            if (ws.targetAccounts.length === 0) {
-                console.log(`[Producer] No target accounts configured. Skipping.`);
-                continue;
+            // 1. Initial Scrape for new/never-scraped workspaces
+            if (!ws.lastScrapedAt) {
+                console.log(`[Heartbeat] 🆕 New workspace detected (${ws.name}). Triggering initial scrape...`);
+                await runScrape(ws);
+                // We continue to allow other phases (like synthesis) if they happen to match, 
+                // but usually the first scrape needs minutes to complete.
             }
 
-            // Check daily limit — if reached, skip translation to save API quota
-            const postsToday = await getDailyPublishCount(ws.id);
-            const limitReached = postsToday >= ws.dailyPostLimit;
-            if (limitReached) {
-                console.log(`[Producer] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
-            }
+            const publishTimes = ws.publishTimes && ws.publishTimes.length > 0
+                ? ws.publishTimes
+                : ["12:00", "18:00", "22:00"];
 
-            const settings: WorkspaceSettings = {
-                translationPrompt: ws.translationPrompt,
-                hotScoreThreshold: ws.hotScoreThreshold,
-                topicFilter: ws.topicFilter,
-                maxPostAgeHours: ws.maxPostAgeHours,
-            };
+            const reviewWindow = ws.reviewWindowHours || 1;
+            console.log(`  - [${ws.name}] Last Scrape: ${ws.lastScrapedAt?.toLocaleTimeString() || "Never"}`);
 
-            // Enqueue one job per target account
-            for (const username of ws.targetAccounts) {
-                const jobData: ScrapeJobData = {
-                    username,
-                    workspaceId: ws.id,
-                    settings,
-                    skipTranslation: limitReached,
-                };
+            // Check each cycle for this workspace
+            for (const timeStr of publishTimes) {
+                const [pubH, pubM] = timeStr.split(":").map(Number);
 
-                await scrapeQueue.add(
-                    "scrape-account",
-                    jobData,
-                    {
-                        // Deduplicate: if a job for this account is already in the queue, skip it?
-                        // FIX: Previously we used a static ID, which meant after one success, 
-                        // subsequent jobs were ignored by BullMQ as duplicates.
-                        // Now using a timestamp to ensure a fresh job is added every cycle.
-                        jobId: `scrape-${ws.id}-${username}-${Date.now()}`,
-                        removeOnComplete: true, // Auto-remove to keep Redis clean
-                        removeOnFail: { count: 100 }, // Keep last 100 failures
-                    }
-                );
-                totalJobs++;
+                // --- SCRAPE PHASE ---
+                // Window: (Publish - ReviewWindow - 2h) to (Publish - ReviewWindow)
+                const synthDate = new Date(now);
+                synthDate.setHours(pubH - reviewWindow, pubM, 0, 0);
+
+                const scrapeWindowStart = new Date(synthDate);
+                scrapeWindowStart.setHours(scrapeWindowStart.getHours() - 2);
+
+                const isWithinScrapeWindow = now >= scrapeWindowStart && now < synthDate;
+                const minutesSinceLastScrape = ws.lastScrapedAt
+                    ? (now.getTime() - ws.lastScrapedAt.getTime()) / (1000 * 60)
+                    : 999;
+
+                // Trigger if in window and haven't scraped in last 28 mins (allow slight drift)
+                if (isWithinScrapeWindow && minutesSinceLastScrape >= 28) {
+                    console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr}, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
+                    await runScrape(ws);
+                }
+
+                // --- SYNTHESIS PHASE ---
+                const synthHHMM = synthDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+                if (currentHHMM === synthHHMM) {
+                    console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr})`);
+                    await runSynthesis(ws, timeStr);
+                }
+
+                // --- PUBLISH PHASE ---
+                if (currentHHMM === timeStr) {
+                    console.log(`[Heartbeat] � Triggering PUBLISH for ${ws.name} (Time: ${timeStr})`);
+                    await runPublish(ws);
+                }
             }
         }
 
-        console.log(`[Producer] Enqueued ${totalJobs} scrape jobs.`);
     } catch (error) {
-        console.error("[Producer] Error enqueuing scrape jobs:", error);
+        console.error("[Heartbeat] Error:", error);
     }
 });
 
-// ─── Publishing Job (every 10 minutes) ──────────────────────────────────────
-// Publisher stays as-is — low volume, no parallelism needed.
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-cron.schedule("*/10 * * * *", async () => {
-    console.log("\n[Publisher] Running scheduled publish check...");
+async function runScrape(ws: any) {
+    if (ws.targetAccounts.length === 0) return;
 
-    try {
-        const workspaces = await prisma.workspace.findMany({
-            where: {
-                isActive: true,
-                threadsToken: { not: null },
-            },
+    console.log(`[Scrape] Starting cycle for ${ws.name}...`);
+
+    // Update tracking
+    await prisma.workspace.update({
+        where: { id: ws.id },
+        data: { lastScrapedAt: new Date() }
+    });
+
+    const postsToday = await getDailyPublishCount(ws.id);
+    const limitReached = postsToday >= ws.dailyPostLimit;
+
+    if (limitReached) {
+        console.log(`[Scrape] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
+    }
+
+    const settings: WorkspaceSettings = {
+        translationPrompt: ws.translationPrompt,
+        hotScoreThreshold: ws.hotScoreThreshold,
+        topicFilter: ws.topicFilter,
+        maxPostAgeHours: ws.maxPostAgeHours,
+    };
+
+    let count = 0;
+    for (const username of ws.targetAccounts) {
+        const jobData: ScrapeJobData = {
+            username,
+            workspaceId: ws.id,
+            settings,
+            skipTranslation: limitReached,
+        };
+
+        await scrapeQueue.add(`scrape-${ws.id}-${username}-${Date.now()}`, jobData, {
+            removeOnComplete: true,
+            removeOnFail: { count: 100 },
         });
-
-        for (const ws of workspaces) {
-            if (!ws.threadsAppId || !ws.threadsToken) {
-                console.log(`[Publisher] Workspace "${ws.name}" has no Threads credentials. Skipping.`);
-                continue;
-            }
-
-            await checkAndPublishApprovedPosts({
-                workspaceId: ws.id,
-                threadsUserId: ws.threadsAppId,
-                threadsAccessToken: ws.threadsToken,
-                translationPrompt: ws.translationPrompt,
-                dailyLimit: ws.dailyPostLimit,
-            });
-        }
-    } catch (error) {
-        console.error("[Publisher] Error in publishing job:", error);
+        count++;
     }
-});
+    console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
+}
 
-// ─── Synthesis Job (every 30 minutes) ──────────────────────────────────────
-import { runSynthesisEngine } from "../lib/synthesis_engine";
+async function runSynthesis(ws: any, targetPublishTime: string) {
+    await prisma.workspace.update({
+        where: { id: ws.id },
+        data: { lastSynthesizedAt: new Date() }
+    });
 
-cron.schedule("*/30 * * * *", async () => {
-    console.log("\n[Synthesis] Running scheduled synthesis check...");
+    await runSynthesisEngine(ws.id, {
+        translationPrompt: ws.translationPrompt,
+        synthesisLanguage: ws.synthesisLanguage,
+        targetPublishTimeStr: targetPublishTime
+    });
+}
 
-    try {
-        const workspaces = await prisma.workspace.findMany({
-            where: { isActive: true },
-        });
-
-        for (const ws of workspaces) {
-            await runSynthesisEngine(ws.id, {
-                translationPrompt: ws.translationPrompt,
-                synthesisLanguage: ws.synthesisLanguage,
-            });
-        }
-    } catch (error) {
-        console.error("[Synthesis] Error in synthesis job:", error);
+async function runPublish(ws: any) {
+    if (!ws.threadsAppId || !ws.threadsToken) {
+        console.log(`[Publish] Skipping ${ws.name} (No credentials)`);
+        return;
     }
-});
 
-console.log("Worker started. Cron jobs:");
-console.log("  - Producer:   every 5 minutes (enqueues scrape jobs to Redis)");
-console.log("  - Publisher:  every 10 minutes");
-console.log("Waiting for next scheduled run...\n");
+    await prisma.workspace.update({
+        where: { id: ws.id },
+        data: { lastPublishedAt: new Date() }
+    });
+
+    await checkAndPublishApprovedPosts({
+        workspaceId: ws.id,
+        threadsUserId: ws.threadsAppId,
+        threadsAccessToken: ws.threadsToken,
+        translationPrompt: ws.translationPrompt,
+        dailyLimit: ws.dailyPostLimit,
+    });
+}
+
+console.log("Worker started. Waiting for next minute tick...");

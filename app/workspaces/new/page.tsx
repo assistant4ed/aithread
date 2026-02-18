@@ -25,6 +25,8 @@ export default function NewWorkspacePage() {
         dailyPostLimit: 3,
         topicFilter: "",
         maxPostAgeHours: 48,
+        publishTimes: ["12:00", "18:00", "22:00"],
+        reviewWindowHours: 1,
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +47,8 @@ export default function NewWorkspacePage() {
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
                     maxPostAgeHours: Number(form.maxPostAgeHours),
+                    publishTimes: form.publishTimes,
+                    reviewWindowHours: Number(form.reviewWindowHours),
                     topicFilter: form.topicFilter || null,
                 }),
             });
@@ -153,6 +157,105 @@ export default function NewWorkspacePage() {
                     </Field>
                 </div>
 
+                {/* Pipeline Schedule */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Pipeline Schedule (UTC+8)
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Publish Times */}
+                        <Field label="Publish Times" hint="When do you want articles to go live?">
+                            <div className="flex flex-wrap gap-2 mb-3">
+                                {form.publishTimes.map((time, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/10 border border-accent/20 text-accent text-sm">
+                                        {time}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newTimes = [...form.publishTimes];
+                                                newTimes.splice(i, 1);
+                                                setForm({ ...form, publishTimes: newTimes });
+                                            }}
+                                            className="text-accent/60 hover:text-accent font-bold"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                                {form.publishTimes.length === 0 && (
+                                    <span className="text-xs text-muted italic py-1">No times set</span>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="time"
+                                    className="input w-32"
+                                    id="new-time-input"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const input = document.getElementById("new-time-input") as HTMLInputElement;
+                                        if (input.value) {
+                                            if (!form.publishTimes.includes(input.value)) {
+                                                const newTimes = [...form.publishTimes, input.value].sort();
+                                                setForm({ ...form, publishTimes: newTimes });
+                                            }
+                                            input.value = "";
+                                        }
+                                    }}
+                                    className="px-3 py-1 bg-surface border border-border rounded-lg text-sm hover:bg-white/5"
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                        </Field>
+
+                        {/* Review Window */}
+                        <Field label="Review Window (Hours)" hint="Hours before publish time to generate drafts">
+                            <input
+                                type="number"
+                                value={form.reviewWindowHours}
+                                onChange={(e) => setForm({ ...form, reviewWindowHours: Number(e.target.value) })}
+                                className="input"
+                                min={1}
+                                max={12}
+                            />
+                        </Field>
+                    </div>
+
+                    {/* Pipeline Preview */}
+                    <div className="mt-4 p-3 bg-white/5 rounded-lg text-xs font-mono text-muted/80">
+                        <div className="mb-2 font-sans font-semibold text-muted">Pipeline Preview:</div>
+                        {form.publishTimes.length > 0 ? form.publishTimes.map((time) => {
+                            const [h, m] = time.split(":").map(Number);
+                            const pubDate = new Date();
+                            pubDate.setHours(h, m, 0, 0);
+
+                            const synthDate = new Date(pubDate);
+                            synthDate.setHours(h - (form.reviewWindowHours || 1));
+
+                            const scrapeStart = new Date(synthDate);
+                            scrapeStart.setHours(scrapeStart.getHours() - 2);
+
+                            const fmt = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+                            return (
+                                <div key={time} className="flex items-center gap-2 mb-1">
+                                    <span className="text-blue-400">Scrape {fmt(scrapeStart)}</span>
+                                    <span>→</span>
+                                    <span className="text-purple-400">Draft {fmt(synthDate)}</span>
+                                    <span>→</span>
+                                    <span className="text-muted">Review</span>
+                                    <span>→</span>
+                                    <span className="text-green-400 font-bold">Publish {time}</span>
+                                </div>
+                            );
+                        }) : <div>No pipeline configured.</div>}
+                    </div>
+                </div>
+
                 {/* Threads Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
@@ -198,8 +301,8 @@ export default function NewWorkspacePage() {
                         Cancel
                     </button>
                 </div>
-            </form>
-        </div>
+            </form >
+        </div >
     );
 }
 

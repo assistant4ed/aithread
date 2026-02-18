@@ -49,13 +49,17 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
         where: {
             workspaceId,
             status: "APPROVED",
+            OR: [
+                { scheduledPublishAt: null },
+                { scheduledPublishAt: { lte: new Date() } }
+            ]
         },
         orderBy: { createdAt: "asc" },
         take: remaining,
     });
 
     if (approvedArticles.length === 0) {
-        console.log(`[Publisher] No APPROVED articles found.`);
+        console.log(`[Publisher] No APPROVED articles ready to publish.`);
         return;
     }
 
@@ -79,18 +83,35 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
 }
 
 export async function publishArticle(
-    article: { id: string; articleContent: string; sourcePostIds: string[] },
+    article: {
+        id: string;
+        articleContent: string;
+        sourcePostIds: string[];
+        selectedMediaUrl?: string | null;
+        selectedMediaType?: string | null;
+    },
     threadsUserId: string,
     threadsAccessToken: string
 ) {
     let text = article.articleContent;
 
-    // Determine media from source posts
+    // Determine media
     let mediaUrl = "";
     let coverUrl = "";
     let mediaType: "IMAGE" | "VIDEO" | "TEXT" = "TEXT";
 
-    if (article.sourcePostIds.length > 0) {
+    // 1. User selected media (Priority)
+    if (article.selectedMediaUrl) {
+        mediaUrl = article.selectedMediaUrl;
+        mediaType = (article.selectedMediaType as "IMAGE" | "VIDEO") || "IMAGE";
+        if (mediaType === "VIDEO") {
+            // If manual upload, we might not have a cover URL easily unless passed.
+            // For now assume no cover or let Threads generate one.
+        }
+        console.log(`[Publisher] Using user-selected media: ${mediaType} - ${mediaUrl}`);
+    }
+    // 2. Auto-pick from source posts (Fallback)
+    else if (article.sourcePostIds.length > 0) {
         const sourcePosts = await prisma.post.findMany({
             where: { id: { in: article.sourcePostIds } },
             select: { mediaUrls: true }
@@ -122,6 +143,7 @@ export async function publishArticle(
             }
             if (mediaType === "VIDEO") break; // Found video, stop looking
         }
+        console.log(`[Publisher] Auto-selected media: ${mediaType} - ${mediaUrl}`);
     }
 
     if (!mediaUrl && !text) {
@@ -130,6 +152,7 @@ export async function publishArticle(
     }
 
     // Create container
+    // ... logic remains same ...
     console.log(`[Publisher] Creating Threads container (${mediaType})...`);
     console.log(`[Publisher] Media URL: ${mediaUrl}`);
     if (coverUrl) console.log(`[Publisher] Cover URL: ${coverUrl}`);

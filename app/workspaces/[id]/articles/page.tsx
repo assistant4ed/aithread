@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 
+
 interface SynthesizedArticle {
     id: string;
     topicName: string;
@@ -17,6 +18,9 @@ interface SynthesizedArticle {
     publishedUrl: string | null;
     createdAt: string;
     mediaUrls?: any[];
+    selectedMediaUrl?: string | null;
+    selectedMediaType?: string | null;
+    scheduledPublishAt?: string | null;
 }
 
 const STATUS_TABS = ["ALL", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "ERROR"] as const;
@@ -28,6 +32,7 @@ export default function ArticlesPage() {
     const [total, setTotal] = useState(0);
     const [activeTab, setActiveTab] = useState<string>("PENDING_REVIEW");
     const [loading, setLoading] = useState(true);
+    const [uploadingId, setUploadingId] = useState<string | null>(null);
 
     const fetchArticles = useCallback(async () => {
         setLoading(true);
@@ -63,6 +68,42 @@ export default function ArticlesPage() {
             body: JSON.stringify({ status: newStatus }),
         });
         fetchArticles();
+    };
+
+    const handleMediaSelect = async (articleId: string, url: string, type: "image" | "video") => {
+        // Optimistic update
+        setArticles(prev => prev.map(a =>
+            a.id === articleId ? { ...a, selectedMediaUrl: url, selectedMediaType: type } : a
+        ));
+
+        await fetch(`/api/articles/${articleId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedMediaUrl: url, selectedMediaType: type }),
+        });
+    };
+
+    const handleFileUpload = async (articleId: string, file: File) => {
+        setUploadingId(articleId);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const res = await fetch(`/api/articles/${articleId}/upload-media`, {
+                method: "POST",
+                body: formData,
+            });
+            const data = await res.json();
+
+            if (data.url) {
+                await handleMediaSelect(articleId, data.url, data.type);
+            }
+        } catch (e) {
+            console.error("Upload failed", e);
+            alert("Upload failed");
+        } finally {
+            setUploadingId(null);
+        }
     };
 
     return (
@@ -110,7 +151,8 @@ export default function ArticlesPage() {
                     {articles.map((article) => (
                         <div
                             key={article.id}
-                            className="border border-border rounded-xl p-5 hover:border-accent/30 transition-colors"
+                            className={`border rounded-xl p-5 hover:border-accent/30 transition-colors ${article.status === "PUBLISHED" ? "border-success/30 bg-success/5" : "border-border"
+                                }`}
                         >
                             {/* Header */}
                             <div className="flex items-center justify-between mb-3">
@@ -118,48 +160,92 @@ export default function ArticlesPage() {
                                     <span className="text-base font-bold text-accent">{article.topicName}</span>
                                     <StatusBadge status={article.status} />
                                 </div>
-                                <span className="text-xs text-muted">
-                                    {new Date(article.createdAt).toLocaleString()}
-                                </span>
+                                <div className="text-right text-xs text-muted flex flex-col gap-0.5">
+                                    <span>Generated: {new Date(article.createdAt).toLocaleString()}</span>
+                                    {article.scheduledPublishAt && (
+                                        <span className="text-success font-medium">
+                                            Scheduled: {new Date(article.scheduledPublishAt).toLocaleString()}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Content */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                                 <div>
                                     <p className="text-xs text-muted mb-2 font-mono uppercase">Synthesized Article (Traditional Chinese)</p>
-                                    <div className="text-sm text-foreground whitespace-pre-wrap bg-surface/50 p-4 rounded-lg border border-border">
+                                    <div className="text-sm text-foreground whitespace-pre-wrap bg-surface/50 p-4 rounded-lg border border-border min-h-[120px]">
                                         {article.articleContent}
+                                    </div>
+                                    <div className="mt-2 text-xs text-muted">
+                                        Sources: {article.authorCount} distinct authors, {article.postCount} posts
                                     </div>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-muted mb-2 font-mono uppercase">Metadata & Media</p>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs text-muted font-mono uppercase">Media Selection</p>
+                                        <label className="text-xs text-accent cursor-pointer hover:underline">
+                                            {uploadingId === article.id ? "Uploading..." : "+ Upload Custom"}
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*,video/*"
+                                                onChange={(e) => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                        handleFileUpload(article.id, e.target.files[0]);
+                                                    }
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+
                                     <div className="space-y-4">
-                                        <div className="text-xs text-muted space-y-1">
-                                            <p>Sources: <span className="text-foreground">{article.authorCount} distinct authors</span></p>
-                                            <p>Post Volume: <span className="text-foreground">{article.postCount} posts</span></p>
-                                            <p>Authors: {article.sourceAccounts.map(a => `@${a}`).join(", ")}</p>
+                                        {/* Media Preview */}
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {/* Combined list: custom media + source media */}
+                                            {(() => {
+                                                const allMedia = [...(article.mediaUrls || [])];
+                                                // If custom media is selected but not in the list, just treat it as the selected state
+                                                // Actually we want to show the list of OPTIONS.
+                                                // The selected one gets a border.
+
+                                                // If we uploaded custom media, it should be in `selectedMediaUrl`. 
+                                                // We can display it as a special "Selected" preview if it's not in the list.
+                                                return allMedia.slice(0, 8).map((m, i) => {
+                                                    const url = typeof m === "string" ? m : m.url;
+                                                    const type = typeof m === "string" ? "image" : m.type;
+                                                    const isSelected = article.selectedMediaUrl === url;
+
+                                                    return (
+                                                        <div
+                                                            key={i}
+                                                            onClick={() => handleMediaSelect(article.id, url, type)}
+                                                            className={`relative aspect-square rounded overflow-hidden cursor-pointer border-2 transition-all ${isSelected ? "border-accent ring-2 ring-accent/20" : "border-transparent opacity-70 hover:opacity-100"
+                                                                }`}
+                                                        >
+                                                            {type === "video" ? (
+                                                                <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white text-xs">▶</div>
+                                                            ) : (
+                                                                <div
+                                                                    className="w-full h-full bg-cover bg-center"
+                                                                    style={{ backgroundImage: `url(${url})` }}
+                                                                />
+                                                            )}
+                                                            {isSelected && (
+                                                                <div className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full mb-0.5"></div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
 
-                                        {/* Media Preview */}
-                                        {article.mediaUrls && article.mediaUrls.length > 0 && (
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {article.mediaUrls.slice(0, 3).map((m, i) => (
-                                                    <a key={i} href={m.url} target="_blank" rel="noopener" className="block aspect-square relative bg-black rounded overflow-hidden group">
-                                                        {m.type === "video" ? (
-                                                            <div className="w-full h-full flex items-center justify-center text-white bg-gray-800">▶</div>
-                                                        ) : (
-                                                            <div
-                                                                className="w-full h-full bg-cover bg-center"
-                                                                style={{ backgroundImage: `url(${m.url})` }}
-                                                            />
-                                                        )}
-                                                    </a>
-                                                ))}
-                                                {article.mediaUrls.length > 3 && (
-                                                    <div className="flex items-center justify-center bg-surface border border-border rounded text-xs text-muted">
-                                                        +{article.mediaUrls.length - 3} more
-                                                    </div>
-                                                )}
+                                        {/* Show currently selected larger preview if exists */}
+                                        {article.selectedMediaUrl && (
+                                            <div className="mt-2 text-xs text-muted flex items-center gap-2 bg-surface/30 p-2 rounded">
+                                                <span>Selected:</span>
+                                                <div className="h-8 w-8 rounded bg-cover bg-center" style={{ backgroundImage: `url(${article.selectedMediaUrl})` }}></div>
+                                                <span className="truncate flex-1 opacity-50">{article.selectedMediaUrl}</span>
                                             </div>
                                         )}
                                     </div>

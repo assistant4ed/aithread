@@ -120,6 +120,18 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                             <dd className="font-mono">{workspace.maxPostAgeHours}h</dd>
                         </div>
                         <div className="flex justify-between">
+                            <dt className="text-muted">Publish Schedule</dt>
+                            <dd className="font-mono text-right">
+                                {workspace.publishTimes && workspace.publishTimes.length > 0
+                                    ? workspace.publishTimes.join(", ")
+                                    : "Default"}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-muted">Review Window</dt>
+                            <dd className="font-mono">{workspace.reviewWindowHours}h before publish</dd>
+                        </div>
+                        <div className="flex justify-between">
                             <dt className="text-muted">Daily Post Limit</dt>
                             <dd className="font-mono">{workspace.dailyPostLimit}</dd>
                         </div>

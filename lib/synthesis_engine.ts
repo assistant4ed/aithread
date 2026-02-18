@@ -11,6 +11,7 @@ const groq = new Groq({
 export interface SynthesisSettings {
     translationPrompt: string;
     synthesisLanguage: string;
+    targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
 }
 
 /**
@@ -24,6 +25,26 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     console.log(`[Synthesis] Starting for workspace ${workspaceId}...`);
     console.log(`[Synthesis] Target Language: ${settings.synthesisLanguage}`);
 
+    // Compute scheduledPublishAt if target time is provided
+    let scheduledAt: Date | undefined;
+    if (settings.targetPublishTimeStr) {
+        // Parse HH:MM
+        const [h, m] = settings.targetPublishTimeStr.split(":").map(Number);
+        const now = new Date();
+        const candidate = new Date();
+        candidate.setHours(h, m, 0, 0);
+
+        // If candidate is in the past (e.g. slight drift), schedule for tomorrow? 
+        // Or assume it's for today. The pipeline triggers synthesis BEFORE publish, so it should be future.
+        // If it's close, it's fine.
+        if (candidate.getTime() < now.getTime() - 1000 * 60 * 60) {
+            // If it's more than 1 hour in the past, assume it's tomorrow (edge case)
+            candidate.setDate(candidate.getDate() + 1);
+        }
+        scheduledAt = candidate;
+        console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toLocaleString()}`);
+    }
+
     // 1. Lookback: 72 hours
     const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
 
@@ -31,15 +52,6 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         where: {
             workspaceId,
             createdAt: { gte: threeDaysAgo },
-            // We want to re-cluster even if they were part of an old cluster, 
-            // but for now let's focus on non-coherent ones or update existing ones?
-            // "The Lookback: Query PostgreSQL for all unprocessed posts" implies only new ones.
-            // But synthesis needs context. Let's fetch ALL valid posts in window to form clusters.
-            // But we only want to generate NEW articles if we have enough NEW data.
-            // Let's stick to the prompt: "unprocessed posts"
-            // Actually, if we only look at "unprocessed", we miss the context of "processed" posts that are part of the same trend.
-            // Better approach: Fetch ALL posts in 72h, cluster them. 
-            // If a cluster is valid (5% authors) AND contains at least one "PENDING" post, we synthesize/update it.
         },
         select: {
             id: true,
@@ -56,25 +68,24 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     }
 
     // 2. Cluster
-    // Prepare documents for clustering
     const docs: Document[] = posts
-        .filter(p => p.contentOriginal && p.contentOriginal.length > 20) // Filter extremely short/empty
+        .filter(p => p.contentOriginal && p.contentOriginal.length > 20)
         .map(p => ({
             id: p.id,
             text: p.contentOriginal || "",
         }));
 
     console.log(`[Synthesis] Clustering ${docs.length} posts...`);
-    const rawClusters = clusterPosts(docs, 0.35); // 0.35 threshold (tweak based on testing)
+    const rawClusters = clusterPosts(docs, 0.35);
 
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
-    const totalTracked = allAuthors.size || 1; // Avoid divide by zero, though logically should be >0
+    const totalTracked = allAuthors.size || 1;
 
-    // FIX: Minimum 2 authors required (or 5%, whichever is higher) to avoid 1-author "trends"
+    // FIX: Minimum 2 authors required (or 5%, whichever is higher)
     const thresholdCount = Math.max(2, Math.ceil(totalTracked * 0.05));
 
-    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Threshold: ${thresholdCount} authors (5% of ${totalTracked}, min 2).`);
+    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Threshold: ${thresholdCount} authors.`);
 
     let newArticles = 0;
 
@@ -84,15 +95,11 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         // 3a. Check Threshold
         if (authors.size < thresholdCount) {
-            continue; // Not a trend yet
+            continue;
         }
 
-        // 3b. Check if this cluster has any "new" news (unprocessed/PENDING posts) or is already fully synthesized?
-        // We don't want to re-synthesize the same old news every 30 mins unless there's new info.
+        // 3b. Check if this cluster has any "new" news
         const hasPending = clusterPosts.some(p => p.coherenceStatus === "PENDING" || p.coherenceStatus === "ISOLATED");
-
-        // Also check if these posts are already linked to a specialized article?
-        // For simplicity, if hasPending is true, we generate/regenerate.
         if (!hasPending) continue;
 
         console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
@@ -106,16 +113,14 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         }
 
         // 5. Translate & Persist & Sanitize
-        // Translate title and content to Target Language
         const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}. Maintain the journalistic tone. Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
         const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}. Keep it punchy. Output ONLY the translated text.`);
 
-        // Sanitize output to remove LLM artifacts
         const translatedContent = sanitizeText(rawContent);
         const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
 
         if (!translatedContent || !translatedTitle) {
-            console.log("  -> Synthesis rejected by sanitizer (empty/broken output).");
+            console.log("  -> Synthesis rejected by sanitizer.");
             continue;
         }
 
@@ -130,7 +135,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 sourceAccounts: Array.from(authors),
                 authorCount: authors.size,
                 postCount: clusterPosts.length,
-                status: "PENDING_REVIEW", // Needs human approval
+                status: "PENDING_REVIEW",
+                scheduledPublishAt: scheduledAt,
             },
         });
 
@@ -139,7 +145,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             where: { id: { in: cluster.postIds } },
             data: {
                 coherenceStatus: "COHERENT",
-                topicClusterId: article.id, // We link to the Article ID now
+                topicClusterId: article.id,
                 lastCoherenceCheck: new Date(),
             },
         });
@@ -150,6 +156,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
     console.log(`[Synthesis] Finished. Generated ${newArticles} new articles.`);
 }
+
+
 
 interface SynthesisResult {
     headline: string;

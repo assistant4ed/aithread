@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
             dailyPostLimit,
             topicFilter,
             maxPostAgeHours,
+            publishTimes,
+            reviewWindowHours,
         } = await request.json();
 
         if (!name || !translationPrompt) {
@@ -46,6 +48,8 @@ export async function POST(request: NextRequest) {
                 dailyPostLimit: dailyPostLimit || 3,
                 topicFilter: topicFilter || null,
                 maxPostAgeHours: maxPostAgeHours ?? 48,
+                publishTimes: publishTimes || ["12:00", "18:00", "22:00"],
+                reviewWindowHours: reviewWindowHours ?? 1,
             },
         });
 

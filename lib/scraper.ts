@@ -165,51 +165,25 @@ export class ThreadsScraper {
                     // Strategy 2: Numeric lines at the end of the text
                     // If metrics are 0, check for isolated numbers in the text lines
                     if (likes === 0 && replies === 0 && reposts === 0) {
-                        // Find lines that look like numbers
+                        // Find lines that look like numbers (e.g. "1.2K", "350", "1")
                         const numberLines = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?$/));
 
                         if (numberLines.length >= 2) {
-                            // Take the last 3 numbers if available, or last 2
-                            const metrics = numberLines.slice(-3); // at most 3
+                            // Threads now often shows: [Likes, Replies, Reposts, Sends]
+                            // If we have 4, we take the first 3. If we have 3, we take them all.
+                            // If 2, we assume Likes/Replies.
+                            const metrics = numberLines.slice(0, 4);
 
-                            if (metrics.length === 3) {
-                                const s1 = metrics[0];
-                                let n1 = parseFloat(s1.replace(/,/g, ''));
-                                if (s1.toUpperCase().includes('K')) n1 = n1 * 1000;
-                                if (s1.toUpperCase().includes('M')) n1 = n1 * 1000000;
-                                likes = isNaN(n1) ? 0 : n1;
+                            const parseMetric = (s: string) => {
+                                let n = parseFloat(s.replace(/,/g, ''));
+                                if (s.toUpperCase().includes('K')) n = n * 1000;
+                                if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                return isNaN(n) ? 0 : n;
+                            };
 
-                                const s2 = metrics[1];
-                                let n2 = parseFloat(s2.replace(/,/g, ''));
-                                if (s2.toUpperCase().includes('K')) n2 = n2 * 1000;
-                                if (s2.toUpperCase().includes('M')) n2 = n2 * 1000000;
-                                replies = isNaN(n2) ? 0 : n2;
-
-                                const s3 = metrics[2];
-                                let n3 = parseFloat(s3.replace(/,/g, ''));
-                                if (s3.toUpperCase().includes('K')) n3 = n3 * 1000;
-                                if (s3.toUpperCase().includes('M')) n3 = n3 * 1000000;
-                                reposts = isNaN(n3) ? 0 : n3;
-
-                            } else if (metrics.length === 2) {
-                                const s1 = metrics[0];
-                                let n1 = parseFloat(s1.replace(/,/g, ''));
-                                if (s1.toUpperCase().includes('K')) n1 = n1 * 1000;
-                                if (s1.toUpperCase().includes('M')) n1 = n1 * 1000000;
-                                likes = isNaN(n1) ? 0 : n1;
-
-                                const s2 = metrics[1];
-                                let n2 = parseFloat(s2.replace(/,/g, ''));
-                                if (s2.toUpperCase().includes('K')) n2 = n2 * 1000;
-                                if (s2.toUpperCase().includes('M')) n2 = n2 * 1000000;
-                                replies = isNaN(n2) ? 0 : n2;
-                            } else if (metrics.length === 1) {
-                                const s1 = metrics[0];
-                                let n1 = parseFloat(s1.replace(/,/g, ''));
-                                if (s1.toUpperCase().includes('K')) n1 = n1 * 1000;
-                                if (s1.toUpperCase().includes('M')) n1 = n1 * 1000000;
-                                likes = isNaN(n1) ? 0 : n1;
-                            }
+                            if (metrics.length >= 1) likes = parseMetric(metrics[0]);
+                            if (metrics.length >= 2) replies = parseMetric(metrics[1]);
+                            if (metrics.length >= 3) reposts = parseMetric(metrics[2]);
                         }
                     }
 
@@ -227,17 +201,22 @@ export class ThreadsScraper {
                         reposts,
                         mediaUrls: media,
                         postUrl,
-                        postedAt: postedAt && !isNaN(new Date(postedAt).getTime()) ? new Date(postedAt) : undefined,
+                        postedAt: postedAt // Return raw string
                     };
                 });
             });
 
             // Filter out posts without a valid date (likely pinned or ad garbage)
-            return posts.filter((p: any) => {
+            const filtered = posts.filter((p: any) => {
                 if (!p.postedAt) return false;
                 const d = new Date(p.postedAt);
-                return !isNaN(d.getTime());
+                const isValid = !isNaN(d.getTime());
+                if (isValid) {
+                    p.postedAt = d;
+                }
+                return isValid;
             });
+            return filtered as unknown as ThreadPost[];
 
         } catch (error) {
             console.error(`Error scraping ${username}:`, error);
