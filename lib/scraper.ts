@@ -227,8 +227,21 @@ export class ThreadsScraper {
                     }
 
                     // Check age limit
-                    if (since && d < since) {
-                        foundOld = true;
+                    // Logic Update: Only considered "reached old posts" if the *last* post in the batch is old. 
+                    // This prevents Pinned posts (which are old but at the top) from triggering a premature stop.
+                    // We'll check this outside the loop for the last item, or here if we track index.
+                }
+
+                // Check if the last post in rawPosts is old
+                if (rawPosts.length > 0 && since) {
+                    const lastPost = rawPosts[rawPosts.length - 1];
+                    if (lastPost.postedAt) { // postedAt is Date now due to fix above? No, rawPosts has string/converted.
+                        // rawPosts elements are modified in place in the loop above? 
+                        // No, I did `(p as any).postedAt = d`. Yes, modified in place.
+                        const d = (lastPost as any).postedAt;
+                        if (d instanceof Date && d < since) {
+                            foundOld = true;
+                        }
                     }
                 }
 
