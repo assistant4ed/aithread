@@ -35,7 +35,11 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
     // Rate-limit delay (stagger requests)
     await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
 
-    const posts = await scraper.scrapeAccount(username);
+    const maxAgeHours = settings?.maxPostAgeHours || 172;
+    const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+    console.log(`[ScrapeWorker] Scraping @${username} since ${since.toISOString()}...`);
+
+    const posts = await scraper.scrapeAccount(username, since);
     console.log(`[ScrapeWorker] Found ${posts.length} posts for @${username}`);
 
     let newCount = 0;

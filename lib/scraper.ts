@@ -54,9 +54,13 @@ export class ThreadsScraper {
         }
     }
 
-    async scrapeAccount(username: string): Promise<ThreadPost[]> {
+    async scrapeAccount(username: string, since?: Date): Promise<ThreadPost[]> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+
+        // Safety limit to prevent infinite loops if dates aren't parsing or layout changes
+        const MAX_SCROLLS = 20;
+        const allPosts = new Map<string, ThreadPost>();
 
         try {
             console.log(`Navigating to https://www.threads.net/@${username}`);
@@ -64,164 +68,205 @@ export class ThreadsScraper {
 
             await page.waitForSelector('body', { timeout: 10000 });
 
-            // Scroll down to trigger lazy loading of media/videos
-            await page.evaluate(async () => {
-                await new Promise<void>((resolve) => {
-                    let totalHeight = 0;
-                    const distance = 100;
-                    const timer = setInterval(() => {
-                        const scrollHeight = document.body.scrollHeight;
-                        window.scrollBy(0, distance);
-                        totalHeight += distance;
-                        if (totalHeight >= 2000) {
-                            clearInterval(timer);
-                            resolve();
-                        }
-                    }, 100);
-                });
-            });
-
+            // Initial wait for hydration
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            const posts = await page.evaluate(() => {
-                const potentialSelectors = [
-                    'div[data-pressable-container="true"]',
-                    'div[role="article"]',
-                    'div[aria-label*="Thread"]'
-                ];
+            let scrollCount = 0;
+            let finished = false;
 
-                let postElements: Element[] = [];
-                for (const sel of potentialSelectors) {
-                    const found = Array.from(document.querySelectorAll(sel));
-                    if (found.length > 0) {
-                        postElements = found;
-                        break;
+            while (scrollCount < MAX_SCROLLS && !finished) {
+                // 1. Scrape current view
+                const rawPosts = await page.evaluate(() => {
+                    // Selectors for both old and new Threads UI structures
+                    const potentialSelectors = [
+                        'div[data-pressable="true"]',
+                        'div[data-pressable-container="true"]',
+                        'div[role="article"]',
+                        'div[aria-label*="Thread"]'
+                    ];
+
+                    const allElements = new Set<Element>();
+                    for (const sel of potentialSelectors) {
+                        document.querySelectorAll(sel).forEach(el => allElements.add(el));
                     }
-                }
 
-                return postElements.map((el: any) => {
-                    const text = el.textContent || "";
+                    const postElements = Array.from(allElements);
+                    if (postElements.length === 0) return [];
 
-                    const videos = Array.from(el.querySelectorAll('video'))
-                        .map((vid: any) => vid.src || '')
-                        .filter((src: string) => src.startsWith('http'))
-                        .map((src: string) => ({ url: src, type: 'video' as const }));
+                    return postElements.map((el: any) => {
+                        const videos = Array.from(el.querySelectorAll('video'))
+                            .map((vid: any) => vid.src || '')
+                            .filter((src: string) => src.startsWith('http'))
+                            .map((src: string) => ({ url: src, type: 'video' as const }));
 
-                    const images = Array.from(el.querySelectorAll('img'))
-                        .filter((img: any) => {
-                            const alt = (img.alt || '').toLowerCase();
-                            return !alt.includes('profile picture');
-                        })
-                        .map((img: any) => img.src)
-                        .filter((src: string) => src.startsWith('http'))
-                        .map((src: string) => ({ url: src, type: 'image' as const }));
+                        const images = Array.from(el.querySelectorAll('img'))
+                            .filter((img: any) => {
+                                const alt = (img.alt || '').toLowerCase();
+                                return !alt.includes('profile picture');
+                            })
+                            .map((img: any) => img.src)
+                            .filter((src: string) => src.startsWith('http'))
+                            .map((src: string) => ({ url: src, type: 'image' as const }));
 
-                    const media = videos.length > 0 ? videos : images;
+                        const media = videos.length > 0 ? videos : images;
 
-                    const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
-                    const postUrl = links.find((l: string) => l.includes('/post/')) || "";
+                        const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
+                        const postUrl = links.find((l: string) => l.includes('/post/')) || "";
 
-                    let likes = 0;
-                    let replies = 0;
-                    let reposts = 0;
+                        let likes = 0;
+                        let replies = 0;
+                        let reposts = 0;
 
-                    const innerText = el.innerText || "";
-                    // Split lines for metric extraction if needed
-                    const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+                        const innerText = el.innerText || "";
+                        const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
 
-                    const likeEl = el.querySelector('[aria-label*="likes"]');
-                    if (likeEl) {
-                        const str = likeEl.getAttribute('aria-label');
-                        if (str) {
-                            let n = parseFloat(str.replace(/,/g, ''));
-                            if (str.toUpperCase().includes('K')) n = n * 1000;
-                            if (str.toUpperCase().includes('M')) n = n * 1000000;
-                            likes = isNaN(n) ? 0 : n;
+                        const likeEl = el.querySelector('[aria-label*="likes"]');
+                        if (likeEl) {
+                            const str = likeEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                likes = isNaN(n) ? 0 : n;
+                            }
                         }
-                    }
 
-                    const replyEl = el.querySelector('[aria-label*="replies"]');
-                    if (replyEl) {
-                        const str = replyEl.getAttribute('aria-label');
-                        if (str) {
-                            let n = parseFloat(str.replace(/,/g, ''));
-                            if (str.toUpperCase().includes('K')) n = n * 1000;
-                            if (str.toUpperCase().includes('M')) n = n * 1000000;
-                            replies = isNaN(n) ? 0 : n;
+                        const replyEl = el.querySelector('[aria-label*="replies"]');
+                        if (replyEl) {
+                            const str = replyEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                replies = isNaN(n) ? 0 : n;
+                            }
                         }
-                    }
 
-                    const repostEl = el.querySelector('[aria-label*="reposts"]');
-                    if (repostEl) {
-                        const str = repostEl.getAttribute('aria-label');
-                        if (str) {
-                            let n = parseFloat(str.replace(/,/g, ''));
-                            if (str.toUpperCase().includes('K')) n = n * 1000;
-                            if (str.toUpperCase().includes('M')) n = n * 1000000;
-                            reposts = isNaN(n) ? 0 : n;
+                        const repostEl = el.querySelector('[aria-label*="reposts"]');
+                        if (repostEl) {
+                            const str = repostEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                reposts = isNaN(n) ? 0 : n;
+                            }
                         }
-                    }
 
-                    // Strategy 2: Numeric lines at the end of the text
-                    // If metrics are 0, check for isolated numbers in the text lines
-                    if (likes === 0 && replies === 0 && reposts === 0) {
-                        // Find lines that look like numbers (e.g. "1.2K", "350", "1")
-                        const numberLines = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?$/));
-
-                        if (numberLines.length >= 2) {
-                            // Threads now often shows: [Likes, Replies, Reposts, Sends]
-                            // If we have 4, we take the first 3. If we have 3, we take them all.
-                            // If 2, we assume Likes/Replies.
-                            const metrics = numberLines.slice(0, 4);
-
-                            const parseMetric = (s: string) => {
-                                let n = parseFloat(s.replace(/,/g, ''));
-                                if (s.toUpperCase().includes('K')) n = n * 1000;
-                                if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                return isNaN(n) ? 0 : n;
-                            };
-
-                            if (metrics.length >= 1) likes = parseMetric(metrics[0]);
-                            if (metrics.length >= 2) replies = parseMetric(metrics[1]);
-                            if (metrics.length >= 3) reposts = parseMetric(metrics[2]);
+                        // Strategy 2: Numeric lines at the end of the text
+                        if (likes === 0 && replies === 0 && reposts === 0) {
+                            const numberLines = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?$/));
+                            if (numberLines.length >= 2) {
+                                const metrics = numberLines.slice(0, 4);
+                                if (metrics.length >= 1) {
+                                    const s = metrics[0];
+                                    let n = parseFloat(s.replace(/,/g, ''));
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    likes = isNaN(n) ? 0 : n;
+                                }
+                                if (metrics.length >= 2) {
+                                    const s = metrics[1];
+                                    let n = parseFloat(s.replace(/,/g, ''));
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    replies = isNaN(n) ? 0 : n;
+                                }
+                                if (metrics.length >= 3) {
+                                    const s = metrics[2];
+                                    let n = parseFloat(s.replace(/,/g, ''));
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    reposts = isNaN(n) ? 0 : n;
+                                }
+                            }
                         }
-                    }
 
-                    let postedAt: string | null = null;
-                    const timeEl = el.querySelector('time');
-                    if (timeEl) {
-                        postedAt = timeEl.getAttribute('datetime');
-                    }
+                        let postedAt: string | null = null;
+                        const timeEl = el.querySelector('time');
+                        if (timeEl) {
+                            postedAt = timeEl.getAttribute('datetime');
+                        }
 
-                    return {
-                        content: innerText.slice(0, 300),
-                        threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
-                        likes,
-                        replies,
-                        reposts,
-                        mediaUrls: media,
-                        postUrl,
-                        postedAt: postedAt // Return raw string
-                    };
+                        return {
+                            content: innerText.slice(0, 300),
+                            threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
+                            likes,
+                            replies,
+                            reposts,
+                            mediaUrls: media,
+                            postUrl,
+                            postedAt: postedAt
+                        };
+                    });
                 });
-            });
 
-            // Filter out posts without a valid date (likely pinned or ad garbage)
-            const filtered = posts.filter((p: any) => {
-                if (!p.postedAt) return false;
-                const d = new Date(p.postedAt);
-                const isValid = !isNaN(d.getTime());
-                if (isValid) {
-                    p.postedAt = d;
+                // 2. Process and add to map
+                let foundNew = false;
+                let foundOld = false;
+
+                for (const p of rawPosts) {
+                    if (!p.postedAt) continue;
+
+                    const d = new Date(p.postedAt);
+                    if (isNaN(d.getTime())) continue;
+
+                    // Fix date object
+                    (p as any).postedAt = d;
+
+                    // Deduplicate key
+                    const existing = allPosts.get(p.threadId);
+
+                    // Logic: Keep the one with more metrics (avoids capturing "Reply" elements that link to parent but have no stats)
+                    const currentScore = (p.likes || 0) + (p.replies || 0) + (p.reposts || 0);
+                    const existingScore = existing ? (existing.likes || 0) + (existing.replies || 0) + (existing.reposts || 0) : -1;
+
+                    if (!existing || currentScore > existingScore) {
+                        allPosts.set(p.threadId, p as unknown as ThreadPost);
+                        if (!existing) foundNew = true;
+                    }
+
+                    // Check age limit
+                    if (since && d < since) {
+                        foundOld = true;
+                    }
                 }
-                return isValid;
-            });
-            return filtered as unknown as ThreadPost[];
+
+                // 3. Logic: 
+                //    - If we found an old post, we can stop (we have enough history).
+                //    - If we didn't find ANY new posts in this scroll, we might be stuck or at end.
+                //    - Otherwise, scroll more.
+
+                if (foundOld) {
+                    console.log(`[Scraper] Reached posts older than ${since?.toISOString()}. Stopping.`);
+                    finished = true;
+                } else if (!foundNew && scrollCount > 0) {
+                    console.log("[Scraper] No new posts found in this scroll. Stopping.");
+                    finished = true;
+                } else {
+                    console.log(`[Scraper] Scroll ${scrollCount + 1}/${MAX_SCROLLS}: Found ${rawPosts.length} posts (Total unique: ${allPosts.size}). Scrolling...`);
+
+                    await page.evaluate(async () => {
+                        window.scrollBy(0, 3000);
+                        await new Promise(r => setTimeout(r, 2000));
+                    });
+
+                    scrollCount++;
+                }
+            }
+
+            const results = Array.from(allPosts.values());
+            // Sort newest-first
+            results.sort((a: any, b: any) => b.postedAt!.getTime() - a.postedAt!.getTime());
+
+            return results;
 
         } catch (error) {
             console.error(`Error scraping ${username}:`, error);
-            // return []; // Changed to return what we have so far? No, just empty array on main error.
-            return [];
+            // Return what we have so far
+            const results = Array.from(allPosts.values());
+            results.sort((a: any, b: any) => (b.postedAt?.getTime() || 0) - (a.postedAt?.getTime() || 0));
+            return results;
         } finally {
             await page.close();
         }
@@ -243,7 +288,6 @@ export class ThreadsScraper {
             let bestVideoUrl: string | undefined;
             let bestCoverUrl: string | undefined;
 
-            // Find video
             while ((match = videoRegex.exec(html)) !== null) {
                 try {
                     const videoVersions = JSON.parse(match[1]);
@@ -257,7 +301,6 @@ export class ThreadsScraper {
                 } catch (e) { }
             }
 
-            // Find cover
             while ((match = imageRegex.exec(html)) !== null) {
                 try {
                     const imageVersions = JSON.parse(match[1]);

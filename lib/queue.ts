@@ -16,9 +16,14 @@ function parseRedisUrl(url: string): ConnectionOptions {
         port: parseInt(parsed.port || "6379", 10),
         password: parsed.password || undefined,
         username: parsed.username || undefined,
-        tls: parsed.protocol === "rediss:" ? {} : undefined,
+        tls: parsed.protocol === "rediss:" ? {
+            checkServerIdentity: () => undefined, // potentially help with some self-signed certs (though Upstash usually fine)
+        } : undefined,
         maxRetriesPerRequest: null, // Required by BullMQ
         enableReadyCheck: false,
+        connectTimeout: 30000,
+        keepAlive: 1000,
+        family: 4, // Force IPv4
     };
 }
 
