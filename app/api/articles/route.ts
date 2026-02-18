@@ -32,13 +32,18 @@ export async function GET(request: NextRequest) {
     // For the list view, we might want to just pick the first image from source posts?
     // Let's do a quick lookup for media URLs for these articles.
     const hydratedArticles = await Promise.all(articles.map(async (art) => {
-        const sourcePosts = await prisma.post.findMany({
-            where: { id: { in: art.sourcePostIds } },
-            select: { mediaUrls: true, sourceAccount: true }
-        });
+        let allMedia = Array.isArray(art.mediaUrls) ? art.mediaUrls : [];
 
-        // Flatten media
-        const allMedia = sourcePosts.flatMap(p => (Array.isArray(p.mediaUrls) ? p.mediaUrls : []));
+        // If stored media is empty, hydrate from source posts
+        if (allMedia.length === 0) {
+            const sourcePosts = await prisma.post.findMany({
+                where: { id: { in: art.sourcePostIds } },
+                select: { mediaUrls: true, sourceAccount: true }
+            });
+
+            // Flatten media
+            allMedia = sourcePosts.flatMap(p => (Array.isArray(p.mediaUrls) ? p.mediaUrls : []));
+        }
 
         return {
             ...art,

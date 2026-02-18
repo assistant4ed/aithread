@@ -96,11 +96,42 @@ export default function ArticlesPage() {
             const data = await res.json();
 
             if (data.url) {
-                await handleMediaSelect(articleId, data.url, data.type);
+                // Find article to get current mediaUrls
+                const article = articles.find(a => a.id === articleId);
+                if (!article) return;
+
+                const newMedia = { url: data.url, type: data.type };
+                const updatedMediaUrls = [...(article.mediaUrls || []), newMedia];
+
+                // Optimistic update
+                setArticles(prev => prev.map(a =>
+                    a.id === articleId ? {
+                        ...a,
+                        selectedMediaUrl: data.url,
+                        selectedMediaType: data.type,
+                        mediaUrls: updatedMediaUrls
+                    } : a
+                ));
+
+                // Persist
+                const patchRes = await fetch(`/api/articles/${articleId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        selectedMediaUrl: data.url,
+                        selectedMediaType: data.type,
+                        mediaUrls: updatedMediaUrls
+                    }),
+                });
+
+                if (!patchRes.ok) {
+                    throw new Error("Failed to save media selection");
+                }
             }
-        } catch (e) {
-            console.error("Upload failed", e);
-            alert("Upload failed");
+        } catch (e: any) {
+            console.error("Upload/Save failed", e);
+            alert(`Upload failed: ${e.message}`);
+            fetchArticles(); // Revert state
         } finally {
             setUploadingId(null);
         }

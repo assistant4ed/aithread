@@ -27,6 +27,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             resumable: false,
         });
 
+        // Make the file public
+        await blob.makePublic();
+
         // Make public if needed, or just use the authenticated URL if the bucket is public?
         // Assuming the bucket is public-read or we use a signed URL. 
         // For now, let's assume public-read or return the public URL format.

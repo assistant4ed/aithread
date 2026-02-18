@@ -10,10 +10,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { id } = await params;
     const body = await request.json();
 
-    const updated = await prisma.synthesizedArticle.update({
-        where: { id },
-        data: body,
-    });
+    try {
+        const updated = await prisma.synthesizedArticle.update({
+            where: { id },
+            data: body,
+        });
 
-    return NextResponse.json(updated);
+        return NextResponse.json(updated);
+    } catch (error: any) {
+        console.error("Error updating article:", error);
+        return NextResponse.json({ error: "Failed to update article" }, { status: 500 });
+    }
 }

@@ -115,6 +115,10 @@ model SynthesizedArticle {
   authorCount     Int       // How many distinct authors
   postCount       Int       // How many posts in the cluster
   
+  
+  // Media
+  mediaUrls       Json[]    @default([]) // [{url: string, type: "image"|"video"}]
+  
   // Custom Media Selection
   selectedMediaUrl   String?
   selectedMediaType  String?   // "image" | "video"
