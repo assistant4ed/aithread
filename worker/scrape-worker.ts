@@ -22,6 +22,37 @@ async function getScraperForSlot(slotId: number): Promise<ThreadsScraper> {
 // Track which slot is processing (simple round-robin via job counter)
 let jobCounter = 0;
 
+// ─── Follower Count Cache ─────────────────────────────────────────────────────
+
+const FOLLOWER_CACHE_TTL_HOURS = 6;
+
+/**
+ * Returns the cached follower count for an account, or scrapes it fresh
+ * if the cache is stale (> 6 hours old) or missing.
+ */
+async function getOrFetchFollowerCount(username: string, scraper: ThreadsScraper): Promise<number> {
+    const cached = await prisma.trackedAccount.findUnique({ where: { username } });
+
+    if (cached) {
+        const ageHours = (Date.now() - cached.lastFetchedAt.getTime()) / (1000 * 60 * 60);
+        if (ageHours < FOLLOWER_CACHE_TTL_HOURS) {
+            console.log(`[ScrapeWorker] @${username} follower count (cached): ${cached.followerCount}`);
+            return cached.followerCount;
+        }
+    }
+
+    // Cache miss or stale — scrape fresh
+    const followerCount = await scraper.getFollowerCount(username);
+
+    await prisma.trackedAccount.upsert({
+        where: { username },
+        update: { followerCount, lastFetchedAt: new Date() },
+        create: { username, followerCount, lastFetchedAt: new Date() },
+    });
+
+    return followerCount;
+}
+
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
 async function processScrapeJob(job: Job<ScrapeJobData>) {
@@ -41,6 +72,10 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
 
     const posts = await scraper.scrapeAccount(username, since);
     console.log(`[ScrapeWorker] Found ${posts.length} posts for @${username}`);
+
+    // Fetch (or use cached) follower count for this account
+    const followerCount = await getOrFetchFollowerCount(username, scraper);
+    console.log(`[ScrapeWorker] @${username} follower count: ${followerCount}`);
 
     let newCount = 0;
 
@@ -79,7 +114,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
             username,
             workspaceId,
             settings,
-            { skipTranslation }
+            { skipTranslation },
+            followerCount
         );
 
         if (!savedPost) {

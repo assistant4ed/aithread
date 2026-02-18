@@ -28,20 +28,17 @@ export async function GET(request: NextRequest) {
         prisma.synthesizedArticle.count({ where }),
     ]);
 
-    // Hydrate source posts for media display if needed
-    // For the list view, we might want to just pick the first image from source posts?
-    // Let's do a quick lookup for media URLs for these articles.
+    // Hydrate source posts for media display and source links
     const hydratedArticles = await Promise.all(articles.map(async (art) => {
+        const sourcePosts = await prisma.post.findMany({
+            where: { id: { in: art.sourcePostIds } },
+            select: { id: true, mediaUrls: true, sourceAccount: true, sourceUrl: true }
+        });
+
         let allMedia = Array.isArray(art.mediaUrls) ? art.mediaUrls : [];
 
         // If stored media is empty, hydrate from source posts
         if (allMedia.length === 0) {
-            const sourcePosts = await prisma.post.findMany({
-                where: { id: { in: art.sourcePostIds } },
-                select: { mediaUrls: true, sourceAccount: true }
-            });
-
-            // Flatten media
             allMedia = sourcePosts.flatMap(p => (Array.isArray(p.mediaUrls) ? p.mediaUrls : []));
         }
 
@@ -49,6 +46,11 @@ export async function GET(request: NextRequest) {
             ...art,
             mediaUrls: allMedia,
             sourceAccounts: art.sourceAccounts, // already on model
+            sourcePosts: sourcePosts.map(p => ({
+                id: p.id,
+                sourceAccount: p.sourceAccount,
+                sourceUrl: p.sourceUrl,
+            })),
         };
     }));
 

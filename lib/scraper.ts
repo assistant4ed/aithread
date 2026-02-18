@@ -13,6 +13,7 @@ export interface ThreadPost {
     threadId: string;
     content: string;
     mediaUrls: MediaItem[];
+    views: number;
     likes: number;
     replies: number;
     reposts: number;
@@ -113,12 +114,24 @@ export class ThreadsScraper {
                         const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
                         const postUrl = links.find((l: string) => l.includes('/post/')) || "";
 
+                        let views = 0;
                         let likes = 0;
                         let replies = 0;
                         let reposts = 0;
 
                         const innerText = el.innerText || "";
                         const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+
+                        const viewEl = el.querySelector('[aria-label*="views"]');
+                        if (viewEl) {
+                            const str = viewEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                views = isNaN(n) ? 0 : n;
+                            }
+                        }
 
                         const likeEl = el.querySelector('[aria-label*="likes"]');
                         if (likeEl) {
@@ -191,6 +204,7 @@ export class ThreadsScraper {
                         return {
                             content: innerText.slice(0, 300),
                             threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
+                            views,
                             likes,
                             replies,
                             reposts,
@@ -280,6 +294,53 @@ export class ThreadsScraper {
             const results = Array.from(allPosts.values());
             results.sort((a: any, b: any) => (b.postedAt?.getTime() || 0) - (a.postedAt?.getTime() || 0));
             return results;
+        } finally {
+            await page.close();
+        }
+    }
+
+    /**
+     * Scrape the follower count from an account's profile page.
+     * Returns 0 if it cannot be determined.
+     */
+    async getFollowerCount(username: string): Promise<number> {
+        if (!this.browser) await this.init();
+        const page = await this.browser!.newPage();
+        try {
+            console.log(`[Scraper] Fetching follower count for @${username}`);
+            await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            const followerCount = await page.evaluate(() => {
+                // Strategy 1: aria-label on follower count element
+                const followerEl = document.querySelector('[aria-label*="followers"]');
+                if (followerEl) {
+                    const str = followerEl.getAttribute('aria-label') || followerEl.textContent || '';
+                    let n = parseFloat(str.replace(/,/g, ''));
+                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                    if (!isNaN(n) && n > 0) return Math.round(n);
+                }
+
+                // Strategy 2: Look for text containing "followers" near a number
+                const allText = document.body.innerText;
+                const match = allText.match(/(\d[\d,\.]*[KkMm]?)\s*followers/i);
+                if (match) {
+                    const raw = match[1];
+                    let n = parseFloat(raw.replace(/,/g, ''));
+                    if (raw.toUpperCase().includes('K')) n = n * 1000;
+                    if (raw.toUpperCase().includes('M')) n = n * 1000000;
+                    if (!isNaN(n) && n > 0) return Math.round(n);
+                }
+
+                return 0;
+            });
+
+            console.log(`[Scraper] @${username} follower count: ${followerCount}`);
+            return followerCount;
+        } catch (error) {
+            console.error(`[Scraper] Failed to get follower count for @${username}:`, error);
+            return 0;
         } finally {
             await page.close();
         }

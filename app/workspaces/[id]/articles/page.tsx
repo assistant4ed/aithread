@@ -12,6 +12,7 @@ interface SynthesizedArticle {
     articleOriginal: string | null;
     sourcePostIds: string[];
     sourceAccounts: string[];
+    sourcePosts?: { id: string; sourceAccount: string; sourceUrl: string | null }[];
     authorCount: number;
     postCount: number;
     status: string;
@@ -211,6 +212,27 @@ export default function ArticlesPage() {
                                     <div className="mt-2 text-xs text-muted">
                                         Sources: {article.authorCount} distinct authors, {article.postCount} posts
                                     </div>
+                                    {article.sourcePosts && article.sourcePosts.length > 0 && (
+                                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                                            {article.sourcePosts.map((p) =>
+                                                p.sourceUrl ? (
+                                                    <a
+                                                        key={p.id}
+                                                        href={p.sourceUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-accent hover:underline font-mono"
+                                                    >
+                                                        @{p.sourceAccount} ↗
+                                                    </a>
+                                                ) : (
+                                                    <span key={p.id} className="text-xs text-muted font-mono">
+                                                        @{p.sourceAccount}
+                                                    </span>
+                                                )
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="flex items-center justify-between mb-2">

@@ -79,6 +79,7 @@ model Post {
   contentTranslated String?   @db.Text
   mediaUrls         Json?     // [{url: string, type: "image"|"video"}]
 
+  views             Int       @default(0)
   likes             Int       @default(0)
   replies           Int       @default(0)
   reposts           Int       @default(0)
@@ -100,6 +101,16 @@ model Post {
   createdAt         DateTime  @default(now())
   postedAt          DateTime? // When the post was originally posted on Threads
   publishedAt       DateTime?
+}
+
+// ─── TrackedAccount ──────────────────────────────────────────────────────────
+// Caches per-account follower counts to avoid re-scraping every 5 minutes.
+
+model TrackedAccount {
+  username      String   @id
+  followerCount Int      @default(0)
+  lastFetchedAt DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // ─── Synthesis ──────────────────────────────────────────────────────────────

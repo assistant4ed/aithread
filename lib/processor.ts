@@ -34,8 +34,8 @@ export async function processPost(
         threadId: string;
         content: string;
         mediaUrls: { url: string; type: string; coverUrl?: string }[];
+        views: number;
         likes: number;
-
         replies: number;
         reposts: number;
         postedAt?: Date;
@@ -44,7 +44,8 @@ export async function processPost(
     sourceAccount: string,
     workspaceId: string,
     settings: WorkspaceSettings,
-    options: ProcessPostOptions = {}
+    options: ProcessPostOptions = {},
+    followerCount: number = 0
 ) {
     const validPostedAt = safeDate(postData.postedAt);
 
@@ -97,7 +98,7 @@ export async function processPost(
     }
 
     // 4. Score
-    const score = calculateHotScore({ ...postData, postedAt: validPostedAt });
+    const score = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
     const finalScore = isNaN(score) ? 0 : score;
 
     // 5. Hot score gate — skip low-engagement posts entirely
@@ -122,6 +123,7 @@ export async function processPost(
             contentOriginal: postData.content,
             contentTranslated: null, // No individual post translation
             mediaUrls: postData.mediaUrls,
+            views: postData.views,
             likes: postData.likes,
             replies: postData.replies,
             reposts: postData.reposts,
@@ -138,12 +140,35 @@ export async function processPost(
 
 /**
  * Calculate hot score with time-decay.
- * Base score = likes×1.5 + replies×2 + reposts×1
+ *
+ * PRIMARY signal: breakout ratio = views ÷ followerCount × 100
+ *   e.g. 2000 views / 500 followers = 4.0 → score = 400
+ *   This rewards posts that punched above the account's normal reach.
+ *
+ * FALLBACK (when views or followerCount = 0):
+ *   Legacy engagement score = likes×1.5 + replies×2 + reposts×1
+ *
  * Decay: score halves every 24 hours since posting.
- * If postedAt is missing, no decay is applied.
  */
-export function calculateHotScore(post: { likes: number; replies: number; reposts: number; postedAt?: Date }): number {
-    const baseScore = (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+export function calculateHotScore(post: {
+    views?: number;
+    likes: number;
+    replies: number;
+    reposts: number;
+    followerCount?: number;
+    postedAt?: Date;
+}): number {
+    let baseScore: number;
+
+    if (post.views && post.views > 0 && post.followerCount && post.followerCount > 0) {
+        // Breakout ratio — primary signal
+        const breakoutRatio = post.views / post.followerCount;
+        baseScore = breakoutRatio * 100;
+        console.log(`[HotScore] Breakout ratio: ${post.views} views / ${post.followerCount} followers = ${breakoutRatio.toFixed(2)} → score ${baseScore.toFixed(0)}`);
+    } else {
+        // Legacy fallback
+        baseScore = (post.likes * 1.5) + (post.replies * 2) + (post.reposts * 1);
+    }
 
     const validDate = safeDate(post.postedAt);
     if (!validDate) return baseScore;
