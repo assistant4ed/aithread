@@ -118,6 +118,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             twitterAccessToken: account.access_token,
                             twitterRefreshToken: account.refresh_token,
                             twitterExpiresAt: account.expires_at,
+                            // Clear legacy OAuth 1.0a secret to prevent "Bad Authentication Data" errors
+                            // and force the publisher to use OAuth 2.0 (Text-only mode)
+                            twitterAccessSecret: null,
                             // We might want to store the Twitter username/ID too for display
                             // twitterApiKey/Secret are App credentials, not user tokens. 
                             // We are shifting to OAuth 2.0 user tokens (access_token).

@@ -1,75 +1,111 @@
-// Prisma schema — PostgreSQL, Multi-Workspace Architecture
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") 
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
-
-// ─── Workspace ───────────────────────────────────────────────────────────────
 
 model Workspace {
-  id                String   @id @default(cuid())
-  name              String   @unique
-  isActive          Boolean  @default(true)
-
-  // Accounts to scrape
-  targetAccounts    String[] // PostgreSQL native array, e.g. ["openai", "nvidia"]
-
-  // AI / Translation
-  translationPrompt String   @db.Text
-  clusteringPrompt  String   @default("Group these posts into news clusters. Focus on the core event or announcement. Combine posts from different authors if they are about the SAME story. Ignore generic chatter.")
-  synthesisLanguage String   @default("Traditional Chinese (HK/TW)")
-  topicFilter       String?  // Optional topic/keyword filter for AI relevance check
-  hotScoreThreshold Float    @default(50)
-  maxPostAgeHours   Int      @default(48) // Skip posts older than this (hours)
-  postLookbackHours Int      @default(24) // How far back to look for synthesis (hours)
-
-  // Threads API credentials (per workspace)
-  threadsAppId      String?
-  threadsToken      String? // Acts as Access Token
-  threadsRefreshToken String?
-  threadsExpiresAt    Int?     // Unix timestamp
-
-  // Instagram API credentials
-  instagramAccessToken String?
+  id                    String               @id @default(cuid())
+  name                  String               @unique
+  isActive              Boolean              @default(true)
+  targetAccounts        String[]
+  translationPrompt     String
+  hotScoreThreshold     Float                @default(50)
+  threadsAppId          String?
+  threadsToken          String?
+  dailyPostLimit        Int                  @default(3)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  maxPostAgeHours       Int                  @default(48)
+  publishTimes          String[]             @default(["12:00", "18:00", "22:00"])
+  reviewWindowHours     Int                  @default(1)
+  synthesisLanguage     String               @default("Traditional Chinese (HK/TW)")
+  topicFilter           String?
+  lastPublishedAt       DateTime?
+  lastScrapedAt         DateTime?
+  lastSynthesizedAt     DateTime?
+  clusteringPrompt      String               @default("Group these posts into news clusters. Focus on the core event or announcement. Combine posts from different authors if they are about the SAME story. Ignore generic chatter.")
+  postLookbackHours     Int                  @default(24)
+  instagramAccessToken  String?
+  instagramAccountId    String?
+  twitterAccessSecret   String?
+  twitterAccessToken    String?
+  twitterApiKey         String?
+  twitterApiSecret      String?
+  instagramExpiresAt    Int?
   instagramRefreshToken String?
-  instagramExpiresAt   Int?     // Unix timestamp
-  instagramAccountId   String?
-
-  // X (Twitter) API credentials
-  twitterApiKey       String?
-  twitterApiSecret    String?
-  twitterAccessToken  String?
-  twitterRefreshToken String?
-  twitterExpiresAt    Int?      // Unix timestamp
-  twitterAccessSecret String?
-
-  // Publishing limits
-  dailyPostLimit    Int      @default(3)
-  
-  // Pipeline Schedule
-  publishTimes      String[] @default(["12:00", "18:00", "22:00"]) // e.g. ["12:00", "18:00"]
-  reviewWindowHours Int      @default(1) // Hours before publish time that synthesis runs
-
-  // Last run tracking
-  lastScrapedAt     DateTime?
-  lastSynthesizedAt DateTime?
-  lastPublishedAt   DateTime?
-
-  // Relations
-  posts             Post[]
-  articles          SynthesizedArticle[]
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  twitterExpiresAt      Int?
+  twitterRefreshToken   String?
+  threadsExpiresAt      Int?
+  threadsRefreshToken   String?
+  posts                 Post[]
+  articles              SynthesizedArticle[]
 }
 
-// ─── Post ────────────────────────────────────────────────────────────────────
+model Post {
+  id                 String          @id @default(cuid())
+  threadId           String          @unique
+  sourceAccount      String
+  contentOriginal    String?
+  contentTranslated  String?
+  mediaUrls          Json?
+  likes              Int             @default(0)
+  replies            Int             @default(0)
+  reposts            Int             @default(0)
+  hotScore           Float           @default(0)
+  sourceUrl          String?
+  status             PostStatus      @default(PENDING_REVIEW)
+  publishedUrl       String?
+  coherenceStatus    CoherenceStatus @default(PENDING)
+  topicClusterId     String?
+  lastCoherenceCheck DateTime?
+  workspaceId        String
+  createdAt          DateTime        @default(now())
+  publishedAt        DateTime?
+  postedAt           DateTime?
+  views              Int             @default(0)
+  externalUrls       String[]        @default([])
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id])
+}
+
+model TrackedAccount {
+  username      String   @id
+  followerCount Int      @default(0)
+  lastFetchedAt DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SynthesizedArticle {
+  id                    String     @id @default(cuid())
+  topicName             String
+  articleContent        String
+  articleOriginal       String?
+  sourcePostIds         String[]
+  sourceAccounts        String[]
+  authorCount           Int
+  postCount             Int
+  selectedMediaUrl      String?
+  selectedMediaType     String?
+  scheduledPublishAt    DateTime?
+  workspaceId           String
+  status                PostStatus @default(PENDING_REVIEW)
+  publishedUrl          String?
+  createdAt             DateTime   @default(now())
+  publishedAt           DateTime?
+  mediaUrls             Json[]     @default([])
+  externalUrls          String[]   @default([])
+  instagramMediaId      String?
+  publishedAtInstagram  DateTime?
+  publishedAtTwitter    DateTime?
+  publishedUrlInstagram String?
+  publishedUrlTwitter   String?
+  tweetId               String?
+  workspace             Workspace  @relation(fields: [workspaceId], references: [id])
+}
 
 enum PostStatus {
   PENDING_REVIEW
@@ -83,92 +119,4 @@ enum CoherenceStatus {
   PENDING
   COHERENT
   ISOLATED
-}
-
-model Post {
-  id                String    @id @default(cuid())
-  threadId          String    @unique // Original ID on Threads
-  sourceAccount     String    // Username this was scraped from
-
-  contentOriginal   String?   @db.Text
-  contentTranslated String?   @db.Text
-  mediaUrls         Json?     // [{url: string, type: "image"|"video"}]
-
-  views             Int       @default(0)
-  likes             Int       @default(0)
-  replies           Int       @default(0)
-  reposts           Int       @default(0)
-  hotScore          Float     @default(0)
-  
-  externalUrls      String[]  @default([]) // Reference URL Finder
-
-  sourceUrl         String?   // Link to the original post
-  status            PostStatus @default(PENDING_REVIEW)
-  publishedUrl      String?   // Threads URL after publishing
-
-  // Trend Analysis
-  coherenceStatus   CoherenceStatus @default(PENDING)
-  topicClusterId    String?
-  lastCoherenceCheck DateTime?
-
-  // Relations
-  workspaceId       String
-  workspace         Workspace @relation(fields: [workspaceId], references: [id])
-
-  createdAt         DateTime  @default(now())
-  postedAt          DateTime? // When the post was originally posted on Threads
-  publishedAt       DateTime?
-}
-
-// ─── TrackedAccount ──────────────────────────────────────────────────────────
-// Caches per-account follower counts to avoid re-scraping every 5 minutes.
-
-model TrackedAccount {
-  username      String   @id
-  followerCount Int      @default(0)
-  lastFetchedAt DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-// ─── Synthesis ──────────────────────────────────────────────────────────────
-
-model SynthesizedArticle {
-  id              String    @id @default(cuid())
-  topicName       String    // e.g. "OpenAI Sora V2 Launch"
-  articleContent  String    @db.Text // The synthesized article (Traditional Chinese)
-  articleOriginal String?   @db.Text // English draft before translation
-  
-  sourcePostIds   String[]  // IDs of posts that contributed
-  sourceAccounts  String[]  // Unique authors who mentioned this
-  authorCount     Int       // How many distinct authors
-  postCount       Int       // How many posts in the cluster
-  externalUrls    String[]  @default([]) // Aggregated references
-  
-  
-  // Media
-  mediaUrls       Json[]    @default([]) // [{url: string, type: "image"|"video"}]
-  
-  // Custom Media Selection
-  selectedMediaUrl   String?
-  selectedMediaType  String?   // "image" | "video"
-  
-  // Scheduling
-  scheduledPublishAt DateTime?
-
-  workspaceId     String
-  workspace       Workspace @relation(fields: [workspaceId], references: [id])
-  
-  status          PostStatus @default(PENDING_REVIEW)
-  publishedUrl    String?
-  publishedUrlInstagram String?
-  publishedUrlTwitter   String?
-
-  publishedAtInstagram  DateTime?
-  publishedAtTwitter    DateTime?
-
-  tweetId         String?
-  instagramMediaId String?
-  
-  createdAt       DateTime  @default(now())
-  publishedAt     DateTime?
 }
