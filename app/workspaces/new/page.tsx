@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 
 const DEFAULT_PROMPT = ""; // Empty by default, user can add style like "Use casual tone"
 
@@ -32,6 +33,53 @@ export default function NewWorkspacePage() {
         twitterAccessToken: "",
         twitterAccessSecret: "",
     });
+
+    const handleConnectOAuth = async (provider: string) => {
+        if (!form.name) {
+            setError("Please enter a workspace name first");
+            return;
+        }
+
+        setLoading(true);
+        setError("");
+
+        try {
+            // 1. Create the workspace first (POST)
+            const res = await fetch("/api/workspaces", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...form,
+                    targetAccounts: form.targetAccounts
+                        .split(",")
+                        .map((a) => a.trim().replace(/^@/, ""))
+                        .filter(Boolean),
+                    hotScoreThreshold: Number(form.hotScoreThreshold),
+                    dailyPostLimit: Number(form.dailyPostLimit),
+                    maxPostAgeHours: Number(form.maxPostAgeHours),
+                    postLookbackHours: Number(form.postLookbackHours),
+                    publishTimes: form.publishTimes,
+                    reviewWindowHours: Number(form.reviewWindowHours),
+                    topicFilter: form.topicFilter || null,
+                    clusteringPrompt: form.clusteringPrompt || null,
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to create workspace before OAuth");
+            }
+
+            const workspace = await res.json();
+
+            // 2. Set the cookie and trigger OAuth
+            document.cookie = `connect_workspace_id=${workspace.id}; path=/; max-age=300`;
+            await signIn(provider, { callbackUrl: `${window.location.origin}/workspaces/${workspace.id}/edit` });
+        } catch (err: any) {
+            setError(err.message);
+            setLoading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -312,26 +360,46 @@ export default function NewWorkspacePage() {
                         Threads publishing
                         <span className="text-xs font-normal ml-2">(optional)</span>
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Field label="Threads User ID">
-                            <input
-                                type="text"
-                                value={form.threadsAppId}
-                                onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
-                                placeholder="e.g. 25909735278694109"
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="Threads Access Token">
-                            <input
-                                type="password"
-                                value={form.threadsToken}
-                                onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
-                                placeholder="Long-lived token"
-                                className="input"
-                            />
-                        </Field>
+
+                    <p className="text-xs text-muted">
+                        Connect your Threads account to enable auto-publishing:
+                    </p>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => handleConnectOAuth("threads")}
+                            disabled={loading}
+                            className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            Connect Threads
+                        </button>
                     </div>
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                            <Field label="Threads User ID">
+                                <input
+                                    type="text"
+                                    value={form.threadsAppId}
+                                    onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
+                                    placeholder="e.g. 25909735278694109"
+                                    className="input"
+                                />
+                            </Field>
+                            <Field label="Threads Access Token">
+                                <input
+                                    type="password"
+                                    value={form.threadsToken}
+                                    onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
+                                    placeholder="Long-lived token"
+                                    className="input"
+                                />
+                            </Field>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Instagram Credentials */}
@@ -340,26 +408,53 @@ export default function NewWorkspacePage() {
                         Instagram publishing
                         <span className="text-xs font-normal ml-2">(optional)</span>
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Field label="Instagram account ID">
-                            <input
-                                type="text"
-                                value={form.instagramAccountId}
-                                onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
-                                placeholder="e.g. 17841401234567890"
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="Instagram Access Token">
-                            <input
-                                type="password"
-                                value={form.instagramAccessToken}
-                                onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
-                                placeholder="Access token"
-                                className="input"
-                            />
-                        </Field>
+
+                    <p className="text-xs text-muted">
+                        Connect your Instagram account to enable auto-publishing:
+                    </p>
+
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
+                        <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                            <strong className="text-amber-400">Requirements:</strong> Instagram account must be set to <strong className="text-amber-400">Professional (Business or Creator)</strong> and linked to a <strong className="text-amber-400">Facebook Page</strong> that you manage.
+                        </p>
                     </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => handleConnectOAuth("facebook")}
+                            disabled={loading}
+                            className="px-4 py-2 bg-[#E1306C] hover:bg-[#C13584] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            Connect Instagram
+                        </button>
+                    </div>
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                            <Field label="Instagram account ID">
+                                <input
+                                    type="text"
+                                    value={form.instagramAccountId}
+                                    onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
+                                    placeholder="e.g. 17841401234567890"
+                                    className="input"
+                                />
+                            </Field>
+                            <Field label="Instagram Access Token">
+                                <input
+                                    type="password"
+                                    value={form.instagramAccessToken}
+                                    onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
+                                    placeholder="Access token"
+                                    className="input"
+                                />
+                            </Field>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Twitter Credentials */}
@@ -368,42 +463,64 @@ export default function NewWorkspacePage() {
                         X (Twitter) publishing
                         <span className="text-xs font-normal ml-2">(optional)</span>
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Field label="API Key">
-                            <input
-                                type="text"
-                                value={form.twitterApiKey}
-                                onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="API Secret">
-                            <input
-                                type="password"
-                                value={form.twitterApiSecret}
-                                onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
+
+                    <p className="text-xs text-muted">
+                        Connect your X (Twitter) account to enable auto-publishing:
+                    </p>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={() => handleConnectOAuth("twitter")}
+                            disabled={loading}
+                            className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            Connect X (Twitter)
+                        </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Field label="Access Token">
-                            <input
-                                type="password"
-                                value={form.twitterAccessToken}
-                                onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                        <Field label="Access Secret">
-                            <input
-                                type="password"
-                                value={form.twitterAccessSecret}
-                                onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
-                                className="input"
-                            />
-                        </Field>
-                    </div>
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 space-y-4 pt-4 border-t border-border/50">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Field label="API Key">
+                                    <input
+                                        type="text"
+                                        value={form.twitterApiKey}
+                                        onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                                <Field label="API Secret">
+                                    <input
+                                        type="password"
+                                        value={form.twitterApiSecret}
+                                        onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Field label="Access Token">
+                                    <input
+                                        type="password"
+                                        value={form.twitterAccessToken}
+                                        onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                                <Field label="Access Secret">
+                                    <input
+                                        type="password"
+                                        value={form.twitterAccessSecret}
+                                        onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Actions */}

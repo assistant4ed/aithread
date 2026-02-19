@@ -450,6 +450,12 @@ export default function EditWorkspacePage() {
                         Connect your Instagram account to enable auto-publishing.
                     </p>
 
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
+                        <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                            <strong className="text-amber-400">Requirements:</strong> Instagram account must be set to <strong className="text-amber-400">Professional (Business or Creator)</strong> and linked to a <strong className="text-amber-400">Facebook Page</strong> that you manage.
+                        </p>
+                    </div>
+
                     <div className="flex gap-3">
                         <button
                             type="button"

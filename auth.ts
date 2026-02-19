@@ -35,13 +35,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Twitter({
             clientId: process.env.AUTH_TWITTER_ID,
             clientSecret: process.env.AUTH_TWITTER_SECRET,
-            // NextAuth V5 (Auth.js) defaults to OAuth 2.0. 
-            // We just need to ensure the scopes are correct for V2.
             authorization: {
+                url: "https://twitter.com/i/oauth2/authorize",
                 params: {
-                    scope: "users.read tweet.read tweet.write offline.access"
-                }
+                    scope: "users.read tweet.read tweet.write offline.access",
+                },
             },
+            token: "https://api.twitter.com/2/oauth2/token",
         }),
         Facebook({
             clientId: process.env.AUTH_INSTAGRAM_ID,
