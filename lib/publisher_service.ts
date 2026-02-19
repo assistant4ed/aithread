@@ -187,12 +187,20 @@ export async function publishArticle(
     if (config.threadsUserId && config.threadsAccessToken) {
         try {
             console.log(`[Publisher] Publishing to Threads...`);
+
+            // Threads has a 500-character limit
+            let threadsText = text;
+            if (threadsText && threadsText.length > 500) {
+                console.log(`[Publisher] Truncating Threads content (original length: ${threadsText.length})`);
+                threadsText = threadsText.substring(0, 497) + "...";
+            }
+
             const containerId = await createContainer(
                 config.threadsUserId,
                 config.threadsAccessToken,
                 mediaType === "VIDEO" ? 'VIDEO' : 'IMAGE', // Threads assumes IMAGE if simple text or IMAGE
                 mediaUrl || undefined,
-                text || undefined,
+                threadsText || undefined,
                 undefined,
                 undefined,
                 coverUrl || undefined
@@ -285,17 +293,22 @@ export async function publishArticle(
             }
 
             let mediaIds: string[] = [];
-            if (mediaUrl) { // Twitter requires upload first
-                const mediaId = await uploadTwitterMedia(
-                    twitterConfig,
-                    mediaUrl,
-                    mediaType === 'VIDEO' ? 'video' : 'image'
-                );
-                mediaIds.push(mediaId);
 
-                if (mediaType === 'VIDEO') {
-                    // Give Twitter a moment to process video if needed (twitter-api-v2 usually waits for processing on uploadMedia default but sync only for images?)
-                    // The uploadMedia helper in v2 usually handles it.
+            // Twitter V2 Media Upload requires OAuth 1.0a (User Context) usually
+            if (mediaUrl) {
+                if (hasTwitterV1) {
+                    try {
+                        const mediaId = await uploadTwitterMedia(
+                            twitterConfig,
+                            mediaUrl,
+                            mediaType === 'VIDEO' ? 'video' : 'image'
+                        );
+                        mediaIds.push(mediaId);
+                    } catch (uploadErr: any) {
+                        console.warn(`[Publisher] Twitter media upload failed (likely permission/format): ${uploadErr.message}. Proceeding with text only.`);
+                    }
+                } else {
+                    console.warn(`[Publisher] Twitter media upload skipped: Missing OAuth 1.0a credentials. Posting text only.`);
                 }
             }
 

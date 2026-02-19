@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
             publishTimes,
             reviewWindowHours,
             synthesisLanguage,
-            imagePrompt,
             instagramAccessToken,
             instagramAccountId,
             twitterApiKey,
@@ -69,7 +68,6 @@ export async function POST(request: NextRequest) {
                 postLookbackHours: postLookbackHours ?? 24,
                 publishTimes: publishTimes || ["12:00", "18:00", "22:00"],
                 reviewWindowHours: reviewWindowHours ?? 1,
-                imagePrompt: imagePrompt || null,
             },
         });
 

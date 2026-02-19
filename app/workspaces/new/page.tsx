@@ -23,9 +23,14 @@ export default function NewWorkspacePage() {
         topicFilter: "",
         maxPostAgeHours: 48,
         postLookbackHours: 24,
-        imagePrompt: "",
         publishTimes: ["12:00", "18:00", "22:00"],
         reviewWindowHours: 1,
+        instagramAccountId: "",
+        instagramAccessToken: "",
+        twitterApiKey: "",
+        twitterApiSecret: "",
+        twitterAccessToken: "",
+        twitterAccessSecret: "",
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -51,7 +56,12 @@ export default function NewWorkspacePage() {
                     reviewWindowHours: Number(form.reviewWindowHours),
                     topicFilter: form.topicFilter || null,
                     clusteringPrompt: form.clusteringPrompt || null,
-                    imagePrompt: form.imagePrompt || null,
+                    instagramAccountId: form.instagramAccountId || null,
+                    instagramAccessToken: form.instagramAccessToken || null,
+                    twitterApiKey: form.twitterApiKey || null,
+                    twitterApiSecret: form.twitterApiSecret || null,
+                    twitterAccessToken: form.twitterAccessToken || null,
+                    twitterAccessSecret: form.twitterAccessSecret || null,
                 }),
             });
 
@@ -125,15 +135,7 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                {/* Image Prompt */}
-                <Field label="Image Style Prompt (Optional)" hint="Style instructions for AI image generation (e.g. 'Cyberpunk style, neon colors')">
-                    <textarea
-                        value={form.imagePrompt}
-                        onChange={(e) => setForm({ ...form, imagePrompt: e.target.value })}
-                        rows={2}
-                        className="input text-sm"
-                    />
-                </Field>
+
 
                 {/* Synthesis Language */}
                 <Field label="Synthesis Language" hint="Target language for synthesized articles">
@@ -307,29 +309,101 @@ export default function NewWorkspacePage() {
                 {/* Threads Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-                        Threads API Credentials
-                        <span className="text-xs font-normal ml-2">(optional — needed for publishing)</span>
+                        Threads publishing
+                        <span className="text-xs font-normal ml-2">(optional)</span>
                     </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Threads User ID">
+                            <input
+                                type="text"
+                                value={form.threadsAppId}
+                                onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
+                                placeholder="e.g. 25909735278694109"
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Threads Access Token">
+                            <input
+                                type="password"
+                                value={form.threadsToken}
+                                onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
+                                placeholder="Long-lived token"
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+                </div>
 
-                    <Field label="Threads User ID">
-                        <input
-                            type="text"
-                            value={form.threadsAppId}
-                            onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
-                            placeholder="e.g. 25909735278694109"
-                            className="input"
-                        />
-                    </Field>
+                {/* Instagram Credentials */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Instagram publishing
+                        <span className="text-xs font-normal ml-2">(optional)</span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Instagram account ID">
+                            <input
+                                type="text"
+                                value={form.instagramAccountId}
+                                onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
+                                placeholder="e.g. 17841401234567890"
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Instagram Access Token">
+                            <input
+                                type="password"
+                                value={form.instagramAccessToken}
+                                onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
+                                placeholder="Access token"
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+                </div>
 
-                    <Field label="Threads Access Token">
-                        <input
-                            type="password"
-                            value={form.threadsToken}
-                            onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
-                            placeholder="Long-lived access token"
-                            className="input"
-                        />
-                    </Field>
+                {/* Twitter Credentials */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        X (Twitter) publishing
+                        <span className="text-xs font-normal ml-2">(optional)</span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="API Key">
+                            <input
+                                type="text"
+                                value={form.twitterApiKey}
+                                onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="API Secret">
+                            <input
+                                type="password"
+                                value={form.twitterApiSecret}
+                                onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Access Token">
+                            <input
+                                type="password"
+                                value={form.twitterAccessToken}
+                                onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Access Secret">
+                            <input
+                                type="password"
+                                value={form.twitterAccessSecret}
+                                onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
+                                className="input"
+                            />
+                        </Field>
+                    </div>
                 </div>
 
                 {/* Actions */}

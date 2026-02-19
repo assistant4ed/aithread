@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "hotScoreThreshold", "threadsAppId", "threadsToken", "dailyPostLimit",
             "topicFilter", "maxPostAgeHours", "synthesisLanguage",
             "publishTimes", "reviewWindowHours", "clusteringPrompt",
-            "postLookbackHours", "imagePrompt",
+            "postLookbackHours",
             "instagramAccessToken", "instagramAccountId",
             "twitterApiKey", "twitterApiSecret", "twitterAccessToken", "twitterAccessSecret",
         ];

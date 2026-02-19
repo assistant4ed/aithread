@@ -132,14 +132,30 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                             <dd className="font-mono">{workspace.reviewWindowHours}h before publish</dd>
                         </div>
                         <div className="flex justify-between">
-                            <dt className="text-muted">Daily Post Limit</dt>
-                            <dd className="font-mono">{workspace.dailyPostLimit}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                            <dt className="text-muted">Threads Credentials</dt>
+                            <dt className="text-muted">Threads Connection</dt>
                             <dd className="font-mono">
                                 {workspace.threadsToken ? (
-                                    <span className="text-success">✓ Configured</span>
+                                    <span className="text-success">✓ Connected</span>
+                                ) : (
+                                    <span className="text-muted">Not set</span>
+                                )}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-muted">Instagram Connection</dt>
+                            <dd className="font-mono">
+                                {workspace.instagramAccessToken ? (
+                                    <span className="text-success">✓ Connected</span>
+                                ) : (
+                                    <span className="text-muted">Not set</span>
+                                )}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-muted">X (Twitter) Connection</dt>
+                            <dd className="font-mono">
+                                {workspace.twitterAccessToken ? ( // This is use for OAuth 2.0 user tokens
+                                    <span className="text-success">✓ Connected</span>
                                 ) : (
                                     <span className="text-muted">Not set</span>
                                 )}

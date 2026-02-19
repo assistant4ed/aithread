@@ -3,6 +3,7 @@
 import { useRouter, useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export default function EditWorkspacePage() {
     const router = useRouter();
@@ -26,7 +27,6 @@ export default function EditWorkspacePage() {
         topicFilter: "",
         maxPostAgeHours: 48,
         postLookbackHours: 24,
-        imagePrompt: "",
         publishTimes: [] as string[],
         reviewWindowHours: 1,
         instagramAccountId: "",
@@ -58,7 +58,6 @@ export default function EditWorkspacePage() {
                     topicFilter: data.topicFilter || "",
                     maxPostAgeHours: data.maxPostAgeHours || 48,
                     postLookbackHours: data.postLookbackHours || 24,
-                    imagePrompt: data.imagePrompt || "",
                     publishTimes: data.publishTimes || ["12:00", "18:00", "22:00"],
                     reviewWindowHours: data.reviewWindowHours || 1,
                     instagramAccountId: data.instagramAccountId || "",
@@ -105,7 +104,6 @@ export default function EditWorkspacePage() {
                     topicFilter: form.topicFilter || null,
                     maxPostAgeHours: Number(form.maxPostAgeHours),
                     postLookbackHours: Number(form.postLookbackHours),
-                    imagePrompt: form.imagePrompt || null,
                     publishTimes: form.publishTimes,
                     reviewWindowHours: Number(form.reviewWindowHours),
                     instagramAccountId: form.instagramAccountId || null,
@@ -142,7 +140,7 @@ export default function EditWorkspacePage() {
                 >
                     ← Back to Workspace
                 </Link>
-                <h1 className="text-2xl font-bold tracking-tight">Edit Workspace</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Edit Workspace <span className="text-xs font-normal text-muted">(v0.2.1)</span></h1>
             </div>
 
             {error && (
@@ -197,15 +195,7 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
-                {/* Image Prompt */}
-                <Field label="Image Style Prompt (Optional)" hint="Style instructions for AI image generation (e.g. 'Cyberpunk style, neon colors')">
-                    <textarea
-                        value={form.imagePrompt}
-                        onChange={(e) => setForm({ ...form, imagePrompt: e.target.value })}
-                        rows={2}
-                        className="input text-sm"
-                    />
-                </Field>
+
 
                 {/* Synthesis Language */}
                 <Field label="Synthesis Language" hint="Target language for synthesized articles">
@@ -402,13 +392,39 @@ export default function EditWorkspacePage() {
                             type="button"
                             onClick={() => {
                                 document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
-                                window.location.href = `/api/auth/signin/threads?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                                signIn("threads", { callbackUrl: window.location.href });
                             }}
                             className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                         >
                             {form.threadsToken ? "Reconnect Threads" : "Connect Threads"}
                         </button>
                     </div>
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 space-y-4 pt-4 border-t border-border/50">
+                            <Field label="Threads User ID">
+                                <input
+                                    type="text"
+                                    value={form.threadsAppId}
+                                    onChange={(e) => setForm({ ...form, threadsAppId: e.target.value })}
+                                    placeholder="e.g. 25909735278694109"
+                                    className="input"
+                                />
+                            </Field>
+                            <Field label="Threads Access Token">
+                                <input
+                                    type="password"
+                                    value={form.threadsToken}
+                                    onChange={(e) => setForm({ ...form, threadsToken: e.target.value })}
+                                    placeholder="Paste access token here"
+                                    className="input"
+                                />
+                            </Field>
+                        </div>
+                    </details>
                 </div>
 
 
@@ -439,13 +455,39 @@ export default function EditWorkspacePage() {
                             type="button"
                             onClick={() => {
                                 document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
-                                window.location.href = `/api/auth/signin/instagram?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                                signIn("facebook", { callbackUrl: window.location.href });
                             }}
                             className="px-4 py-2 bg-[#E1306C] hover:bg-[#C13584] text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                         >
                             {form.instagramAccessToken ? "Reconnect Instagram" : "Connect Instagram"}
                         </button>
                     </div>
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 space-y-4 pt-4 border-t border-border/50">
+                            <Field label="Instagram Account ID">
+                                <input
+                                    type="text"
+                                    value={form.instagramAccountId}
+                                    onChange={(e) => setForm({ ...form, instagramAccountId: e.target.value })}
+                                    placeholder="e.g. 17841401234567890"
+                                    className="input"
+                                />
+                            </Field>
+                            <Field label="Instagram Access Token">
+                                <input
+                                    type="password"
+                                    value={form.instagramAccessToken}
+                                    onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
+                                    placeholder="Paste access token here"
+                                    className="input"
+                                />
+                            </Field>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Twitter Credentials */}
@@ -473,14 +515,58 @@ export default function EditWorkspacePage() {
                         <button
                             type="button"
                             onClick={() => {
-                                document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=300`;
-                                window.location.href = `/api/auth/signin/twitter?callbackUrl=${encodeURIComponent(window.location.href)}`;
+                                document.cookie = `connect_workspace_id=${workspaceId}; path=/; max-age=1000`;
+                                signIn("twitter", { callbackUrl: window.location.href });
                             }}
                             className="px-4 py-2 bg-black hover:bg-black/80 text-white border border-white/20 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                         >
                             {form.twitterAccessToken ? "Reconnect X (Twitter)" : "Connect X (Twitter)"}
                         </button>
                     </div>
+
+                    <details className="mt-4 text-xs" open={!!form.twitterApiKey}>
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Required for media uploads)
+                        </summary>
+                        <div className="mt-4 space-y-4 pt-4 border-t border-border/50">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Field label="API Key">
+                                    <input
+                                        type="text"
+                                        value={form.twitterApiKey}
+                                        onChange={(e) => setForm({ ...form, twitterApiKey: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                                <Field label="API Secret">
+                                    <input
+                                        type="password"
+                                        value={form.twitterApiSecret}
+                                        onChange={(e) => setForm({ ...form, twitterApiSecret: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Field label="Access Token">
+                                    <input
+                                        type="password"
+                                        value={form.twitterAccessToken}
+                                        onChange={(e) => setForm({ ...form, twitterAccessToken: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                                <Field label="Access Secret">
+                                    <input
+                                        type="password"
+                                        value={form.twitterAccessSecret}
+                                        onChange={(e) => setForm({ ...form, twitterAccessSecret: e.target.value })}
+                                        className="input"
+                                    />
+                                </Field>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Actions */}

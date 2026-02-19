@@ -13,7 +13,6 @@ export interface SynthesisSettings {
     clusteringPrompt: string;
     synthesisLanguage: string;
     postLookbackHours?: number;
-    imagePrompt?: string;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
     hotScoreThreshold?: number;    // "Viral" threshold
 }
@@ -316,7 +315,6 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     clusteringPrompt: ws.clusteringPrompt,
                     synthesisLanguage: ws.synthesisLanguage,
                     postLookbackHours: ws.postLookbackHours,
-                    imagePrompt: ws.imagePrompt || undefined,
                     hotScoreThreshold: ws.hotScoreThreshold, // Pass threshold
                 });
             }
