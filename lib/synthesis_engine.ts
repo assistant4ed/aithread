@@ -154,6 +154,24 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const allUrls = clusterPosts.flatMap(p => p.externalUrls || []);
         const uniqueUrls = Array.from(new Set(allUrls));
 
+        // 6. Auto-Approval (Optional)
+        let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
+        const workspace = await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { autoApproveDrafts: true, autoApprovePrompt: true }
+        });
+
+        if (workspace?.autoApproveDrafts) {
+            console.log(`  -> Auto-approving article...`);
+            const approved = await checkAutoApproval(
+                translatedTitle,
+                translatedContent,
+                workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler."
+            );
+            finalStatus = approved ? "APPROVED" : "REJECTED";
+            console.log(`  -> Auto-approval result: ${finalStatus}`);
+        }
+
         // Create the article
         const article = await prisma.synthesizedArticle.create({
             data: {
@@ -165,7 +183,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 sourceAccounts: Array.from(authors),
                 authorCount: authors.size,
                 postCount: clusterPosts.length,
-                status: "PENDING_REVIEW",
+                status: finalStatus,
                 scheduledPublishAt: scheduledAt,
                 externalUrls: uniqueUrls,
             },
@@ -181,11 +199,52 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             },
         });
 
-        console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id})`);
+        console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id}) Status: ${finalStatus}`);
         newArticles++;
     }
 
     console.log(`[Synthesis] Finished. Generated ${newArticles} new articles.`);
+}
+
+/**
+ * Check if an article should be auto-approved using LLM.
+ */
+async function checkAutoApproval(title: string, content: string, instruction: string): Promise<boolean> {
+    const prompt = `
+    You are an AI Content Moderator.
+    Task: Judge if the following news article should be approved for publication.
+    
+    Instructions:
+    ${instruction}
+    
+    Article Title: ${title}
+    Article Content:
+    ${content}
+    
+    Output Format:
+    Return a JSON object: { "approved": true/false, "reason": "short explanation" }
+    JSON ONLY.
+    `;
+
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a precise content judge." },
+                { role: "user", content: prompt },
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.1,
+            response_format: { type: "json_object" },
+        });
+
+        const raw = completion.choices[0]?.message?.content;
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        return !!parsed.approved;
+    } catch (e) {
+        console.error("[Synthesis] Auto-approval check failed:", e);
+        return false; // Default to manual review on error
+    }
 }
 
 import { RawCluster } from "./clustering";

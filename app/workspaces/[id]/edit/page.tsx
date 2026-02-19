@@ -35,6 +35,8 @@ export default function EditWorkspacePage() {
         twitterApiSecret: "",
         twitterAccessToken: "",
         twitterAccessSecret: "",
+        autoApproveDrafts: false,
+        autoApprovePrompt: "",
     });
 
     useEffect(() => {
@@ -66,6 +68,8 @@ export default function EditWorkspacePage() {
                     twitterApiSecret: data.twitterApiSecret || "",
                     twitterAccessToken: data.twitterAccessToken || "",
                     twitterAccessSecret: data.twitterAccessSecret || "",
+                    autoApproveDrafts: data.autoApproveDrafts || false,
+                    autoApprovePrompt: data.autoApprovePrompt || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -112,6 +116,8 @@ export default function EditWorkspacePage() {
                     twitterApiSecret: form.twitterApiSecret || null,
                     twitterAccessToken: form.twitterAccessToken || null,
                     twitterAccessSecret: form.twitterAccessSecret || null,
+                    autoApproveDrafts: form.autoApproveDrafts,
+                    autoApprovePrompt: form.autoApprovePrompt || null,
                 }),
             });
 
@@ -364,6 +370,43 @@ export default function EditWorkspacePage() {
                             );
                         }) : <div>No pipeline configured.</div>}
                     </div>
+                </div>
+
+                {/* Auto-Approval Logic */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            Auto-Approval Logic
+                        </h3>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted">{form.autoApproveDrafts ? "ON" : "OFF"}</span>
+                            <button
+                                type="button"
+                                onClick={() => setForm({ ...form, autoApproveDrafts: !form.autoApproveDrafts })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.autoApproveDrafts ? 'bg-accent' : 'bg-muted/30'}`}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.autoApproveDrafts ? 'translate-x-6' : 'translate-x-1'}`}
+                                />
+                            </button>
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-muted">
+                        Automatically approve or reject drafts using LLM before they are published.
+                    </p>
+
+                    {form.autoApproveDrafts && (
+                        <Field label="Auto-Approve Prompt" hint="Instruction for the AI to judge articles.">
+                            <textarea
+                                value={form.autoApprovePrompt}
+                                onChange={(e) => setForm({ ...form, autoApprovePrompt: e.target.value })}
+                                rows={4}
+                                placeholder="e.g. Approve if news is relevant to tech/AI..."
+                                className="input font-mono text-xs"
+                            />
+                        </Field>
+                    )}
                 </div>
 
                 {/* Threads Credentials */}

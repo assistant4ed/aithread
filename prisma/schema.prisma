@@ -44,6 +44,8 @@ model Workspace {
   threadsRefreshToken   String?
   posts                 Post[]
   articles              SynthesizedArticle[]
+  autoApproveDrafts     Boolean              @default(false)
+  autoApprovePrompt     String?
 }
 
 model Post {

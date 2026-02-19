@@ -371,6 +371,12 @@ export default function ArticlesPage() {
                                             >
                                                 Reject
                                             </button>
+                                            <a
+                                                href={`/workspaces/${workspaceId}/articles/${article.id}/edit`}
+                                                className="px-4 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors text-sm font-medium"
+                                            >
+                                                Edit Draft
+                                            </a>
                                         </>
                                     )}
                                     {article.status === "APPROVED" && (
