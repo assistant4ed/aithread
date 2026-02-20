@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{title}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --bg-gray: #f9fafb;
+            --border: #e5e7eb;
+        }
+        body {
+            font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        .header {
+            border-bottom: 2px solid var(--primary);
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+        }
+        .video-id { font-size: 0.8em; color: var(--text-light); }
+        .title { font-size: 2.2em; margin: 10px 0; line-height: 1.2; }
+        .meta { display: flex; gap: 20px; color: var(--text-light); font-size: 0.9em; }
+        
+        .main-thumbnail {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .summary-box {
+            background: var(--bg-gray);
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .chapter {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+        }
+        .chapter-header {
+            display: flex;
+            align-items: baseline;
+            gap: 15px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        .chapter-ts {
+            font-family: monospace;
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .chapter-img {
+            width: 320px;
+            border-radius: 4px;
+            float: right;
+            margin-left: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        ul { padding-left: 20px; }
+        li { margin-bottom: 6px; }
+
+        .takeaways {
+            background: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 50px;
+            page-break-inside: avoid;
+        }
+
+        .footer {
+            margin-top: 60px;
+            text-align: center;
+            font-size: 0.8em;
+            color: var(--text-light);
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+        @media print {
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="video-id">Video ID: {{videoId}}</div>
+        <h1 class="title">{{title}}</h1>
+        <div class="meta">
+            <span>Channel: <strong>{{channelName}}</strong></span>
+            <span>Generated: {{generatedAtFormatted}}</span>
+        </div>
+    </div>
+
+    {{#if thumbnailDataUri}}
+    <img src="{{thumbnailDataUri}}" class="main-thumbnail" alt="Video Thumbnail">
+    {{/if}}
+
+    <div class="summary-box">
+        <strong>One-Liner:</strong> {{oneLinerSummary}}<br>
+        <strong>Target Audience:</strong> {{targetAudience}}<br>
+        <strong>Difficulty Level:</strong> {{difficultyLevel}}
+    </div>
+
+    {{#each chapters}}
+    <div class="chapter">
+        <div class="chapter-header">
+            <span class="chapter-ts">{{timestampStart}}</span>
+            <h2 style="margin:0">{{heading}}</h2>
+        </div>
+
+        {{#if screenshotDataUri}}
+        <img src="{{screenshotDataUri}}" class="chapter-img" alt="Chapter Screen">
+        {{/if}}
+
+        <h3>Key Points</h3>
+        <ul>
+            {{#each keyPoints}}<li>{{this}}</li>{{/each}}
+        </ul>
+
+        {{#if actionItems.length}}
+        <h3>Action Items</h3>
+        <ul>
+            {{#each actionItems}}<li>{{this}}</li>{{/each}}
+        </ul>
+        {{/if}}
+
+        {{#if notableQuotes.length}}
+        <blockquote style="font-style: italic; border-left: 4px solid #3b82f6; padding: 10px 20px; background: #f8fafc; margin: 20px 0;">
+            {{#each notableQuotes}}"{{this}}"{{/each}}
+        </blockquote>
+        {{/if}}
+    </div>
+    {{/each}}
+
+    <div class="takeaways">
+        <h2 style="margin-top:0; color: var(--primary);">Overall Takeaways</h2>
+        <ul>
+            {{#each overallTakeaways}}<li>{{this}}</li>{{/each}}
+        </ul>
+    </div>
+
+    <div class="footer">
+        Automated YouTube Deep-Dive &bull; {{generatedAt}}
+    </div>
+</body>
+</html>
