@@ -66,6 +66,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             threadId: true,
             externalUrls: true,
             hotScore: true,
+            sourceUrl: true,
         },
     });
 
@@ -130,7 +131,11 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
 
         // 4. Synthesize
-        const synthesis = await synthesizeCluster(clusterPosts.map(p => p.contentOriginal || "").join("\n\n---\n\n"));
+        const synthesis = await synthesizeCluster(clusterPosts.map(p => ({
+            content: p.contentOriginal || "",
+            account: p.sourceAccount,
+            url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
+        })));
 
         if (!synthesis) {
             console.log("  -> Synthesis failed / empty response.");
@@ -139,7 +144,9 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         // 5. Translate & Persist & Sanitize
         const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
-        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain the journalistic tone. Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
+        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain the journalistic tone. 
+        CRITICAL: This is a curated list. Maintain the "Source N:" format and DO NOT translate or modify the URLs. 
+        Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
         const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Keep it punchy. Output ONLY the translated text.`);
 
         const translatedContent = sanitizeText(rawContent);
@@ -309,17 +316,27 @@ interface SynthesisResult {
     content: string;
 }
 
-async function synthesizeCluster(textContext: string): Promise<SynthesisResult | null> {
+export async function synthesizeCluster(posts: { content: string; account: string; url: string }[]): Promise<SynthesisResult | null> {
+    const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
+
     const prompt = `
-    You are a Tech News Editor. 
-    Task: Synthesize the provided raw social media posts into a single, cohesive news story.
+    You are a Tech News Curator. 
+    Task: Synthesize the provided raw social media posts into a curated news summary.
+    
+    Output Format (Markdown):
+    "content" field must be a SINGLE string containing:
+    1. A brief intro sentence (e.g., "Several sources are reporting on Seedance 2.0...").
+    2. A newline.
+    3. A list of sources. For EACH unique source/account in the cluster:
+       Source N: [A punchy 1-2 sentence hook summarizing their specific input] [Link]
     
     Rules:
-    1. Focus on the core news/announcement.
-    2. Ignore personal opinions/chatter unless relevant context.
-    3. Output JSON: { "headline": "...", "content": "..." }
-    4. "content" should be a 2-3 paragraph summary.
-    5. JSON ONLY. No preamble. No "Here is the JSON".
+    1. STRICT LIMIT: Each bullet point/hook must be 1-2 sentences only.
+    2. "content" MUST be a string, NOT an array of strings.
+    3. Focus on the core news/announcement.
+    4. Ignore personal opinions/chatter unless relevant context.
+    5. Output JSON: { "headline": "...", "content": "..." }
+    6. JSON ONLY. No preamble. No "Here is the JSON".
     `;
 
     try {
@@ -329,20 +346,27 @@ async function synthesizeCluster(textContext: string): Promise<SynthesisResult |
                 { role: "user", content: `Posts:\n${textContext.slice(0, 15000)}` }, // Limit context
             ],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.2,
+            temperature: 0.1, // Lower temperature for stricter format
             response_format: { type: "json_object" },
         });
 
         const raw = completion.choices[0]?.message?.content;
         if (!raw) return null;
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+
+        // Safety: If content is an array, join it
+        if (Array.isArray(parsed.content)) {
+            parsed.content = parsed.content.join("\n");
+        }
+
+        return parsed;
     } catch (e) {
         console.error("Synthesis error:", e);
         return null;
     }
 }
 
-async function translateText(text: string, prompt: string): Promise<string> {
+export async function translateText(text: string, prompt: string): Promise<string> {
     try {
         const completion = await groq.chat.completions.create({
             messages: [

@@ -180,7 +180,7 @@ export function calculateHotScore(post: {
     if (!validDate) return baseScore;
 
     const ageHours = (Date.now() - validDate.getTime()) / (1000 * 60 * 60);
-    const decayFactor = Math.pow(0.5, ageHours / 24); // Half-life = 24 hours
+    const decayFactor = Math.pow(0.5, ageHours / 72); // Half-life = 72 hours (3 days)
     const result = baseScore * decayFactor;
     return isNaN(result) ? baseScore : result;
 }
