@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import Groq from "groq-sdk";
 import { clusterPosts, Document } from "./clustering";
 import { sanitizeText } from "./sanitizer";
+import { POST_FORMATS } from "./postFormats";
 
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
@@ -130,12 +131,18 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
 
+        // 3c. Classify Format
+        console.log(`[Synthesis] Classifying format for cluster...`);
+        const classifyResult = await classifyCluster(clusterPosts);
+        const formatId = classifyResult?.format || "LISTICLE"; // fallback
+        console.log(`[Synthesis] Classified as: ${formatId} (Reason: ${classifyResult?.reason || "fallback"})`);
+
         // 4. Synthesize
         const synthesis = await synthesizeCluster(clusterPosts.map(p => ({
             content: p.contentOriginal || "",
             account: p.sourceAccount,
             url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
-        })));
+        })), formatId);
 
         if (!synthesis) {
             console.log("  -> Synthesis failed / empty response.");
@@ -194,6 +201,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 status: finalStatus,
                 scheduledPublishAt: scheduledAt,
                 externalUrls: uniqueUrls,
+                formatUsed: formatId,
             },
         });
 
@@ -317,31 +325,61 @@ interface SynthesisResult {
     content: string;
 }
 
-export async function synthesizeCluster(posts: { content: string; account: string; url: string }[]): Promise<SynthesisResult | null> {
+async function classifyCluster(posts: any[]) {
+    const postSummaries = posts.map(p => `- ${p.contentOriginal?.slice(0, 200)}`).join('\n');
+
+    const prompt = `You are a social media editor. Read these posts about the same story and decide which format best fits the content.
+
+## POSTS
+${postSummaries}
+
+## AVAILABLE FORMATS
+${Object.values(POST_FORMATS).map(f =>
+        `${f.id}: ${f.description}\nUse when: ${f.trigger}`
+    ).join('\n\n')}
+
+## OUTPUT — JSON ONLY
+{
+  "format": "one of the format IDs above",
+  "reason": "one sentence explaining why"
+}`;
+
+    try {
+        const response = await groq.chat.completions.create({
+            model: 'llama-3.1-8b-instant',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: 0.1,
+        });
+
+        const raw = response.choices[0]?.message?.content;
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        console.error("[Synthesis] Classify error:", e);
+        return null;
+    }
+}
+
+export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string): Promise<SynthesisResult | null> {
+    const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
     const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
 
     const prompt = `
-    You are a Viral Tech News Curator. 
-    Task: Synthesize clustered social media posts into a high-impact, skimmable curated summary.
+    You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary using the ${format.id} format.
     
-    DYNAMIC FORMATTING INSTRUCTIONS:
-    Analyze the clustered posts and choose ONE of the following formats that best fits the nature of the news:
-
-    1. The Listicle: Use this if the sources are sharing multiple distinct tools, tips, or separate opinions.
-       - Structure: A brief intro sentence, followed by a list of insights.
-       - Format for each insight: 🔥 [Punchy 3-5 word title] - @[Author Name]: [1 sentence high-impact insight/hook] [Link]
-
-    2. The Breaking News Flash: Use this if it's a single massive announcement (like a new model release).
-       - Structure: 1-2 punchy paragraphs summarizing the news and community reaction. Include @[Author Name] and [Link] naturally in the text.
-
-    3. The Quote/Debate: Use this if the accounts are arguing or quoting a specific person.
-       - Structure: Set up the debate/quote, present the differing views. Include @[Author Name] and [Link] for context.
+    ## FORMAT RULES
+    Structure: ${format.structure}
+    Style: ${format.description}
+    
+    ## HOOK RULE
+    Open with 1-2 sentences max. Short. Punchy. Makes people stop scrolling.
     
     Rules:
     1. NO ACADEMIC PHRASING: Do NOT use "Source 1 reports", "Author discusses", or "Post analyzes". 
     2. LEAD WITH VALUE: Hook the reader immediately.
     3. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
-    4. Make sure to attribute the original authors using @[Author Name] and their [Link]s in whichever format you choose.
+    4. Make sure to attribute the original authors using @[Author Name] and their [Link]s matching the structure of the chosen format.
     5. Output JSON: { "headline": "...", "content": "..." }
     6. JSON ONLY. No preamble.
     `;
