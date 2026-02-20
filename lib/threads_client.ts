@@ -12,6 +12,12 @@ export interface ThreadsErrorResponse {
     };
 }
 
+export interface ThreadsTokenResponse {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+}
+
 /**
  * Creates a media container on Threads.
  * 
@@ -182,4 +188,45 @@ export async function getThread(
     }
 
     return await response.json();
+}
+
+/**
+ * Exchanges a short-lived Threads user access token for a long-lived one.
+ * Long-lived tokens are valid for 60 days.
+ */
+export async function exchangeForLongLivedToken(
+    shortLivedToken: string,
+    clientSecret: string
+): Promise<ThreadsTokenResponse> {
+    const endpoint = `https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedToken}`;
+
+    const response = await fetch(endpoint);
+
+    if (!response.ok) {
+        const errorData = (await response.json()) as ThreadsErrorResponse;
+        const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
+        throw new Error(`Threads API Token Exchange Error: ${errorMessage}`);
+    }
+
+    return await response.json() as ThreadsTokenResponse;
+}
+
+/**
+ * Refreshes an unexpired long-lived Threads user access token.
+ * Refreshed tokens are valid for 60 days from the refresh date.
+ */
+export async function refreshLongLivedToken(
+    longLivedToken: string
+): Promise<ThreadsTokenResponse> {
+    const endpoint = `https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${longLivedToken}`;
+
+    const response = await fetch(endpoint);
+
+    if (!response.ok) {
+        const errorData = (await response.json()) as ThreadsErrorResponse;
+        const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
+        throw new Error(`Threads API Token Refresh Error: ${errorMessage}`);
+    }
+
+    return await response.json() as ThreadsTokenResponse;
 }

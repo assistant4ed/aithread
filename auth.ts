@@ -3,6 +3,7 @@ import Facebook from "next-auth/providers/facebook"
 import Twitter from "next-auth/providers/twitter"
 import { prisma } from "@/lib/prisma"
 import { cookies } from "next/headers"
+import { exchangeForLongLivedToken } from "@/lib/threads_client"
 
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -136,13 +137,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     })
                     console.log(`Updated Instagram (via Facebook) tokens for workspace ${workspaceId}`)
                 } else if (account.provider === "threads") {
+                    let accessToken = account.access_token;
+                    let expiresAt = account.expires_at;
+
+                    // Immediately exchange for long-lived token (60 days)
+                    if (accessToken && process.env.AUTH_THREADS_SECRET) {
+                        try {
+                            console.log("🔄 [Auth] Exchanging Threads short-lived token for long-lived token...");
+                            const longLived = await exchangeForLongLivedToken(accessToken, process.env.AUTH_THREADS_SECRET);
+                            accessToken = longLived.access_token;
+                            // expires_in is in seconds, expires_at in NextAuth is usually seconds from epoch
+                            expiresAt = Math.floor(Date.now() / 1000) + longLived.expires_in;
+                            console.log(`✅ [Auth] Obtained long-lived token. Expires in ${Math.floor(longLived.expires_in / 86400)} days.`);
+                        } catch (err: any) {
+                            console.error("❌ [Auth] Failed to exchange for long-lived token:", err.message);
+                            // Fallback to short-lived token if exchange fails, though it will expire soon
+                        }
+                    }
 
                     await prisma.workspace.update({
                         where: { id: workspaceId },
                         data: {
-                            threadsToken: account.access_token,
+                            threadsToken: accessToken,
                             threadsRefreshToken: account.refresh_token,
-                            threadsExpiresAt: account.expires_at,
+                            threadsExpiresAt: expiresAt,
                             threadsAppId: account.providerAccountId,
                         },
                     })

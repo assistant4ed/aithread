@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { createContainer, publishContainer, waitForContainer } from "./threads_client";
+import { createContainer, publishContainer, waitForContainer, refreshLongLivedToken } from "./threads_client";
 
 
 export interface PublisherConfig {
@@ -46,11 +46,61 @@ export async function getDailyPublishCount(workspaceId: string): Promise<number>
     });
 }
 
+
+/**
+ * Ensures the Threads token for a workspace is valid and not about to expire.
+ * Refreshes if it expires in less than 7 days.
+ */
+export async function ensureValidThreadsToken(workspaceId: string): Promise<string | null> {
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { threadsToken: true, threadsExpiresAt: true }
+    });
+
+    if (!workspace || !workspace.threadsToken) return null;
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const sevenDaysSeconds = 7 * 24 * 60 * 60;
+
+    // Refresh if expired or expiring within 7 days
+    if (workspace.threadsExpiresAt && workspace.threadsExpiresAt < (nowSeconds + sevenDaysSeconds)) {
+        try {
+            console.log(`🔄 [Publisher] Refreshing Threads token for workspace ${workspaceId}...`);
+            const refreshed = await refreshLongLivedToken(workspace.threadsToken);
+
+            const newExpiresAt = Math.floor(Date.now() / 1000) + refreshed.expires_in;
+
+            await prisma.workspace.update({
+                where: { id: workspaceId },
+                data: {
+                    threadsToken: refreshed.access_token,
+                    threadsExpiresAt: newExpiresAt
+                }
+            });
+
+            console.log(`✅ [Publisher] Threads token refreshed. New expiry in ${Math.floor(refreshed.expires_in / 86400)} days.`);
+            return refreshed.access_token;
+        } catch (err: any) {
+            console.error(`❌ [Publisher] Failed to refresh Threads token:`, err.message);
+            // If refresh fails, we return the old one as a last resort (might still work if not fully expired)
+            return workspace.threadsToken;
+        }
+    }
+
+    return workspace.threadsToken;
+}
+
 /**
  * Find and publish APPROVED synthesized articles for a workspace.
  */
 export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
     const { workspaceId, dailyLimit } = config;
+
+    // Ensure token is valid before starting
+    const validToken = await ensureValidThreadsToken(workspaceId);
+    if (validToken) {
+        config.threadsAccessToken = validToken;
+    }
 
     console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
 
