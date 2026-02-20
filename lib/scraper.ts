@@ -275,8 +275,10 @@ export class ThreadsScraper {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
 
-        const MAX_SCROLLS = 20;
+        const MAX_SCROLLS = 30; // Increased to allow scanning past old posts
         const allPosts = new Map<string, ThreadPost>();
+        const CONSECUTIVE_OLD_THRESHOLD = 10;
+        let consecutiveOldCount = 0;
 
         try {
             const cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
@@ -388,7 +390,6 @@ export class ThreadsScraper {
                 });
 
                 let foundNew = false;
-                let foundOld = false;
 
                 for (const p of rawPosts) {
                     if (!p.postedAt || p.threadId === "unknown") continue;
@@ -397,24 +398,41 @@ export class ThreadsScraper {
                     (p as any).postedAt = d;
 
                     const existing = allPosts.get(p.threadId);
+
+                    // Age filtering
+                    const isOld = since && d < since;
+
+                    if (isOld) {
+                        consecutiveOldCount++;
+                    } else {
+                        consecutiveOldCount = 0; // Reset on any fresh post
+                    }
+
+                    if (consecutiveOldCount >= CONSECUTIVE_OLD_THRESHOLD) {
+                        console.log(`[Scraper] Topic scrape stopping: ${consecutiveOldCount} consecutive old posts`);
+                        finished = true;
+                        break;
+                    }
+
+                    if (isOld) continue; // Don't add to allPosts if it's old (but we already incremented consecutiveOldCount)
+
                     const currentScore = (p.likes || 0) + (p.replies || 0);
 
                     if (!existing || currentScore > (existing.likes + existing.replies)) {
                         allPosts.set(p.threadId, p as unknown as ThreadPost);
                         if (!existing) foundNew = true;
                     }
-                    if (since && d < since) foundOld = true;
                 }
 
-                if (foundOld) {
-                    console.log(`[Scraper] Reached posts older than ${since?.toISOString()}. Stopping.`);
-                    finished = true;
-                } else if (!foundNew && scrollCount > 2) {
+                if (finished) break;
+
+                if (!foundNew && scrollCount > 5) {
+                    console.log(`[Scraper] No new posts after ${scrollCount} scrolls. Stopping.`);
                     finished = true;
                 } else {
-                    console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique: ${allPosts.size}`);
+                    console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique fresh: ${allPosts.size} (Consecutive old: ${consecutiveOldCount})`);
                     await page.evaluate(async () => {
-                        window.scrollBy(0, 3000);
+                        window.scrollBy(0, 4000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
                     scrollCount++;
@@ -431,6 +449,7 @@ export class ThreadsScraper {
             await page.close();
         }
     }
+
 
     async getFollowerCount(username: string): Promise<number> {
         if (!this.browser) await this.init();
