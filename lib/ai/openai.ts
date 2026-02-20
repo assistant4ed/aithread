@@ -1,18 +1,13 @@
 import OpenAI from "openai";
 import { AIProvider, AIChatMessage, AIChatOptions } from "./provider";
 
-export class OpenRouter implements AIProvider {
+export class OpenAIProvider implements AIProvider {
     private client: OpenAI;
     private defaultModel: string;
 
-    constructor(apiKey: string, defaultModel: string) {
+    constructor(apiKey: string, defaultModel: string = "gpt-4o-mini") {
         this.client = new OpenAI({
             apiKey,
-            baseURL: "https://openrouter.ai/api/v1",
-            defaultHeaders: {
-                "HTTP-Referer": "https://github.com/threads-monitor", // Optional
-                "X-Title": "Threads Monitor", // Optional
-            }
         });
         this.defaultModel = defaultModel;
     }
@@ -29,7 +24,7 @@ export class OpenRouter implements AIProvider {
 
             return completion.choices[0]?.message?.content || null;
         } catch (e) {
-            console.error("[OpenRouter] Error:", e);
+            console.error("[OpenAIProvider] Error:", e);
             return null;
         }
     }

@@ -467,9 +467,9 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     synthesisLanguage: ws.synthesisLanguage,
                     postLookbackHours: ws.postLookbackHours,
                     hotScoreThreshold: ws.hotScoreThreshold, // Pass threshold
-                    aiProvider: ws.aiProvider,
-                    aiModel: ws.aiModel,
-                    aiApiKey: ws.aiApiKey,
+                    aiProvider: (ws as any).aiProvider,
+                    aiModel: (ws as any).aiModel,
+                    aiApiKey: (ws as any).aiApiKey,
                 });
             }
         } catch (e) {

@@ -21,14 +21,17 @@ export interface ProviderConfig {
 }
 
 import { GroqProvider } from "./groq";
-import { OpenRouter } from "./openrouter";
+import { OpenAIProvider } from "./openai";
+import { AnthropicProvider } from "./anthropic";
 
 export function getProvider(config: ProviderConfig): AIProvider {
     switch (config.provider.toUpperCase()) {
         case "GROQ":
             return new GroqProvider(config.apiKey || process.env.GROQ_API_KEY || "", config.model);
-        case "OPENROUTER":
-            return new OpenRouter(config.apiKey || process.env.OPENROUTER_API_KEY || "", config.model);
+        case "OPENAI":
+            return new OpenAIProvider(config.apiKey || process.env.OPENAI_API_KEY || "", config.model);
+        case "CLAUDE":
+            return new AnthropicProvider(config.apiKey || process.env.ANTHROPIC_API_KEY || "", config.model);
         default:
             throw new Error(`Unsupported AI provider: ${config.provider}`);
     }

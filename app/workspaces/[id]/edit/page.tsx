@@ -604,6 +604,46 @@ export default function EditWorkspacePage() {
                     )}
                 </div>
 
+                {/* AI Configuration */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        AI Provider Configuration
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="AI Provider">
+                            <select
+                                value={form.aiProvider}
+                                onChange={(e) => setForm({ ...form, aiProvider: e.target.value })}
+                                className="input"
+                            >
+                                <option value="GROQ">Groq (Fast, Llama 3)</option>
+                                <option value="OPENAI">OpenAI (GPT-4o/mini)</option>
+                                <option value="CLAUDE">Claude (Anthropic)</option>
+                            </select>
+                        </Field>
+                        <Field label="AI Model">
+                            <input
+                                type="text"
+                                value={form.aiModel}
+                                onChange={(e) => setForm({ ...form, aiModel: e.target.value })}
+                                placeholder={form.aiProvider === "GROQ" ? "llama-3.3-70b-versatile" : form.aiProvider === "OPENAI" ? "gpt-4o-mini" : "claude-3-5-sonnet-20241022"}
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+
+                    <Field label="Provider API Key (Optional)" hint="Override the global API key for this workspace.">
+                        <input
+                            type="password"
+                            value={form.aiApiKey}
+                            onChange={(e) => setForm({ ...form, aiApiKey: e.target.value })}
+                            placeholder="sk-..."
+                            className="input"
+                        />
+                    </Field>
+                </div>
+
                 {/* Threads Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <div className="flex items-center justify-between">
