@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { getProvider } from "./ai/provider";
 import { calculateTopicScore, applyFreshnessAdjustment } from "./scoring/topicScore";
+import { ThreadPost, ThreadsScraper } from "./scraper";
 
 export interface WorkspaceSettings {
     translationPrompt: string;
@@ -19,10 +20,86 @@ export interface ProcessPostOptions {
 /**
  * Helper to ensure we have a valid Date or undefined
  */
+// ─── Utilities ──────────────────────────────────────────────────────────────
+
 function safeDate(d: any): Date | undefined {
     if (!d) return undefined;
     const date = new Date(d);
     return isNaN(date.getTime()) ? undefined : date;
+}
+
+function isLikelySpam(input: { content: string | null; followerCount: number | null }): boolean {
+    if (!input.content) return true;
+    const content = input.content.toLowerCase();
+
+    // Low quality patterns
+    const spamPatterns = [
+        "check out my bio",
+        "link in bio",
+        "make money fast",
+        "dm for collab",
+        "follow for follow",
+        "subscribe to my",
+        "🔥💰🚀"
+    ];
+
+    if (spamPatterns.some(p => content.includes(p))) return true;
+
+    // Zero follower accounts with very short repetitive content
+    if ((input.followerCount === 0 || input.followerCount === null) && content.length < 20) {
+        return true;
+    }
+
+    return false;
+}
+
+const FOLLOWER_CACHE_TTL_HOURS = 24;
+
+export async function resolveFollowerCounts(
+    posts: ThreadPost[],
+    scraper: ThreadsScraper
+): Promise<Map<string, number>> {
+    const authorIds = [...new Set(posts.map(p => p.authorId))].filter(Boolean);
+    const followerMap = new Map<string, number>();
+
+    // Batch fetch from cache first
+    const cached = await prisma.accountCache.findMany({
+        where: {
+            platformId: { in: authorIds },
+            platform: 'THREADS',
+            updatedAt: { gte: new Date(Date.now() - FOLLOWER_CACHE_TTL_HOURS * 3600000) }
+        }
+    });
+
+    cached.forEach((c: any) => followerMap.set(c.platformId, c.followerCount));
+
+    // Identify accounts needing resolution
+    const uncachedIds = authorIds.filter(id => !followerMap.has(id));
+
+    if (uncachedIds.length > 0) {
+        // Batch resolve in chunks — don't hammer the API
+        const chunkSize = 5;
+        for (let i = 0; i < uncachedIds.length; i += chunkSize) {
+            const currentChunk = uncachedIds.slice(i, i + chunkSize);
+            const resolved = await scraper.batchFetchFollowerCounts(currentChunk);
+
+            // Write to cache
+            await prisma.accountCache.createMany({
+                data: resolved.map(r => ({
+                    platformId: r.id,
+                    followerCount: r.followerCount,
+                    platform: 'THREADS',
+                    updatedAt: new Date()
+                })),
+                skipDuplicates: true,
+            });
+
+            resolved.forEach((r: any) => followerMap.set(r.id, r.followerCount));
+            await new Promise(r => setTimeout(r, 1000)); // rate limit between batches
+        }
+    }
+
+    return followerMap;
 }
 
 /**
@@ -176,57 +253,7 @@ export async function processPost(
     return savedPost;
 }
 
-/**
- * Calculate hot score for topic posts with stricter quality gates and spam filtering.
- */
-export function calculateTopicHotScore(
-    post: {
-        views?: number;
-        likes: number;
-        replies: number;
-        reposts: number;
-        followerCount?: number;
-        postedAt?: Date;
-        content: string;
-    },
-    source: {
-        minLikes?: number | null;
-        minReplies?: number | null;
-        maxAgeHours?: number | null;
-    }
-): number {
-    const validDate = safeDate(post.postedAt);
-    const ageHours = validDate ? (Date.now() - validDate.getTime()) / (1000 * 60 * 60) : 0;
-
-    // Hard gates — fail fast
-    if (source.minLikes && post.likes < source.minLikes) return 0;
-    if (source.minReplies && post.replies < source.minReplies) return 0;
-    if (source.maxAgeHours && ageHours > source.maxAgeHours) return 0;
-
-    // Topic-specific spam filter
-    if (isLikelySpam(post)) return 0;
-
-    // Standard hot score with topic penalty
-    const baseScore = calculateHotScore(post);
-    const TOPIC_TRUST_PENALTY = 0.7; // topic posts need 30% higher engagement
-
-    return baseScore * TOPIC_TRUST_PENALTY;
-}
-
-/**
- * Heuristic spam filter for topic-based scraping.
- */
-export function isLikelySpam(post: { content: string; followerCount?: number }): boolean {
-    const text = post.content || "";
-    const spamSignals = [
-        (text.match(/follow|giveaway|airdrop|win|click here|dm me/gi)?.length || 0) >= 2,
-        (text.match(/https?:\/\//g)?.length || 0) > 3, // excessive links
-        (post.followerCount || 0) < 50,                // tiny accounts
-        text.length < 30,                              // too short
-    ];
-
-    return spamSignals.filter(Boolean).length >= 2;
-}
+// calculateTopicHotScore removed in favor of topicScore.ts
 
 /**
  * Calculate hot score with time-decay.

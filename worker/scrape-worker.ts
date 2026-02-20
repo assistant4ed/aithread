@@ -2,7 +2,7 @@ import "dotenv/config";
 import { Worker, Job } from "bullmq";
 import { SCRAPE_QUEUE_NAME, ScrapeJobData, redisConnection } from "../lib/queue";
 import { ThreadsScraper } from "../lib/scraper";
-import { processPost } from "../lib/processor";
+import { processPost, resolveFollowerCounts } from "../lib/processor";
 import { uploadMediaToGCS } from "../lib/storage";
 import { prisma } from "../lib/prisma";
 
@@ -85,10 +85,16 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
 
     let posts = [];
     let followerCount = 0;
+    let followerMap = new Map<string, number>();
 
     if (type === 'TOPIC') {
         console.log(`[ScrapeWorker] Scraping topic #${target} since ${since.toISOString()}...`);
         posts = await scraper.scrapeTopic(target, since);
+
+        if (posts.length > 0) {
+            console.log(`[ScrapeWorker] Resolving follower counts for ${posts.length} posts...`);
+            followerMap = await resolveFollowerCounts(posts, scraper);
+        }
     } else {
         console.log(`[ScrapeWorker] Scraping @${target} since ${since.toISOString()}...`);
         posts = await scraper.scrapeAccount(target, since);
@@ -100,10 +106,19 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
     console.log(`[ScrapeWorker] Found ${posts.length} posts for ${target}`);
 
     let newCount = 0;
+    let failedFreshness = 0;
+    let failedEngagement = 0;
+    let unknownFollowers = 0;
 
     for (const post of posts) {
         // Skip empty posts
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
+
+        // Determine follower count for this post
+        const currentFollowerCount = type === 'TOPIC' ? (followerMap.get(post.authorId) ?? 0) : followerCount;
+        if (type === 'TOPIC' && (followerMap.get(post.authorId) === undefined)) {
+            unknownFollowers++;
+        }
 
         const hasVideo = post.mediaUrls.some(m => m.type === 'video');
         if (hasVideo && post.postUrl) {
@@ -131,16 +146,22 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                 ...post,
                 postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
             },
-            type === 'TOPIC' ? `#${target}` : target,
+            type === 'TOPIC' ? (post.authorUsername || `topic_${target}`) : target,
             workspaceId,
             settings,
             { skipTranslation },
-            followerCount,
+            currentFollowerCount,
             sourceDetails
         );
 
         if (!savedPost) {
-            continue; // Already exists, stats updated, or rejected by gates
+            // Heuristic check for rejection reason if we wanted to be precise we'd return reason from processPost
+            // Here we just increment counters for the log row
+            const ageMs = post.postedAt ? Date.now() - new Date(post.postedAt).getTime() : 0;
+            const ageHours = ageMs / (1000 * 60 * 60);
+            if (ageHours > 72) failedFreshness++;
+            else failedEngagement++;
+            continue;
         }
 
         newCount++;
@@ -194,6 +215,21 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
         }
     }
 
+    // structured logging
+    if (sourceId) {
+        await prisma.scrapeLog.create({
+            data: {
+                sourceId: sourceId,
+                sourceType: type,
+                pagesScraped: 0, // Not explicitly tracked in this loop but we could
+                rawCollected: posts.length,
+                failedFreshness,
+                failedEngagement,
+                unknownFollowers,
+                qualified: newCount,
+            }
+        });
+    }
 
     console.log(`[ScrapeWorker] Done ${target}: ${newCount} new posts`);
     return { target, newCount, total: posts.length };

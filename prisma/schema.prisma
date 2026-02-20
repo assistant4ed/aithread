@@ -160,3 +160,29 @@ enum Platform {
   INSTAGRAM
   TWITTER
 }
+
+model AccountCache {
+  id            String   @id @default(cuid())
+  platformId    String
+  platform      Platform
+  followerCount Int
+  updatedAt     DateTime @updatedAt
+
+  @@unique([platformId, platform])
+  @@index([platformId])
+}
+
+model ScrapeLog {
+  id               String      @id @default(cuid())
+  sourceId         String
+  sourceType       SourceType
+  pagesScraped     Int
+  rawCollected     Int
+  failedFreshness  Int
+  failedEngagement Int
+  unknownFollowers Int
+  qualified        Int
+  createdAt        DateTime    @default(now())
+
+  @@index([sourceId])
+}

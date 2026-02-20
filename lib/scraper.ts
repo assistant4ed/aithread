@@ -19,6 +19,8 @@ export interface ThreadPost {
     postedAt?: Date;
     postUrl: string;
     externalUrls: string[];
+    authorId: string;
+    authorUsername: string;
 }
 
 export class ThreadsScraper {
@@ -106,6 +108,11 @@ export class ThreadsScraper {
                         const media = videos.length > 0 ? videos : images;
                         const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
                         const postUrl = links.find((l: string) => l.includes('/post/')) || "";
+
+                        // Extract author information
+                        const authorEl = el.querySelector('a[href*="/@"]');
+                        const authorUsername = authorEl?.getAttribute('href')?.split('/@')[1]?.split('?')[0] || "";
+                        const authorId = authorUsername; // Using username as ID for Threads platform
 
                         let views = 0, likes = 0, replies = 0, reposts = 0;
 
@@ -211,7 +218,9 @@ export class ThreadsScraper {
                             mediaUrls: media,
                             externalUrls: uniqueExternalLinks,
                             postUrl,
-                            postedAt: postedAt
+                            postedAt: postedAt,
+                            authorId,
+                            authorUsername
                         };
                     });
                 });
@@ -327,6 +336,11 @@ export class ThreadsScraper {
                         const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
                         const postUrl = links.find((l: string) => l.includes('/post/')) || "";
 
+                        // Extract author information
+                        const authorEl = el.querySelector('a[href*="/@"]');
+                        const authorUsername = authorEl?.getAttribute('href')?.split('/@')[1]?.split('?')[0] || "";
+                        const authorId = authorUsername;
+
                         let views = 0, likes = 0, replies = 0, reposts = 0;
 
                         const viewEl = el.querySelector('[aria-label*="views"]');
@@ -384,7 +398,9 @@ export class ThreadsScraper {
                             mediaUrls: media,
                             postUrl,
                             postedAt,
-                            externalUrls: []
+                            externalUrls: [],
+                            authorId,
+                            authorUsername
                         };
                     });
                 });
@@ -489,6 +505,17 @@ export class ThreadsScraper {
         } finally {
             await page.close();
         }
+    }
+
+    async batchFetchFollowerCounts(usernames: string[]): Promise<{ id: string, followerCount: number }[]> {
+        const results = [];
+        for (const username of usernames) {
+            const followerCount = await this.getFollowerCount(username);
+            results.push({ id: username, followerCount });
+            // Small delay between specific profile fetches to be gentle
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        return results;
     }
 
     async enrichPost(postUrl: string): Promise<{ videoUrl?: string; coverUrl?: string } | null> {
