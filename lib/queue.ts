@@ -37,10 +37,12 @@ export const redisConnection: ConnectionOptions = parseRedisUrl(REDIS_URL);
 export const SCRAPE_QUEUE_NAME = "scrape-accounts";
 
 export interface ScrapeJobData {
-    username: string;
+    target: string; // username or hashtag
+    type: 'ACCOUNT' | 'TOPIC';
     workspaceId: string;
     settings: WorkspaceSettings;
     skipTranslation: boolean;
+    sourceId?: string;
 }
 
 /**

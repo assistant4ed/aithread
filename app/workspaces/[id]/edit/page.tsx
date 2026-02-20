@@ -38,6 +38,7 @@ export default function EditWorkspacePage() {
         twitterAccessSecret: "",
         autoApproveDrafts: false,
         autoApprovePrompt: "",
+        sources: [] as any[],
     });
 
     useEffect(() => {
@@ -71,6 +72,7 @@ export default function EditWorkspacePage() {
                     twitterAccessSecret: data.twitterAccessSecret || "",
                     autoApproveDrafts: data.autoApproveDrafts || false,
                     autoApprovePrompt: data.autoApprovePrompt || "",
+                    sources: data.sources || [],
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -119,6 +121,7 @@ export default function EditWorkspacePage() {
                     twitterAccessSecret: form.twitterAccessSecret || null,
                     autoApproveDrafts: form.autoApproveDrafts,
                     autoApprovePrompt: form.autoApprovePrompt || null,
+                    sources: form.sources,
                 }),
             });
 
@@ -203,8 +206,146 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
-                {/* Target Accounts */}
-                <Field label="Target Accounts" hint="Comma-separated Threads usernames to scrape">
+                {/* Scraper Sources */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            Scraper Sources
+                        </h3>
+                        <div className="text-[10px] text-muted-foreground bg-accent/5 px-2 py-0.5 rounded border border-accent/20">
+                            v0.3.0 Hybrid Pipeline
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-muted mb-4">
+                        Add specific accounts or hashtags to monitor. Topic-based scraping requires quality gates to filter noise.
+                    </p>
+
+                    <div className="space-y-3">
+                        {form.sources.map((source, idx) => (
+                            <div key={idx} className="flex flex-col gap-3 p-3 bg-white/5 rounded-lg border border-border/50">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${source.type === 'TOPIC' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                            {source.type}
+                                        </span>
+                                        <span className="text-sm font-medium">{source.value}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newSources = [...form.sources];
+                                            newSources.splice(idx, 1);
+                                            setForm({ ...form, sources: newSources });
+                                        }}
+                                        className="text-muted hover:text-danger transition-colors"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                {source.type === 'TOPIC' && (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="text-[10px] text-muted block mb-1">Min Likes</label>
+                                            <input
+                                                type="number"
+                                                value={source.minLikes || 100}
+                                                onChange={(e) => {
+                                                    const newSources = [...form.sources];
+                                                    newSources[idx] = { ...newSources[idx], minLikes: Number(e.target.value) };
+                                                    setForm({ ...form, sources: newSources });
+                                                }}
+                                                className="input text-xs py-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-muted block mb-1">Min Replies</label>
+                                            <input
+                                                type="number"
+                                                value={source.minReplies || 5}
+                                                onChange={(e) => {
+                                                    const newSources = [...form.sources];
+                                                    newSources[idx] = { ...newSources[idx], minReplies: Number(e.target.value) };
+                                                    setForm({ ...form, sources: newSources });
+                                                }}
+                                                className="input text-xs py-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-muted block mb-1">Max Age (h)</label>
+                                            <input
+                                                type="number"
+                                                value={source.maxAgeHours || 3}
+                                                onChange={(e) => {
+                                                    const newSources = [...form.sources];
+                                                    newSources[idx] = { ...newSources[idx], maxAgeHours: Number(e.target.value) };
+                                                    setForm({ ...form, sources: newSources });
+                                                }}
+                                                className="input text-xs py-1"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {/* Add New Source */}
+                        <div className="p-4 border border-dashed border-border/50 rounded-lg bg-surface/30">
+                            <div className="flex gap-2 items-end">
+                                <div className="flex-1">
+                                    <label className="text-[10px] text-muted block mb-1">New Source (@user or #tag)</label>
+                                    <input
+                                        type="text"
+                                        id="new-source-value"
+                                        placeholder="@username or #hashtag"
+                                        className="input text-sm"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                (document.getElementById('add-source-btn') as HTMLElement).click();
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    id="add-source-btn"
+                                    onClick={() => {
+                                        const input = document.getElementById('new-source-value') as HTMLInputElement;
+                                        let val = input.value.trim();
+                                        if (!val) return;
+
+                                        const type = val.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
+                                        if (type === 'ACCOUNT' && !val.startsWith('@')) val = '@' + val;
+
+                                        const newSource = {
+                                            type,
+                                            value: val,
+                                            platform: 'THREADS',
+                                            isActive: true,
+                                            minLikes: type === 'TOPIC' ? 100 : null,
+                                            minReplies: type === 'TOPIC' ? 5 : null,
+                                            maxAgeHours: type === 'TOPIC' ? 3 : null,
+                                            trustWeight: type === 'ACCOUNT' ? 1.0 : 0.7,
+                                        };
+
+                                        setForm({ ...form, sources: [...form.sources, newSource] });
+                                        input.value = '';
+                                    }}
+                                    className="px-4 py-2 bg-white/5 border border-border rounded-lg text-sm hover:bg-white/10"
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Legacy Target Accounts (for reference, will eventually migrate) */}
+                <Field label="Target Accounts (Legacy)" hint="Legacy comma-separated list. Prefer the 'Scraper Sources' section above.">
                     <div className="flex gap-2">
                         <input
                             type="text"

@@ -46,7 +46,14 @@ export async function processPost(
     workspaceId: string,
     settings: WorkspaceSettings,
     options: ProcessPostOptions = {},
-    followerCount: number = 0
+    followerCount: number = 0,
+    source?: {
+        type: 'ACCOUNT' | 'TOPIC';
+        minLikes?: number | null;
+        minReplies?: number | null;
+        maxAgeHours?: number | null;
+        trustWeight?: number;
+    }
 ) {
     const validPostedAt = safeDate(postData.postedAt);
 
@@ -73,7 +80,7 @@ export async function processPost(
 
     if (existing) {
         // Update engagement stats
-        const newScore = calculateHotScore({ ...postData, postedAt: validPostedAt });
+        const newScore = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
         await prisma.post.update({
             where: { id: existing.id },
             data: {
@@ -86,25 +93,34 @@ export async function processPost(
         return undefined; // Not new
     }
 
-    // 3. Topic Filter Check
+    // 3. Topic Filter Check (Legacy settings filter)
     if (settings.topicFilter && postData.content) {
         const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter);
         if (!isRelevant) {
             console.log(`[Processor] Post rejected by topic filter: "${settings.topicFilter}"`);
-
-            // USER REQUEST: Do not save rejected posts to DB to save space/calls.
-            // We rely on the fact that if we scrape it again, we'll just check filter again (cost of API vs cost of DB).
             return undefined;
         }
     }
 
-    // 4. Score
-    const score = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
-    const finalScore = isNaN(score) ? 0 : score;
+    // 4. Score & Quality Gates
+    let finalScore: number;
+    if (source && source.type === 'TOPIC') {
+        const score = calculateTopicHotScore(
+            { ...postData, postedAt: validPostedAt, followerCount },
+            source
+        );
+        finalScore = isNaN(score) ? 0 : score;
+
+        if (finalScore === 0) {
+            console.log(`[Processor] Topic post ${postData.threadId} rejected by quality gates or spam filter.`);
+            return undefined;
+        }
+    } else {
+        const score = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
+        finalScore = isNaN(score) ? 0 : (score * (source?.trustWeight || 1.0));
+    }
 
     // 5. Hot score gate — skip low-engagement posts entirely
-    // MODIFIED: Use a lower "ingest threshold" (e.g. 10) to capture posts that might form a cluster.
-    // The "Viral Threshold" (settings.hotScoreThreshold) is now applied during Synthesis.
     const ingestThreshold = 10;
 
     if (finalScore < ingestThreshold) {
@@ -112,21 +128,13 @@ export async function processPost(
         return undefined;
     }
 
-    // 6. Translate if not skipped
-    // USER REQUEST: Scraped posts are NOT to be translated, only original is kept.
-    // Translation happens during synthesis.
-    // let translated = "";
-    // if (!options.skipTranslation) {
-    //    translated = await translateContent(postData.content, settings.translationPrompt);
-    // }
-
-    // 7. Save
+    // 6. Save
     const savedPost = await prisma.post.create({
         data: {
             threadId: postData.threadId,
             sourceAccount,
             contentOriginal: postData.content,
-            contentTranslated: null, // No individual post translation
+            contentTranslated: null,
             mediaUrls: postData.mediaUrls,
             views: postData.views,
             likes: postData.likes,
@@ -142,6 +150,58 @@ export async function processPost(
     });
 
     return savedPost;
+}
+
+/**
+ * Calculate hot score for topic posts with stricter quality gates and spam filtering.
+ */
+export function calculateTopicHotScore(
+    post: {
+        views?: number;
+        likes: number;
+        replies: number;
+        reposts: number;
+        followerCount?: number;
+        postedAt?: Date;
+        content: string;
+    },
+    source: {
+        minLikes?: number | null;
+        minReplies?: number | null;
+        maxAgeHours?: number | null;
+    }
+): number {
+    const validDate = safeDate(post.postedAt);
+    const ageHours = validDate ? (Date.now() - validDate.getTime()) / (1000 * 60 * 60) : 0;
+
+    // Hard gates — fail fast
+    if (source.minLikes && post.likes < source.minLikes) return 0;
+    if (source.minReplies && post.replies < source.minReplies) return 0;
+    if (source.maxAgeHours && ageHours > source.maxAgeHours) return 0;
+
+    // Topic-specific spam filter
+    if (isLikelySpam(post)) return 0;
+
+    // Standard hot score with topic penalty
+    const baseScore = calculateHotScore(post);
+    const TOPIC_TRUST_PENALTY = 0.7; // topic posts need 30% higher engagement
+
+    return baseScore * TOPIC_TRUST_PENALTY;
+}
+
+/**
+ * Heuristic spam filter for topic-based scraping.
+ */
+export function isLikelySpam(post: { content: string; followerCount?: number }): boolean {
+    const text = post.content || "";
+    const spamSignals = [
+        (text.match(/follow|giveaway|airdrop|win|click here|dm me/gi)?.length || 0) >= 2,
+        (text.match(/https?:\/\//g)?.length || 0) > 3, // excessive links
+        (post.followerCount || 0) < 50,                // tiny accounts
+        text.length < 30,                              // too short
+    ];
+
+    return spamSignals.filter(Boolean).length >= 2;
 }
 
 /**

@@ -319,6 +319,170 @@ export class ThreadsScraper {
         }
     }
 
+    async scrapeTopic(hashtag: string, since?: Date): Promise<ThreadPost[]> {
+        if (!this.browser) await this.init();
+        const page = await this.browser!.newPage();
+
+        const MAX_SCROLLS = 20;
+        const allPosts = new Map<string, ThreadPost>();
+
+        try {
+            const cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
+            const searchUrl = `https://www.threads.net/search?q=%23${cleanHashtag}`;
+            console.log(`[Scraper] Navigating to ${searchUrl}`);
+            await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+
+            await page.waitForSelector('body', { timeout: 10000 });
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Search results take longer to load content
+
+            let scrollCount = 0;
+            let finished = false;
+
+            while (scrollCount < MAX_SCROLLS && !finished) {
+                const rawPosts = await page.evaluate(() => {
+                    const potentialSelectors = [
+                        'div[data-pressable="true"]',
+                        'div[data-pressable-container="true"]',
+                        'div[role="article"]',
+                        'div[aria-label*="Thread"]'
+                    ];
+
+                    const allElements = new Set<Element>();
+                    for (const sel of potentialSelectors) {
+                        document.querySelectorAll(sel).forEach(el => allElements.add(el));
+                    }
+
+                    const postElements = Array.from(allElements);
+                    if (postElements.length === 0) return [];
+
+                    return postElements.map((el: any) => {
+                        const videos = Array.from(el.querySelectorAll('video'))
+                            .map((vid: any) => vid.src || '')
+                            .filter((src: string) => src.startsWith('http'))
+                            .map((src: string) => ({ url: src, type: 'video' as const }));
+
+                        const images = Array.from(el.querySelectorAll('img'))
+                            .filter((img: any) => {
+                                const alt = (img.alt || '').toLowerCase();
+                                return !alt.includes('profile picture');
+                            })
+                            .map((img: any) => img.src)
+                            .filter((src: string) => src.startsWith('http'))
+                            .map((src: string) => ({ url: src, type: 'image' as const }));
+
+                        const media = videos.length > 0 ? videos : images;
+                        const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
+                        const postUrl = links.find((l: string) => l.includes('/post/')) || "";
+
+                        let views = 0, likes = 0, replies = 0, reposts = 0;
+
+                        const viewEl = el.querySelector('[aria-label*="views"]');
+                        if (viewEl) {
+                            const str = viewEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                views = isNaN(n) ? 0 : n;
+                            }
+                        }
+
+                        const likeEl = el.querySelector('[aria-label*="likes"]');
+                        if (likeEl) {
+                            const str = likeEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                likes = isNaN(n) ? 0 : n;
+                            }
+                        }
+
+                        const replyEl = el.querySelector('[aria-label*="replies"]');
+                        if (replyEl) {
+                            const str = replyEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                replies = isNaN(n) ? 0 : n;
+                            }
+                        }
+
+                        const repostEl = el.querySelector('[aria-label*="reposts"]');
+                        if (repostEl) {
+                            const str = repostEl.getAttribute('aria-label');
+                            if (str) {
+                                let n = parseFloat(str.replace(/,/g, ''));
+                                if (str.toUpperCase().includes('K')) n = n * 1000;
+                                if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                reposts = isNaN(n) ? 0 : n;
+                            }
+                        }
+
+                        let postedAt: string | null = null;
+                        const timeEl = el.querySelector('time');
+                        if (timeEl) postedAt = timeEl.getAttribute('datetime');
+
+                        return {
+                            content: el.innerText?.slice(0, 500) || "",
+                            threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
+                            views, likes, replies, reposts,
+                            mediaUrls: media,
+                            postUrl,
+                            postedAt,
+                            externalUrls: [] // Skip extraction in search list for speed
+                        };
+                    });
+                });
+
+                let foundNew = false;
+                let foundOld = false;
+
+                for (const p of rawPosts) {
+                    if (!p.postedAt || p.threadId === "unknown") continue;
+                    const d = new Date(p.postedAt);
+                    if (isNaN(d.getTime())) continue;
+                    (p as any).postedAt = d;
+
+                    const existing = allPosts.get(p.threadId);
+                    const currentScore = (p.likes || 0) + (p.replies || 0);
+
+                    if (!existing || currentScore > (existing.likes + existing.replies)) {
+                        allPosts.set(p.threadId, p as unknown as ThreadPost);
+                        if (!existing) foundNew = true;
+                    }
+
+                    if (since && d < since) foundOld = true;
+                }
+
+                if (foundOld) {
+                    console.log(`[Scraper] Reached posts older than ${since?.toISOString()}. Stopping.`);
+                    finished = true;
+                } else if (!foundNew && scrollCount > 2) {
+                    console.log("[Scraper] No new posts found in this scroll. Stopping.");
+                    finished = true;
+                } else {
+                    console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique: ${allPosts.size}`);
+                    await page.evaluate(async () => {
+                        window.scrollBy(0, 3000);
+                        await new Promise(r => setTimeout(r, 2000));
+                    });
+                    scrollCount++;
+                }
+            }
+
+            const results = Array.from(allPosts.values());
+            results.sort((a: any, b: any) => b.postedAt!.getTime() - a.postedAt!.getTime());
+            return results;
+        } catch (error) {
+            console.error(`[Scraper] Error scraping topic ${hashtag}:`, error);
+            return Array.from(allPosts.values());
+        } finally {
+            await page.close();
+        }
+    }
+
     /**
      * Scrape the follower count from an account's profile page.
      * Returns 0 if it cannot be determined.

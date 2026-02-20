@@ -13,6 +13,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         where: { id },
         include: {
             _count: { select: { posts: true } },
+            sources: true,
         },
     });
 
@@ -49,9 +50,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             }
         }
 
+        // Handle sources if provided in body
+        if (body.sources && Array.isArray(body.sources)) {
+            // Simple approach: delete existing sources and recreate
+            // In a production app, we'd use upserts or identified updates
+            await prisma.scraperSource.deleteMany({
+                where: { workspaceId: id }
+            });
+
+            data.sources = {
+                create: body.sources.map((s: any) => ({
+                    type: s.type,
+                    value: s.value,
+                    platform: s.platform || 'THREADS',
+                    isActive: s.isActive ?? true,
+                    minLikes: s.minLikes,
+                    minReplies: s.minReplies,
+                    maxAgeHours: s.maxAgeHours,
+                    trustWeight: s.trustWeight || 1.0,
+                }))
+            };
+        }
+
         const workspace = await prisma.workspace.update({
             where: { id },
             data,
+            include: { sources: true }
         });
 
         return NextResponse.json(workspace);

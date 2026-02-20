@@ -7,6 +7,7 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         include: {
             _count: { select: { posts: true } },
+            sources: true,
         },
     });
 
@@ -16,6 +17,7 @@ export async function GET() {
 // POST /api/workspaces — create a new workspace
 export async function POST(request: NextRequest) {
     try {
+        const body = await request.json();
         const {
             name,
             targetAccounts,
@@ -37,7 +39,8 @@ export async function POST(request: NextRequest) {
             twitterApiSecret,
             twitterAccessToken,
             twitterAccessSecret,
-        } = await request.json();
+            sources,
+        } = body;
 
         if (!name || !translationPrompt) {
             return NextResponse.json(
@@ -51,7 +54,7 @@ export async function POST(request: NextRequest) {
                 name,
                 targetAccounts: targetAccounts || [],
                 translationPrompt,
-                clusteringPrompt: clusteringPrompt || undefined, // Use default if undefined
+                clusteringPrompt: clusteringPrompt || undefined,
                 synthesisLanguage: synthesisLanguage || "Traditional Chinese (HK/TW)",
                 hotScoreThreshold: hotScoreThreshold ?? 50,
                 threadsAppId: threadsAppId || null,
@@ -68,7 +71,20 @@ export async function POST(request: NextRequest) {
                 postLookbackHours: postLookbackHours ?? 24,
                 publishTimes: publishTimes || ["12:00", "18:00", "22:00"],
                 reviewWindowHours: reviewWindowHours ?? 1,
+                sources: sources ? {
+                    create: sources.map((s: any) => ({
+                        type: s.type,
+                        value: s.value,
+                        platform: s.platform || 'THREADS',
+                        isActive: s.isActive ?? true,
+                        minLikes: s.minLikes,
+                        minReplies: s.minReplies,
+                        maxAgeHours: s.maxAgeHours,
+                        trustWeight: s.trustWeight || 1.0,
+                    }))
+                } : undefined,
             },
+            include: { sources: true }
         });
 
         return NextResponse.json(workspace, { status: 201 });
