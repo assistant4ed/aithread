@@ -56,8 +56,16 @@ async function getOrFetchFollowerCount(username: string, scraper: ThreadsScraper
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
 async function processScrapeJob(job: Job<ScrapeJobData>) {
-    const { target, type, workspaceId, settings, skipTranslation, sourceId } = job.data;
+    let { target, type, workspaceId, settings, skipTranslation, sourceId } = job.data;
     const slotId = jobCounter++ % CONCURRENCY;
+
+    // Normalize target: strip leading @ or # if present (scrapers handle those prefixes themselves)
+    if (type === 'ACCOUNT' && target.startsWith('@')) {
+        target = target.substring(1);
+    }
+    if (type === 'TOPIC' && target.startsWith('#')) {
+        target = target.substring(1);
+    }
 
     console.log(`[ScrapeWorker] Processing ${type}:${target} (workspace: ${workspaceId}, slot: ${slotId}, attempt: ${job.attemptsMade + 1})`);
 
