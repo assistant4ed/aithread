@@ -39,6 +39,9 @@ export default function EditWorkspacePage() {
         autoApproveDrafts: false,
         autoApprovePrompt: "",
         sources: [] as any[],
+        aiProvider: "GROQ",
+        aiModel: "llama-3.3-70b-versatile",
+        aiApiKey: "",
     });
 
     useEffect(() => {
@@ -73,6 +76,9 @@ export default function EditWorkspacePage() {
                     autoApproveDrafts: data.autoApproveDrafts || false,
                     autoApprovePrompt: data.autoApprovePrompt || "",
                     sources: data.sources || [],
+                    aiProvider: data.aiProvider || "GROQ",
+                    aiModel: data.aiModel || "llama-3.3-70b-versatile",
+                    aiApiKey: data.aiApiKey || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -122,6 +128,9 @@ export default function EditWorkspacePage() {
                     autoApproveDrafts: form.autoApproveDrafts,
                     autoApprovePrompt: form.autoApprovePrompt || null,
                     sources: form.sources,
+                    aiProvider: form.aiProvider,
+                    aiModel: form.aiModel,
+                    aiApiKey: form.aiApiKey || null,
                 }),
             });
 

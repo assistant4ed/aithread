@@ -34,6 +34,9 @@ export default function NewWorkspacePage() {
         twitterAccessToken: "",
         twitterAccessSecret: "",
         sources: [] as any[],
+        aiProvider: "GROQ",
+        aiModel: "llama-3.3-70b-versatile",
+        aiApiKey: "",
     });
 
     const handleConnectOAuth = async (provider: string) => {
@@ -65,6 +68,9 @@ export default function NewWorkspacePage() {
                     topicFilter: form.topicFilter || null,
                     clusteringPrompt: form.clusteringPrompt || null,
                     sources: form.sources,
+                    aiProvider: form.aiProvider,
+                    aiModel: form.aiModel,
+                    aiApiKey: form.aiApiKey || null,
                 }),
             });
 
@@ -109,11 +115,12 @@ export default function NewWorkspacePage() {
                     clusteringPrompt: form.clusteringPrompt || null,
                     instagramAccountId: form.instagramAccountId || null,
                     instagramAccessToken: form.instagramAccessToken || null,
-                    twitterApiKey: form.twitterApiKey || null,
-                    twitterApiSecret: form.twitterApiSecret || null,
                     twitterAccessToken: form.twitterAccessToken || null,
                     twitterAccessSecret: form.twitterAccessSecret || null,
                     sources: form.sources,
+                    aiProvider: form.aiProvider,
+                    aiModel: form.aiModel,
+                    aiApiKey: form.aiApiKey || null,
                 }),
             });
 

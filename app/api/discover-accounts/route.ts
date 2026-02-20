@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Groq from "groq-sdk";
+import { getProvider } from "@/lib/ai/provider";
 
-// Lazy-load Groq to avoid top-level env-var errors
-let groqInstance: Groq | null = null;
-function getGroq() {
-    if (!groqInstance) {
-        if (!process.env.GROQ_API_KEY) {
-            throw new Error("GROQ_API_KEY is missing");
-        }
-        groqInstance = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    }
-    return groqInstance;
-}
+const defaultProvider = getProvider({
+    provider: "GROQ",
+    model: "llama-3.3-70b-versatile",
+});
 
 /**
  * Validates a Threads handle by checking if its profile page 
@@ -79,16 +72,13 @@ export async function POST(req: NextRequest) {
         JSON ONLY.
         `;
 
-        const completion = await getGroq().chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-            ],
+        const raw = await defaultProvider.createChatCompletion([
+            { role: "system", content: systemPrompt },
+        ], {
             model: "llama-3.3-70b-versatile",
             temperature: 0.7,
             response_format: { type: "json_object" },
         });
-
-        const raw = completion.choices[0]?.message?.content;
         if (!raw) {
             return NextResponse.json({ error: "LLM generation failed" }, { status: 500 });
         }

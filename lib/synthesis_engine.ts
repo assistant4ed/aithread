@@ -1,13 +1,9 @@
 
 import { prisma } from "./prisma";
-import Groq from "groq-sdk";
+import { getProvider } from "./ai/provider";
 import { clusterPosts, Document } from "./clustering";
 import { sanitizeText } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
-
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-});
 
 export interface SynthesisSettings {
     translationPrompt: string;
@@ -16,6 +12,9 @@ export interface SynthesisSettings {
     postLookbackHours?: number;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
     hotScoreThreshold?: number;    // "Viral" threshold
+    aiProvider?: string;
+    aiModel?: string;
+    aiApiKey?: string | null;
 }
 
 /**
@@ -86,7 +85,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
     console.log(`[Synthesis] Clustering ${docs.length} posts via LLM...`);
     // const rawClusters = clusterPosts(docs, 0.35); // OLD: Algorithmic
-    const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt); // NEW: LLM
+    const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt, settings); // NEW: LLM
 
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
@@ -133,7 +132,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         // 3c. Classify Format
         console.log(`[Synthesis] Classifying format for cluster...`);
-        const classifyResult = await classifyCluster(clusterPosts);
+        const classifyResult = await classifyCluster(clusterPosts, settings);
         const formatId = classifyResult?.format || "LISTICLE"; // fallback
         console.log(`[Synthesis] Classified as: ${formatId} (Reason: ${classifyResult?.reason || "fallback"})`);
 
@@ -142,7 +141,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             content: p.contentOriginal || "",
             account: p.sourceAccount,
             url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
-        })), formatId);
+        })), formatId, settings);
 
         if (!synthesis) {
             console.log("  -> Synthesis failed / empty response.");
@@ -154,8 +153,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
         CRITICAL: Keep any @[Author] mentions and [Link]s completely untouched. Do not translate usernames or URLs.
         If the original text uses a listicle format like "🔥 [Title] - @[Author]:", maintain those exact formatting delimiters and emojis.
-        Output ONLY the translated text.`);
-        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`);
+        Output ONLY the translated text.`, settings);
+        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`, settings);
 
         const translatedContent = sanitizeText(rawContent);
         const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
@@ -181,7 +180,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             const approved = await checkAutoApproval(
                 translatedTitle,
                 translatedContent,
-                workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler."
+                workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler.",
+                settings
             );
             finalStatus = approved ? "APPROVED" : "REJECTED";
             console.log(`  -> Auto-approval result: ${finalStatus}`);
@@ -225,7 +225,13 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 /**
  * Check if an article should be auto-approved using LLM.
  */
-async function checkAutoApproval(title: string, content: string, instruction: string): Promise<boolean> {
+async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<boolean> {
+    const provider = getProvider({
+        provider: settings?.aiProvider || "GROQ",
+        model: settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined
+    });
+
     const prompt = `
     You are an AI Content Moderator.
     Task: Judge if the following news article should be approved for publication.
@@ -243,17 +249,15 @@ async function checkAutoApproval(title: string, content: string, instruction: st
     `;
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: "You are a precise content judge." },
-                { role: "user", content: prompt },
-            ],
-            model: "llama-3.3-70b-versatile",
+        const raw = await provider.createChatCompletion([
+            { role: "system", content: "You are a precise content judge." },
+            { role: "user", content: prompt },
+        ], {
+            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
 
-        const raw = completion.choices[0]?.message?.content;
         if (!raw) return false;
         const parsed = JSON.parse(raw);
         return !!parsed.approved;
@@ -266,8 +270,14 @@ async function checkAutoApproval(title: string, content: string, instruction: st
 import { RawCluster } from "./clustering";
 
 // New LLM Clustering
-async function clusterPostsWithLLM(posts: Document[], promptInstruction: string): Promise<RawCluster[]> {
+async function clusterPostsWithLLM(posts: Document[], promptInstruction: string, settings?: SynthesisSettings): Promise<RawCluster[]> {
     if (posts.length === 0) return [];
+
+    const provider = getProvider({
+        provider: settings?.aiProvider || "GROQ",
+        model: settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined
+    });
 
     // Format posts for LLM
     const postsText = posts.map(p => `[ID: ${p.id}] ${p.text}`).join("\n\n");
@@ -292,17 +302,15 @@ async function clusterPostsWithLLM(posts: Document[], promptInstruction: string)
     `;
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: `Posts to cluster:\n\n${postsText.slice(0, 25000)}` }, // Limit 25k chars ~ 6k tokens
-            ],
-            model: "llama-3.3-70b-versatile",
+        const raw = await provider.createChatCompletion([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Posts to cluster:\n\n${postsText.slice(0, 25000)}` }, // Limit 25k chars ~ 6k tokens
+        ], {
+            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
 
-        const raw = completion.choices[0]?.message?.content;
         if (!raw) return [];
 
         const parsed = JSON.parse(raw);
@@ -325,8 +333,14 @@ interface SynthesisResult {
     content: string;
 }
 
-async function classifyCluster(posts: any[]) {
+async function classifyCluster(posts: any[], settings?: SynthesisSettings) {
     const postSummaries = posts.map(p => `- ${p.contentOriginal?.slice(0, 200)}`).join('\n');
+
+    const provider = getProvider({
+        provider: settings?.aiProvider || "GROQ",
+        model: settings?.aiModel || "llama-3.1-8b-instant",
+        apiKey: settings?.aiApiKey || undefined
+    });
 
     const prompt = `You are a social media editor. Read these posts about the same story and decide which format best fits the content.
 
@@ -345,14 +359,14 @@ ${Object.values(POST_FORMATS).map(f =>
 }`;
 
     try {
-        const response = await groq.chat.completions.create({
-            model: 'llama-3.1-8b-instant',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: { type: "json_object" },
+        const raw = await provider.createChatCompletion([
+            { role: 'user', content: prompt }
+        ], {
+            model: settings?.aiModel || 'llama-3.1-8b-instant',
             temperature: 0.1,
+            response_format: { type: "json_object" },
         });
 
-        const raw = response.choices[0]?.message?.content;
         if (!raw) return null;
         return JSON.parse(raw);
     } catch (e) {
@@ -361,9 +375,15 @@ ${Object.values(POST_FORMATS).map(f =>
     }
 }
 
-export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string): Promise<SynthesisResult | null> {
+export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string, settings?: SynthesisSettings): Promise<SynthesisResult | null> {
     const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
     const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
+
+    const provider = getProvider({
+        provider: settings?.aiProvider || "GROQ",
+        model: settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined
+    });
 
     const prompt = `
     You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary using the ${format.id} format.
@@ -385,17 +405,15 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     `;
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: prompt },
-                { role: "user", content: `Posts:\n${textContext.slice(0, 15000)}` }, // Limit context
-            ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0.1, // Lower temperature for stricter format
+        const raw = await provider.createChatCompletion([
+            { role: "system", content: prompt },
+            { role: "user", content: `Posts:\n${textContext.slice(0, 15000)}` }, // Limit context
+        ], {
+            model: settings?.aiModel || "llama-3.3-70b-versatile",
+            temperature: 0.1,
             response_format: { type: "json_object" },
         });
 
-        const raw = completion.choices[0]?.message?.content;
         if (!raw) return null;
         const parsed = JSON.parse(raw);
 
@@ -411,18 +429,23 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     }
 }
 
-export async function translateText(text: string, prompt: string): Promise<string> {
+export async function translateText(text: string, prompt: string, settings?: SynthesisSettings): Promise<string> {
+    const provider = getProvider({
+        provider: settings?.aiProvider || "GROQ",
+        model: settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined
+    });
+
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: prompt },
-                { role: "user", content: text },
-            ],
-            model: "llama-3.3-70b-versatile",
+        const result = await provider.createChatCompletion([
+            { role: "system", content: prompt },
+            { role: "user", content: text },
+        ], {
+            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
         });
 
-        return completion.choices[0]?.message?.content || text;
+        return result || text;
     } catch (e) {
         return text;
     }
@@ -444,6 +467,9 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     synthesisLanguage: ws.synthesisLanguage,
                     postLookbackHours: ws.postLookbackHours,
                     hotScoreThreshold: ws.hotScoreThreshold, // Pass threshold
+                    aiProvider: ws.aiProvider,
+                    aiModel: ws.aiModel,
+                    aiApiKey: ws.aiApiKey,
                 });
             }
         } catch (e) {

@@ -41,6 +41,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "instagramAccessToken", "instagramAccountId",
             "twitterApiKey", "twitterApiSecret", "twitterAccessToken", "twitterAccessSecret",
             "autoApproveDrafts", "autoApprovePrompt",
+            "aiProvider", "aiModel", "aiApiKey",
         ];
 
         const data: Record<string, any> = {};

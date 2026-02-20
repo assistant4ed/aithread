@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
             twitterAccessToken,
             twitterAccessSecret,
             sources,
+            aiProvider,
+            aiModel,
+            aiApiKey,
         } = body;
 
         if (!name || !translationPrompt) {
@@ -83,6 +86,9 @@ export async function POST(request: NextRequest) {
                         trustWeight: s.trustWeight || 1.0,
                     }))
                 } : undefined,
+                aiProvider: aiProvider || "GROQ",
+                aiModel: aiModel || "llama-3.3-70b-versatile",
+                aiApiKey: aiApiKey || null,
             },
             include: { sources: true }
         });

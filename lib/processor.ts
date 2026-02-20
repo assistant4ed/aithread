@@ -1,15 +1,14 @@
 import { prisma } from "./prisma";
-import Groq from "groq-sdk";
-
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-});
+import { getProvider } from "./ai/provider";
 
 export interface WorkspaceSettings {
     translationPrompt: string;
     hotScoreThreshold: number;
     topicFilter?: string | null;
     maxPostAgeHours?: number;
+    aiProvider?: string;
+    aiModel?: string;
+    aiApiKey?: string | null;
 }
 
 export interface ProcessPostOptions {
@@ -95,7 +94,7 @@ export async function processPost(
 
     // 3. Topic Filter Check (Legacy settings filter)
     if (settings.topicFilter && postData.content) {
-        const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter);
+        const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter, settings);
         if (!isRelevant) {
             console.log(`[Processor] Post rejected by topic filter: "${settings.topicFilter}"`);
             return undefined;
@@ -245,51 +244,57 @@ export function calculateHotScore(post: {
     return isNaN(result) ? baseScore : result;
 }
 
-export async function checkTopicRelevance(content: string, topic: string): Promise<boolean> {
-    if (!process.env.GROQ_API_KEY) return true; // Fail open if no API key
+export async function checkTopicRelevance(content: string, topic: string, aiSettings?: WorkspaceSettings): Promise<boolean> {
+    const provider = getProvider({
+        provider: aiSettings?.aiProvider || "GROQ",
+        model: aiSettings?.aiModel || "llama-3.1-8b-instant",
+        apiKey: aiSettings?.aiApiKey || undefined
+    });
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: `You are a content filter. Check if the user's post is relevant to the topic: "${topic}".
+        const answer = await provider.createChatCompletion([
+            {
+                role: "system",
+                content: `You are a content filter. Check if the user's post is relevant to the topic: "${topic}".
 Output ONLY "YES" if relevant, or "NO" if not.
 Criteria:
 - Broadly related key concepts are acceptable.
 - If the post is completely unrelated, output NO.
 - If unsure, lean towards YES.`
-                },
-                { role: "user", content: `Post content: "${content}"` },
-            ],
-            model: "llama-3.1-8b-instant",
+            },
+            { role: "user", content: `Post content: "${content}"` },
+        ], {
+            model: aiSettings?.aiModel || "llama-3.1-8b-instant",
             temperature: 0.0,
             max_tokens: 5,
         });
 
-        const answer = completion.choices[0]?.message?.content?.trim().toUpperCase();
-        console.log(`[Topic Check] Topic: "${topic}" | Answer: ${answer}`);
-        return answer === "YES";
+        const trimmed = answer?.trim().toUpperCase();
+        console.log(`[Topic Check] Topic: "${topic}" | Answer: ${trimmed}`);
+        return trimmed === "YES";
     } catch (e: any) {
         console.error("Topic check failed:", e.message);
         return true; // Fail open on error
     }
 }
 
-export async function translateContent(text: string, translationPrompt: string): Promise<string> {
-    if (!process.env.GROQ_API_KEY) return "Translation unavailable (No API Key)";
+export async function translateContent(text: string, translationPrompt: string, aiSettings?: WorkspaceSettings): Promise<string> {
+    const provider = getProvider({
+        provider: aiSettings?.aiProvider || "GROQ",
+        model: aiSettings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: aiSettings?.aiApiKey || undefined
+    });
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: translationPrompt },
-                { role: "user", content: text },
-            ],
-            model: "llama-3.3-70b-versatile",
+        const result = await provider.createChatCompletion([
+            { role: "system", content: translationPrompt },
+            { role: "user", content: text },
+        ], {
+            model: aiSettings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
         });
 
-        return completion.choices[0]?.message?.content || "Translation failed";
+        return result || "Translation failed";
     } catch (e: any) {
         console.error("Translation failed:", e.message);
         return "Translation failed";
