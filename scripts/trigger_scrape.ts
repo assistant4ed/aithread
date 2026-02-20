@@ -15,7 +15,13 @@ async function main() {
             maxPostAgeHours: ws.maxPostAgeHours,
         };
         for (const username of ws.targetAccounts) {
-            const jobData: ScrapeJobData = { username, workspaceId: ws.id, settings, skipTranslation: false };
+            const jobData: ScrapeJobData = {
+                target: username,
+                type: 'ACCOUNT',
+                workspaceId: ws.id,
+                settings,
+                skipTranslation: false
+            };
             await scrapeQueue.add("scrape-account", jobData, { jobId: `manual-${Date.now()}-${username}` });
             console.log(`  -> Enqueued @${username}`);
         }

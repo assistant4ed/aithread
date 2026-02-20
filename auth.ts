@@ -4,28 +4,6 @@ import Twitter from "next-auth/providers/twitter"
 import { prisma } from "@/lib/prisma"
 import { cookies } from "next/headers"
 
-// Debugging Credential Loading
-const missing = []
-if (!process.env.AUTH_TWITTER_ID) missing.push("AUTH_TWITTER_ID")
-if (!process.env.AUTH_TWITTER_SECRET) missing.push("AUTH_TWITTER_SECRET")
-if (!process.env.AUTH_INSTAGRAM_ID) missing.push("AUTH_INSTAGRAM_ID")
-if (!process.env.AUTH_INSTAGRAM_SECRET) missing.push("AUTH_INSTAGRAM_SECRET")
-if (!process.env.AUTH_THREADS_ID) missing.push("AUTH_THREADS_ID")
-if (!process.env.AUTH_THREADS_SECRET) missing.push("AUTH_THREADS_SECRET")
-
-if (missing.length > 0) {
-    console.error("❌ [NextAuth] Missing Environment Variables:", missing.join(", "))
-} else {
-    console.log("✅ [NextAuth] Environment Variables Check:")
-    console.log(`   - AUTH_TWITTER_ID length: ${process.env.AUTH_TWITTER_ID?.length || 0}`)
-    console.log(`   - AUTH_TWITTER_SECRET length: ${process.env.AUTH_TWITTER_SECRET?.length || 0}`)
-    console.log(`   - AUTH_INSTAGRAM_ID length: ${process.env.AUTH_INSTAGRAM_ID?.length || 0}`)
-    console.log(`   - AUTH_INSTAGRAM_SECRET length: ${process.env.AUTH_INSTAGRAM_SECRET?.length || 0}`)
-    console.log(`   - AUTH_THREADS_ID length: ${process.env.AUTH_THREADS_ID?.length || 0}`)
-    console.log(`   - AUTH_THREADS_SECRET length: ${process.env.AUTH_THREADS_SECRET?.length || 0}`)
-    console.log(`   - AUTH_SECRET length: ${process.env.AUTH_SECRET?.length || 0}`)
-    console.log(`   - AUTH_URL: ${process.env.AUTH_URL}`)
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     debug: true,
@@ -78,15 +56,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userinfo: {
                 url: "https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url",
                 async request({ tokens }: { tokens: any }) {
-                    console.log("👤 [Threads] Fetching user profile...");
                     const response = await fetch("https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url&access_token=" + tokens.access_token);
-                    const profileData = await response.json();
-                    console.log("✅ [Threads] Profile response:", JSON.stringify(profileData));
-                    return profileData;
+                    return await response.json();
                 }
             },
             profile(profile: any) {
-                console.log("📝 [Threads] Mapping profile for:", profile.username);
                 return {
                     id: String(profile.id),
                     name: profile.username,
@@ -162,26 +136,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     })
                     console.log(`Updated Instagram (via Facebook) tokens for workspace ${workspaceId}`)
                 } else if (account.provider === "threads") {
-                    console.log("🛑 [Threads] SignIn Callback Debug:");
-                    console.log("   - account.providerAccountId:", account.providerAccountId);
-                    console.log("   - account.userId:", account.userId);
-                    console.log("   - profile.id:", profile?.id);
 
                     await prisma.workspace.update({
                         where: { id: workspaceId },
                         data: {
-                            threadsToken: account.access_token, // Map access_token to our existing threadsToken field
+                            threadsToken: account.access_token,
                             threadsRefreshToken: account.refresh_token,
                             threadsExpiresAt: account.expires_at,
-                            threadsAppId: account.providerAccountId, // Store the Threads user ID in existing threadsAppId field (or creates a new one if pref)
+                            threadsAppId: account.providerAccountId,
                         },
                     })
                     console.log(`Updated Threads tokens for workspace ${workspaceId}`)
                 }
 
-                // 3. Prevent actual "login" to the app. We just wanted the tokens.
-                // Return false to deny the session creation, OR redirect back to the workspace edit page.
-                // Returning a URL strings redirects there.
+
                 return `/workspaces/${workspaceId}/edit?connected=${account.provider}`
 
             } catch (error) {

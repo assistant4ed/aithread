@@ -8,7 +8,6 @@ export interface MediaItem {
     coverUrl?: string;
 }
 
-
 export interface ThreadPost {
     threadId: string;
     content: string;
@@ -60,26 +59,20 @@ export class ThreadsScraper {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
 
-        // Safety limit to prevent infinite loops if dates aren't parsing or layout changes
         const MAX_SCROLLS = 20;
         const allPosts = new Map<string, ThreadPost>();
 
         try {
             console.log(`Navigating to https://www.threads.net/@${username}`);
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
-
             await page.waitForSelector('body', { timeout: 10000 });
-
-            // Initial wait for hydration
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             let scrollCount = 0;
             let finished = false;
 
             while (scrollCount < MAX_SCROLLS && !finished) {
-                // 1. Scrape current view
                 const rawPosts = await page.evaluate(() => {
-                    // Selectors for both old and new Threads UI structures
                     const potentialSelectors = [
                         'div[data-pressable="true"]',
                         'div[data-pressable-container="true"]',
@@ -111,19 +104,14 @@ export class ThreadsScraper {
                             .map((src: string) => ({ url: src, type: 'image' as const }));
 
                         const media = videos.length > 0 ? videos : images;
-
                         const links = Array.from(el.querySelectorAll('a')).map((a: any) => a.href);
                         const postUrl = links.find((l: string) => l.includes('/post/')) || "";
 
-                        let views = 0;
-                        let likes = 0;
-                        let replies = 0;
-                        let reposts = 0;
+                        let views = 0, likes = 0, replies = 0, reposts = 0;
 
                         const innerText = el.innerText || "";
                         const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
 
-                        // Extract external links
                         const extractedLinks = Array.from(el.querySelectorAll('a'))
                             .map((a: any) => a.href)
                             .filter((href: string) => {
@@ -134,11 +122,10 @@ export class ThreadsScraper {
                                     return !['threads.net', 'instagram.com', 'facebook.com', 'whatsapp.com'].includes(hostname)
                                         && !href.startsWith('mailto:')
                                         && !href.startsWith('tel:')
-                                        && !href.includes('/post/') // exclude self links
-                                        && !href.includes('/@');    // exclude mentions usually
+                                        && !href.includes('/post/')
+                                        && !href.includes('/@');
                                 } catch (e) { return false; }
                             });
-                        // Unique links only
                         const uniqueExternalLinks = Array.from(new Set(extractedLinks));
 
                         const viewEl = el.querySelector('[aria-label*="views"]');
@@ -185,7 +172,6 @@ export class ThreadsScraper {
                             }
                         }
 
-                        // Strategy 2: Numeric lines at the end of the text
                         if (likes === 0 && replies === 0 && reposts === 0) {
                             const numberLines = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?$/));
                             if (numberLines.length >= 2) {
@@ -216,17 +202,12 @@ export class ThreadsScraper {
 
                         let postedAt: string | null = null;
                         const timeEl = el.querySelector('time');
-                        if (timeEl) {
-                            postedAt = timeEl.getAttribute('datetime');
-                        }
+                        if (timeEl) postedAt = timeEl.getAttribute('datetime');
 
                         return {
                             content: innerText.slice(0, 300),
                             threadId: postUrl.split('/post/')[1]?.split('?')[0] || "unknown",
-                            views,
-                            likes,
-                            replies,
-                            reposts,
+                            views, likes, replies, reposts,
                             mediaUrls: media,
                             externalUrls: uniqueExternalLinks,
                             postUrl,
@@ -235,23 +216,16 @@ export class ThreadsScraper {
                     });
                 });
 
-                // 2. Process and add to map
                 let foundNew = false;
                 let foundOld = false;
 
                 for (const p of rawPosts) {
                     if (!p.postedAt) continue;
-
                     const d = new Date(p.postedAt);
                     if (isNaN(d.getTime())) continue;
-
-                    // Fix date object
                     (p as any).postedAt = d;
 
-                    // Deduplicate key
                     const existing = allPosts.get(p.threadId);
-
-                    // Logic: Keep the one with more metrics (avoids capturing "Reply" elements that link to parent but have no stats)
                     const currentScore = (p.likes || 0) + (p.replies || 0) + (p.reposts || 0);
                     const existingScore = existing ? (existing.likes || 0) + (existing.replies || 0) + (existing.reposts || 0) : -1;
 
@@ -259,58 +233,36 @@ export class ThreadsScraper {
                         allPosts.set(p.threadId, p as unknown as ThreadPost);
                         if (!existing) foundNew = true;
                     }
-
-                    // Check age limit
-                    // Logic Update: Only considered "reached old posts" if the *last* post in the batch is old. 
-                    // This prevents Pinned posts (which are old but at the top) from triggering a premature stop.
-                    // We'll check this outside the loop for the last item, or here if we track index.
                 }
 
-                // Check if the last post in rawPosts is old
                 if (rawPosts.length > 0 && since) {
                     const lastPost = rawPosts[rawPosts.length - 1];
-                    if (lastPost.postedAt) { // postedAt is Date now due to fix above? No, rawPosts has string/converted.
-                        // rawPosts elements are modified in place in the loop above? 
-                        // No, I did `(p as any).postedAt = d`. Yes, modified in place.
+                    if (lastPost.postedAt) {
                         const d = (lastPost as any).postedAt;
-                        if (d instanceof Date && d < since) {
-                            foundOld = true;
-                        }
+                        if (d instanceof Date && d < since) foundOld = true;
                     }
                 }
-
-                // 3. Logic: 
-                //    - If we found an old post, we can stop (we have enough history).
-                //    - If we didn't find ANY new posts in this scroll, we might be stuck or at end.
-                //    - Otherwise, scroll more.
 
                 if (foundOld) {
                     console.log(`[Scraper] Reached posts older than ${since?.toISOString()}. Stopping.`);
                     finished = true;
                 } else if (!foundNew && scrollCount > 0) {
-                    console.log("[Scraper] No new posts found in this scroll. Stopping.");
                     finished = true;
                 } else {
-                    console.log(`[Scraper] Scroll ${scrollCount + 1}/${MAX_SCROLLS}: Found ${rawPosts.length} posts (Total unique: ${allPosts.size}). Scrolling...`);
-
+                    console.log(`[Scraper] Scroll ${scrollCount + 1}/${MAX_SCROLLS}: Found ${rawPosts.length} posts (Total unique: ${allPosts.size}).`);
                     await page.evaluate(async () => {
                         window.scrollBy(0, 3000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
-
                     scrollCount++;
                 }
             }
 
             const results = Array.from(allPosts.values());
-            // Sort newest-first
             results.sort((a: any, b: any) => b.postedAt!.getTime() - a.postedAt!.getTime());
-
             return results;
-
         } catch (error) {
             console.error(`Error scraping ${username}:`, error);
-            // Return what we have so far
             const results = Array.from(allPosts.values());
             results.sort((a: any, b: any) => (b.postedAt?.getTime() || 0) - (a.postedAt?.getTime() || 0));
             return results;
@@ -331,9 +283,8 @@ export class ThreadsScraper {
             const searchUrl = `https://www.threads.net/search?q=%23${cleanHashtag}`;
             console.log(`[Scraper] Navigating to ${searchUrl}`);
             await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-
             await page.waitForSelector('body', { timeout: 10000 });
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Search results take longer to load content
+            await new Promise(resolve => setTimeout(resolve, 3000));
 
             let scrollCount = 0;
             let finished = false;
@@ -431,7 +382,7 @@ export class ThreadsScraper {
                             mediaUrls: media,
                             postUrl,
                             postedAt,
-                            externalUrls: [] // Skip extraction in search list for speed
+                            externalUrls: []
                         };
                     });
                 });
@@ -452,7 +403,6 @@ export class ThreadsScraper {
                         allPosts.set(p.threadId, p as unknown as ThreadPost);
                         if (!existing) foundNew = true;
                     }
-
                     if (since && d < since) foundOld = true;
                 }
 
@@ -460,7 +410,6 @@ export class ThreadsScraper {
                     console.log(`[Scraper] Reached posts older than ${since?.toISOString()}. Stopping.`);
                     finished = true;
                 } else if (!foundNew && scrollCount > 2) {
-                    console.log("[Scraper] No new posts found in this scroll. Stopping.");
                     finished = true;
                 } else {
                     console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique: ${allPosts.size}`);
@@ -483,10 +432,6 @@ export class ThreadsScraper {
         }
     }
 
-    /**
-     * Scrape the follower count from an account's profile page.
-     * Returns 0 if it cannot be determined.
-     */
     async getFollowerCount(username: string): Promise<number> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
@@ -496,7 +441,6 @@ export class ThreadsScraper {
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             const followerCount = await page.evaluate(() => {
-                // Strategy 1: aria-label on follower count element
                 const followerEl = document.querySelector('[aria-label*="followers"]');
                 if (followerEl) {
                     const str = followerEl.getAttribute('aria-label') || followerEl.textContent || '';
@@ -506,7 +450,6 @@ export class ThreadsScraper {
                     if (!isNaN(n) && n > 0) return Math.round(n);
                 }
 
-                // Strategy 2: Look for text containing "followers" near a number
                 const allText = document.body.innerText;
                 const match = allText.match(/(\d[\d,\.]*[KkMm]?)\s*followers/i);
                 if (match) {
@@ -516,7 +459,6 @@ export class ThreadsScraper {
                     if (raw.toUpperCase().includes('M')) n = n * 1000000;
                     if (!isNaN(n) && n > 0) return Math.round(n);
                 }
-
                 return 0;
             });
 
@@ -575,7 +517,6 @@ export class ThreadsScraper {
             if (bestVideoUrl) {
                 return { videoUrl: bestVideoUrl, coverUrl: bestCoverUrl };
             }
-
             return null;
         } catch (error) {
             console.error(`[Enricher] Failed to enrich ${postUrl}:`, error);

@@ -84,8 +84,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         }));
 
     console.log(`[Synthesis] Clustering ${docs.length} posts via LLM...`);
-    // const rawClusters = clusterPosts(docs, 0.35); // OLD: Algorithmic
-    const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt, settings); // NEW: LLM
+    const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt, settings);
 
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
@@ -102,22 +101,14 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
         const authors = new Set(clusterPosts.map(p => p.sourceAccount));
 
-        console.log(`[Synthesis] [DEBUG] Cluster with ${clusterPosts.length} posts from ${authors.size} authors:`);
-        clusterPosts.forEach(p => {
-            console.log(`  - @${p.sourceAccount}: ${p.contentOriginal?.slice(0, 100).replace(/\n/g, " ")}...`);
-        });
 
         // 3a. Check Threshold (Strict Coherence)
-        // Logic: Keep cluster ONLY if it has enough authors (Coherence).
-        // Virality is just a metric, not a bypass.
+
 
         const isCoherent = authors.size >= thresholdCount;
-        const maxScore = Math.max(...clusterPosts.map(p => p.hotScore || 0));
-
-        console.log(`  -> Audit: Coherent? ${isCoherent} (${authors.size}/${thresholdCount}), MaxScore: ${maxScore.toFixed(0)}`);
 
         if (!isCoherent) {
-            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCount}). Virality doesn't matter.`);
+            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCount}).`);
             continue;
         }
 
@@ -131,10 +122,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
 
         // 3c. Classify Format
-        console.log(`[Synthesis] Classifying format for cluster...`);
         const classifyResult = await classifyCluster(clusterPosts, settings);
-        const formatId = classifyResult?.format || "LISTICLE"; // fallback
-        console.log(`[Synthesis] Classified as: ${formatId} (Reason: ${classifyResult?.reason || "fallback"})`);
+        const formatId = classifyResult?.format || "LISTICLE";
 
         // 4. Synthesize
         const synthesis = await synthesizeCluster(clusterPosts.map(p => ({

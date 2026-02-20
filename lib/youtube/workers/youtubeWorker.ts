@@ -40,22 +40,18 @@ export async function startWorker() {
             console.log(`[Job ${job.id}] Processing ${videoUrl}...`);
 
             try {
-                // 1. Metadata Extraction
                 job.updateProgress(10);
                 const metadata = await extractMetadata(videoUrl);
                 console.log(`[Job ${job.id}] Metadata extracted: ${metadata.title}`);
 
-                // 2. Transcript Extraction
                 job.updateProgress(30);
                 const transcript = await extractTranscript(metadata.id, metadata);
                 console.log(`[Job ${job.id}] Transcript extracted via ${transcript.source}`);
 
-                // 3. LLM Script Generation
                 job.updateProgress(50);
                 const script = await generateScript(transcript, metadata, outputLanguage);
                 console.log(`[Job ${job.id}] Script generated and translated`);
 
-                // 4. Media Asset Extraction
                 job.updateProgress(70);
                 let assets = { thumbnailPath: '', chapterScreenshots: {} };
                 if (includeFrames) {
@@ -67,7 +63,6 @@ export async function startWorker() {
                     assets = await extractMediaAssets(metadata.id, []);
                 }
 
-                // 5. PDF Generation
                 job.updateProgress(90);
                 const outPdfName = `${metadata.id}_${outputLanguage}.pdf`;
                 const pdfPath = path.join(OUTPUT_DIR, outPdfName);

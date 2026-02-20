@@ -1,7 +1,6 @@
 import { Queue, ConnectionOptions } from "bullmq";
 import { WorkspaceSettings } from "./processor";
 
-// ─── Redis Connection ────────────────────────────────────────────────────────
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -32,7 +31,6 @@ function parseRedisUrl(url: string): ConnectionOptions {
  */
 export const redisConnection: ConnectionOptions = parseRedisUrl(REDIS_URL);
 
-// ─── Queue Definitions ──────────────────────────────────────────────────────
 
 export const SCRAPE_QUEUE_NAME = "scrape-accounts";
 
@@ -67,8 +65,6 @@ export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
  */
 export async function removePendingScrapes(workspaceId: string) {
     // Get waiting and delayed jobs
-    // Note: getJobs returns a promise resolving to an array of jobs
-    // We check a reasonable batches (e.g. first 1000) to avoid memory issues if queue is massive
     const jobs = await scrapeQueue.getJobs(['waiting', 'delayed'], 0, 1000, true);
 
     let removedCount = 0;

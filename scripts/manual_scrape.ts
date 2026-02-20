@@ -45,7 +45,8 @@ async function main() {
 
         for (const username of ws.targetAccounts) {
             const jobData: ScrapeJobData = {
-                username,
+                target: username,
+                type: 'ACCOUNT',
                 workspaceId: ws.id,
                 settings,
                 skipTranslation: false,
