@@ -144,10 +144,11 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         // 5. Translate & Persist & Sanitize
         const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
-        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain the journalistic tone. 
-        CRITICAL: This is a curated list. Maintain the "Source N:" format and DO NOT translate or modify the URLs. 
-        Output ONLY the translated text. Do NOT include notes, alternatives, disclaimers, or any meta-commentary.`);
-        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Keep it punchy. Output ONLY the translated text.`);
+        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
+        CRITICAL: Keep any @[Author] mentions and [Link]s completely untouched. Do not translate usernames or URLs.
+        If the original text uses a listicle format like "🔥 [Title] - @[Author]:", maintain those exact formatting delimiters and emojis.
+        Output ONLY the translated text.`);
+        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`);
 
         const translatedContent = sanitizeText(rawContent);
         const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
@@ -320,23 +321,29 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
 
     const prompt = `
-    You are a Tech News Curator. 
-    Task: Synthesize the provided raw social media posts into a curated news summary.
+    You are a Viral Tech News Curator. 
+    Task: Synthesize clustered social media posts into a high-impact, skimmable curated summary.
     
-    Output Format (Markdown):
-    "content" field must be a SINGLE string containing:
-    1. A brief intro sentence (e.g., "Several sources are reporting on Seedance 2.0...").
-    2. A newline.
-    3. A list of sources. For EACH unique source/account in the cluster:
-       Source N: [A punchy 1-2 sentence hook summarizing their specific input] [Link]
+    DYNAMIC FORMATTING INSTRUCTIONS:
+    Analyze the clustered posts and choose ONE of the following formats that best fits the nature of the news:
+
+    1. The Listicle: Use this if the sources are sharing multiple distinct tools, tips, or separate opinions.
+       - Structure: A brief intro sentence, followed by a list of insights.
+       - Format for each insight: 🔥 [Punchy 3-5 word title] - @[Author Name]: [1 sentence high-impact insight/hook] [Link]
+
+    2. The Breaking News Flash: Use this if it's a single massive announcement (like a new model release).
+       - Structure: 1-2 punchy paragraphs summarizing the news and community reaction. Include @[Author Name] and [Link] naturally in the text.
+
+    3. The Quote/Debate: Use this if the accounts are arguing or quoting a specific person.
+       - Structure: Set up the debate/quote, present the differing views. Include @[Author Name] and [Link] for context.
     
     Rules:
-    1. STRICT LIMIT: Each bullet point/hook must be 1-2 sentences only.
-    2. "content" MUST be a string, NOT an array of strings.
-    3. Focus on the core news/announcement.
-    4. Ignore personal opinions/chatter unless relevant context.
+    1. NO ACADEMIC PHRASING: Do NOT use "Source 1 reports", "Author discusses", or "Post analyzes". 
+    2. LEAD WITH VALUE: Hook the reader immediately.
+    3. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
+    4. Make sure to attribute the original authors using @[Author Name] and their [Link]s in whichever format you choose.
     5. Output JSON: { "headline": "...", "content": "..." }
-    6. JSON ONLY. No preamble. No "Here is the JSON".
+    6. JSON ONLY. No preamble.
     `;
 
     try {
