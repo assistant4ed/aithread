@@ -56,34 +56,46 @@ async function getOrFetchFollowerCount(username: string, scraper: ThreadsScraper
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
 async function processScrapeJob(job: Job<ScrapeJobData>) {
-    const { username, workspaceId, settings, skipTranslation } = job.data;
+    const { target, type, workspaceId, settings, skipTranslation, sourceId } = job.data;
     const slotId = jobCounter++ % CONCURRENCY;
 
-    console.log(`[ScrapeWorker] Processing @${username} (workspace: ${workspaceId}, slot: ${slotId}, attempt: ${job.attemptsMade + 1})`);
+    console.log(`[ScrapeWorker] Processing ${type}:${target} (workspace: ${workspaceId}, slot: ${slotId}, attempt: ${job.attemptsMade + 1})`);
 
     const scraper = await getScraperForSlot(slotId);
+
+    // Fetch source details if sourceId is provided
+    let sourceDetails: any = null;
+    if (sourceId) {
+        sourceDetails = await prisma.scraperSource.findUnique({ where: { id: sourceId } });
+    }
 
     // Rate-limit delay (stagger requests)
     await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
 
     const maxAgeHours = settings?.maxPostAgeHours || 172;
     const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
-    console.log(`[ScrapeWorker] Scraping @${username} since ${since.toISOString()}...`);
 
-    const posts = await scraper.scrapeAccount(username, since);
-    console.log(`[ScrapeWorker] Found ${posts.length} posts for @${username}`);
+    let posts = [];
+    let followerCount = 0;
 
-    // Fetch (or use cached) follower count for this account
-    const followerCount = await getOrFetchFollowerCount(username, scraper);
-    console.log(`[ScrapeWorker] @${username} follower count: ${followerCount}`);
+    if (type === 'TOPIC') {
+        console.log(`[ScrapeWorker] Scraping topic #${target} since ${since.toISOString()}...`);
+        posts = await scraper.scrapeTopic(target, since);
+    } else {
+        console.log(`[ScrapeWorker] Scraping @${target} since ${since.toISOString()}...`);
+        posts = await scraper.scrapeAccount(target, since);
+        // Fetch (or use cached) follower count for this account
+        followerCount = await getOrFetchFollowerCount(target, scraper);
+        console.log(`[ScrapeWorker] @${target} follower count: ${followerCount}`);
+    }
+
+    console.log(`[ScrapeWorker] Found ${posts.length} posts for ${target}`);
 
     let newCount = 0;
-
 
     for (const post of posts) {
         // Skip empty posts
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
-
 
         const hasVideo = post.mediaUrls.some(m => m.type === 'video');
         if (hasVideo && post.postUrl) {
@@ -111,15 +123,16 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                 ...post,
                 postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
             },
-            username,
+            type === 'TOPIC' ? `#${target}` : target,
             workspaceId,
             settings,
             { skipTranslation },
-            followerCount
+            followerCount,
+            sourceDetails
         );
 
         if (!savedPost) {
-            continue; // Already exists, stats updated
+            continue; // Already exists, stats updated, or rejected by gates
         }
 
         newCount++;
@@ -174,8 +187,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
     }
 
 
-    console.log(`[ScrapeWorker] Done @${username}: ${newCount} new posts`);
-    return { username, newCount, total: posts.length };
+    console.log(`[ScrapeWorker] Done ${target}: ${newCount} new posts`);
+    return { target, newCount, total: posts.length };
 }
 
 // ─── Start Worker ────────────────────────────────────────────────────────────
@@ -193,7 +206,7 @@ const worker = new Worker<ScrapeJobData>(
 );
 
 worker.on("completed", (job) => {
-    console.log(`[ScrapeWorker] ✅ Job ${job.id} completed (${job.returnvalue?.username})`);
+    console.log(`[ScrapeWorker] ✅ Job ${job.id} completed (${job.returnvalue?.target})`);
 });
 
 worker.on("failed", (job, err) => {

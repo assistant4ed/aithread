@@ -29,6 +29,7 @@ cron.schedule("* * * * *", async () => {
     try {
         const workspaces = await prisma.workspace.findMany({
             where: { isActive: true },
+            include: { sources: true },
         });
 
         if (workspaces.length === 0) {
@@ -100,7 +101,10 @@ cron.schedule("* * * * *", async () => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function runScrape(ws: any) {
-    if (ws.targetAccounts.length === 0) return;
+    const sources = ws.sources || [];
+    const legacyAccounts = ws.targetAccounts || [];
+
+    if (sources.length === 0 && legacyAccounts.length === 0) return;
 
     console.log(`[Scrape] Starting cycle for ${ws.name}...`);
 
@@ -125,20 +129,47 @@ async function runScrape(ws: any) {
     };
 
     let count = 0;
-    for (const username of ws.targetAccounts) {
+
+    // 1. Process ScraperSource (New System)
+    for (const source of sources) {
+        if (!source.isActive) continue;
+
         const jobData: ScrapeJobData = {
-            username,
+            target: source.value,
+            type: source.type,
             workspaceId: ws.id,
             settings,
             skipTranslation: limitReached,
+            sourceId: source.id,
         };
 
-        await scrapeQueue.add(`scrape-${ws.id}-${username}-${Date.now()}`, jobData, {
+        await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData, {
             removeOnComplete: true,
             removeOnFail: { count: 100 },
         });
         count++;
     }
+
+    // 2. Process legacy targetAccounts (Backward Compatibility)
+    for (const username of legacyAccounts) {
+        // Skip if already in sources as an ACCOUNT
+        if (sources.some((s: any) => s.type === 'ACCOUNT' && s.value === username)) continue;
+
+        const jobData: ScrapeJobData = {
+            target: username,
+            type: 'ACCOUNT',
+            workspaceId: ws.id,
+            settings,
+            skipTranslation: limitReached,
+        };
+
+        await scrapeQueue.add(`scrape-legacy-${ws.id}-${username}-${Date.now()}`, jobData, {
+            removeOnComplete: true,
+            removeOnFail: { count: 100 },
+        });
+        count++;
+    }
+
     console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
 }
 

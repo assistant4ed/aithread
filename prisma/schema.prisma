@@ -46,6 +46,32 @@ model Workspace {
   articles              SynthesizedArticle[]
   autoApproveDrafts     Boolean              @default(false)
   autoApprovePrompt     String?
+  sources               ScraperSource[]
+
+  // AI Configuration
+  aiProvider            String               @default("GROQ")
+  aiModel               String               @default("llama-3.3-70b-versatile")
+  aiApiKey              String?              // Optional override
+}
+
+model ScraperSource {
+  id          String     @id @default(cuid())
+  workspaceId String
+  type        SourceType 
+  value       String     
+  platform    Platform
+  isActive    Boolean    @default(true)
+
+  minLikes    Int?       @default(100)
+  minReplies  Int?       @default(5)
+  maxAgeHours Int?       @default(3)
+
+  trustWeight Float      @default(1.0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
 }
 
 model Post {
@@ -106,6 +132,7 @@ model SynthesizedArticle {
   publishedUrlInstagram String?
   publishedUrlTwitter   String?
   tweetId               String?
+  formatUsed            String?
   workspace             Workspace  @relation(fields: [workspaceId], references: [id])
 }
 
@@ -121,4 +148,15 @@ enum CoherenceStatus {
   PENDING
   COHERENT
   ISOLATED
+}
+
+enum SourceType {
+  ACCOUNT
+  TOPIC
+}
+
+enum Platform {
+  THREADS
+  INSTAGRAM
+  TWITTER
 }
