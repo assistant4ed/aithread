@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { getProvider } from "./ai/provider";
+import { calculateTopicScore, applyFreshnessAdjustment } from "./scoring/topicScore";
 
 export interface WorkspaceSettings {
     translationPrompt: string;
@@ -55,21 +56,26 @@ export async function processPost(
     }
 ) {
     const validPostedAt = safeDate(postData.postedAt);
+    const ageHours = validPostedAt ? (Date.now() - validPostedAt.getTime()) / (1000 * 60 * 60) : 0;
 
-    // 1. Freshness gate — skip posts older than maxPostAgeHours
-    // STRICT MODE: If maxPostAgeHours is set, we MUST have a valid date.
-    if (settings.maxPostAgeHours) {
-        if (!validPostedAt) {
-            console.log(`[Processor] Skipping post ${postData.threadId} (missing valid timestamp, likely old/pinned)`);
+    // 1. Freshness gate
+    if (source?.type === 'ACCOUNT') {
+        // Accounts keep hard gate
+        if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
+            console.log(`[Processor] Skipping outdated account post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
             return undefined;
         }
-
-        const ageMs = Date.now() - validPostedAt.getTime();
-        const ageHours = ageMs / (1000 * 60 * 60);
-        if (ageHours > settings.maxPostAgeHours) {
-            console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
+    } else if (source?.type === 'TOPIC') {
+        // Topics use sliding penalty (implemented in scoring step below)
+        // We only apply a hard cutoff at 72h as a safety measure
+        if (ageHours > 72) {
+            console.log(`[Processor] Skipping very old topic post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
             return undefined;
         }
+    } else if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
+        // Fallback for unknown source types
+        console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
+        return undefined;
     }
 
     // 2. Check if post exists
@@ -103,28 +109,47 @@ export async function processPost(
 
     // 4. Score & Quality Gates
     let finalScore: number;
-    if (source && source.type === 'TOPIC') {
-        const score = calculateTopicHotScore(
-            { ...postData, postedAt: validPostedAt, followerCount },
-            source
-        );
-        finalScore = isNaN(score) ? 0 : score;
+    let passesGate = true;
 
-        if (finalScore === 0) {
-            console.log(`[Processor] Topic post ${postData.threadId} rejected by quality gates or spam filter.`);
+    if (source?.type === 'TOPIC') {
+        // Topic-specific spam filter (heuristic)
+        if (isLikelySpam({ content: postData.content, followerCount })) {
+            console.log(`[Processor] Topic post ${postData.threadId} rejected by spam filter heuristics.`);
             return undefined;
         }
+
+        const scoreResult = calculateTopicScore({
+            likeCount: postData.likes,
+            replyCount: postData.replies,
+            repostCount: postData.reposts,
+            quoteCount: 0, // Not currently scraped
+            followerCount: followerCount || null,
+            ageHours
+        });
+
+        // Apply sliding freshness penalty
+        finalScore = applyFreshnessAdjustment(scoreResult.score, ageHours, 'TOPIC');
+
+        // Use the tier-based gate result, but we also respect the freshness adjustment (if it returned 0)
+        passesGate = scoreResult.passesGate && finalScore > 0;
+
+        if (!passesGate) {
+            console.log(`[Processor] Topic post ${postData.threadId} rejected: score ${finalScore.toFixed(1)} (${scoreResult.tier} tier)`);
+            return undefined;
+        }
+
+        console.log(`[Processor] Topic post ${postData.threadId} accepted: score ${finalScore.toFixed(1)} (${scoreResult.tier} tier)`);
     } else {
+        // Account-based scoring
         const score = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
         finalScore = isNaN(score) ? 0 : (score * (source?.trustWeight || 1.0));
-    }
 
-    // 5. Hot score gate — skip low-engagement posts entirely
-    const ingestThreshold = 10;
-
-    if (finalScore < ingestThreshold) {
-        console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(0)}, ingest limit: ${ingestThreshold})`);
-        return undefined;
+        // 5. Hot score gate — skip low-engagement posts
+        const ingestThreshold = 10;
+        if (finalScore < ingestThreshold) {
+            console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(1)}, threshold: ${ingestThreshold})`);
+            return undefined;
+        }
     }
 
     // 6. Save
