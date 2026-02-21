@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma"
 import { cookies } from "next/headers"
 import { exchangeForLongLivedToken } from "@/lib/threads_client"
 import { PrismaAdapter } from "@auth/prisma-adapter"
-import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 
@@ -17,10 +16,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     secret: process.env.AUTH_SECRET,
     session: { strategy: "jwt" }, // We use JWT for middleware compatibility
     providers: [
-        Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        }),
         Credentials({
             name: "Credentials",
             credentials: {
