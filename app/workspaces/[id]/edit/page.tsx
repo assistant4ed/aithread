@@ -43,6 +43,7 @@ export default function EditWorkspacePage() {
         aiModel: "llama-3.3-70b-versatile",
         aiApiKey: "",
         synthesisPrompt: "",
+        coherenceThreshold: 2,
     });
 
     useEffect(() => {
@@ -81,6 +82,7 @@ export default function EditWorkspacePage() {
                     aiModel: data.aiModel || "llama-3.3-70b-versatile",
                     aiApiKey: data.aiApiKey || "",
                     synthesisPrompt: data.synthesisPrompt || "",
+                    coherenceThreshold: data.coherenceThreshold || 2,
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -134,6 +136,7 @@ export default function EditWorkspacePage() {
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
                     synthesisPrompt: form.synthesisPrompt,
+                    coherenceThreshold: Number(form.coherenceThreshold),
                 }),
             });
 
@@ -402,19 +405,23 @@ export default function EditWorkspacePage() {
                         className="input font-mono text-xs"
                     />
                 </Field>
-                {/* Synthesis Prompt */}
+                {/* Coherence Threshold */}
                 <Field
-                    label="Synthesis Personality / Prompt"
-                    hint="Instructions for the AI on how to write the news articles (tone, style, etc.)"
-                    defaultValue="You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary."
+                    label="Noise vs. Consensus (Coherence Threshold)"
+                    hint="Min authors required for a story. 1 = High Noise, 5+ = High Quality/Trends."
                 >
-                    <textarea
-                        value={form.synthesisPrompt}
-                        onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
-                        rows={4}
-                        placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
-                        className="input font-mono text-xs"
-                    />
+                    <div className="flex items-center gap-4">
+                        <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step="1"
+                            value={form.coherenceThreshold}
+                            onChange={(e) => setForm({ ...form, coherenceThreshold: Number(e.target.value) })}
+                            className="flex-1 accent-accent"
+                        />
+                        <span className="text-sm font-mono w-8 text-center">{form.coherenceThreshold}</span>
+                    </div>
                 </Field>
 
 

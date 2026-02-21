@@ -38,6 +38,7 @@ export default function NewWorkspacePage() {
         aiModel: "llama-3.3-70b-versatile",
         aiApiKey: "",
         synthesisPrompt: "You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary.",
+        coherenceThreshold: 2,
     });
 
     const handleConnectOAuth = async (provider: string) => {
@@ -73,6 +74,7 @@ export default function NewWorkspacePage() {
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
                     synthesisPrompt: form.synthesisPrompt,
+                    coherenceThreshold: Number(form.coherenceThreshold),
                 }),
             });
 
@@ -120,6 +122,7 @@ export default function NewWorkspacePage() {
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
                     synthesisPrompt: form.synthesisPrompt,
+                    coherenceThreshold: Number(form.coherenceThreshold),
                 }),
             });
 
@@ -431,6 +434,24 @@ export default function NewWorkspacePage() {
                         placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
                         className="input font-mono text-xs"
                     />
+                </Field>
+                {/* Coherence Threshold */}
+                <Field
+                    label="Noise vs. Consensus (Coherence Threshold)"
+                    hint="Min authors required for a story. 1 = High Noise, 5+ = High Quality/Trends."
+                >
+                    <div className="flex items-center gap-4">
+                        <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step="1"
+                            value={form.coherenceThreshold}
+                            onChange={(e) => setForm({ ...form, coherenceThreshold: Number(e.target.value) })}
+                            className="flex-1 accent-accent"
+                        />
+                        <span className="text-sm font-mono w-8 text-center">{form.coherenceThreshold}</span>
+                    </div>
                 </Field>
 
 

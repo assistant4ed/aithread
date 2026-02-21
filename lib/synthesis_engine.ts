@@ -16,6 +16,7 @@ export interface SynthesisSettings {
     aiProvider?: string;
     aiModel?: string;
     aiApiKey?: string | null;
+    coherenceThreshold?: number; // Minimum authors for consensus
 }
 
 /**
@@ -95,8 +96,9 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
     const totalTracked = allAuthors.size || 1;
 
-    // FIX: Minimum 2 authors required (or 5%, whichever is higher)
-    const thresholdCount = Math.max(2, Math.ceil(totalTracked * 0.05));
+    // Use configurable threshold (default 2)
+    const minAuthors = settings.coherenceThreshold ?? 2;
+    const thresholdCount = Math.max(minAuthors, Math.ceil(totalTracked * 0.05));
 
     console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors.`);
 
@@ -469,6 +471,7 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     aiProvider: (ws as any).aiProvider,
                     aiModel: (ws as any).aiModel,
                     aiApiKey: (ws as any).aiApiKey,
+                    coherenceThreshold: (ws as any).coherenceThreshold,
                 });
             }
         } catch (e) {

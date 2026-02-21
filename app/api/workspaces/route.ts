@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
             aiModel,
             aiApiKey,
             synthesisPrompt,
+            coherenceThreshold,
         } = body;
 
         if (!name || !translationPrompt) {
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
                 aiModel: aiModel || "llama-3.3-70b-versatile",
                 aiApiKey: aiApiKey || null,
                 synthesisPrompt: synthesisPrompt || undefined,
+                coherenceThreshold: coherenceThreshold ? Number(coherenceThreshold) : undefined,
                 ownerId: session.user.id,
             },
             include: { sources: true }

@@ -30,6 +30,7 @@ model Workspace {
   lastSynthesizedAt     DateTime?
   clusteringPrompt      String               @default("Group these posts into news clusters. Focus on the core event or announcement. Combine posts from different authors if they are about the SAME story. Ignore generic chatter.")
   synthesisPrompt       String               @default("You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary.")
+  coherenceThreshold    Int                  @default(2)
   postLookbackHours     Int                  @default(24)
   instagramAccessToken  String?
   instagramAccountId    String?
