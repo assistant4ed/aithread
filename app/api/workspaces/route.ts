@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 // GET /api/workspaces — list all workspaces
 export async function GET() {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const workspaces = await prisma.workspace.findMany({
+        where: {
+            OR: [
+                { ownerId: session.user.id },
+                { ownerId: null }
+            ]
+        },
         orderBy: { createdAt: "desc" },
         include: {
             _count: { select: { posts: true } },
@@ -16,6 +28,11 @@ export async function GET() {
 
 // POST /api/workspaces — create a new workspace
 export async function POST(request: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     try {
         const body = await request.json();
         const {
@@ -89,6 +106,7 @@ export async function POST(request: NextRequest) {
                 aiProvider: aiProvider || "GROQ",
                 aiModel: aiModel || "llama-3.3-70b-versatile",
                 aiApiKey: aiApiKey || null,
+                ownerId: session.user.id,
             },
             include: { sources: true }
         });

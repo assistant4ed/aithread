@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   serverExternalPackages: ['puppeteer-extra', 'puppeteer-extra-plugin-stealth'],
+  allowedDevOrigins: ["nonconducive-suppletory-ha.ngrok-free.dev"],
 };
 
 export default nextConfig;

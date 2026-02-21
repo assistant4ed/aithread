@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -7,6 +8,11 @@ interface RouteParams {
 
 // GET /api/workspaces/:id — single workspace detail
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const workspace = await prisma.workspace.findUnique({
@@ -21,14 +27,38 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
+    // Check ownership
+    if (workspace.ownerId && workspace.ownerId !== session.user.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     return NextResponse.json(workspace);
 }
 
 // PATCH /api/workspaces/:id — update workspace settings
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     try {
+        // Check ownership/permissions
+        const existing = await prisma.workspace.findUnique({
+            where: { id },
+            select: { ownerId: true }
+        });
+
+        if (!existing) {
+            return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+        }
+
+        if (existing.ownerId && existing.ownerId !== session.user.id) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
         const body = await request.json();
 
         // Only allow updating specific fields
@@ -73,6 +103,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             };
         }
 
+        // Auto-assign ownerId if it was null
+        if (!existing.ownerId) {
+            data.ownerId = session.user.id;
+        }
+
         const workspace = await prisma.workspace.update({
             where: { id },
             data,
@@ -94,9 +129,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/workspaces/:id — soft-delete (set isActive = false)
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     try {
+        // Check ownership
+        const existing = await prisma.workspace.findUnique({
+            where: { id },
+            select: { ownerId: true }
+        });
+
+        if (!existing) {
+            return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+        }
+
+        if (existing.ownerId && existing.ownerId !== session.user.id) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
         const workspace = await prisma.workspace.update({
             where: { id },
             data: { isActive: false },

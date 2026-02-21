@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import AutoRefresh from "@/components/AutoRefresh";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const workspaces = await prisma.workspace.findMany({
+        where: {
+            OR: [
+                { ownerId: userId },
+                { ownerId: null }
+            ]
+        },
         orderBy: { createdAt: "desc" },
         include: {
             _count: { select: { posts: true } },

@@ -7,10 +7,10 @@ export async function POST(req: NextRequest) {
     try {
         // Read form data (NextAuth sends x-www-form-urlencoded)
         const text = await req.text();
-        console.log("📥 [Proxy] Request body:", text);
+        console.log("📥 [Proxy] Request body (raw):", text);
 
         // Forward to Threads
-        // We use the raw text body to avoid messing up parsing
+        console.log("📡 [Proxy] Forwarding to Threads: https://graph.threads.net/oauth/access_token");
         const response = await fetch("https://graph.threads.net/oauth/access_token", {
             method: "POST",
             headers: {
@@ -21,25 +21,30 @@ export async function POST(req: NextRequest) {
 
         const data = await response.json();
         console.log("📤 [Proxy] Threads response status:", response.status);
+        console.log("📦 [Proxy] Threads response data:", JSON.stringify(data));
 
         if (!response.ok) {
-            console.error("❌ [Proxy] Threads error:", JSON.stringify(data));
+            console.error("❌ [Proxy] Threads error details:", JSON.stringify(data));
+            // Auth.js expects a conform response even for errors, but typically forwarding the status is fine
             return NextResponse.json(data, { status: response.status });
         }
 
-        console.log("✅ [Proxy] Success! Adding token_type field...");
+        console.log("✅ [Proxy] Success! Patching response for NextAuth...");
 
-        // Patch the response
+        // Threads response usually looks like: { access_token: "...", user_id: 123 }
+        // NextAuth/Auth.js often expects 'token_type' and 'expires_in' for some providers
+        // and 'access_token' must be present.
         const patchedData = {
             ...data,
-            token_type: "Bearer",
-            expires_in: 3600, // Optional fallback
+            token_type: data.token_type || "Bearer",
+            expires_in: data.expires_in || 3600,
         };
 
+        console.log("⬆️ [Proxy] Sending patched data to Auth.js:", JSON.stringify(patchedData));
         return NextResponse.json(patchedData);
 
     } catch (error: any) {
         console.error("💥 [Proxy] Internal error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
     }
 }

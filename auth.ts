@@ -4,13 +4,21 @@ import Twitter from "next-auth/providers/twitter"
 import { prisma } from "@/lib/prisma"
 import { cookies } from "next/headers"
 import { exchangeForLongLivedToken } from "@/lib/threads_client"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import Google from "next-auth/providers/google"
 
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    debug: true,
+    adapter: PrismaAdapter(prisma),
+    debug: false,
     trustHost: true,
     secret: process.env.AUTH_SECRET,
+    session: { strategy: "jwt" }, // We use JWT for middleware compatibility
     providers: [
+        Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        }),
         Twitter({
             clientId: process.env.AUTH_TWITTER_ID,
             clientSecret: process.env.AUTH_TWITTER_SECRET,
@@ -72,16 +80,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
     ],
     callbacks: {
-        async signIn({ user, account, profile }) {
+        async signIn({ user, account, profile }: { user: any, account?: any, profile?: any }) {
             if (!account) return false
 
             // 1. Identify which workspace initiated this connection
             const cookieStore = await cookies()
             const workspaceId = cookieStore.get("connect_workspace_id")?.value
 
+            // If no workspace ID found, this is a main app login
             if (!workspaceId) {
-                console.error("No workspace ID found in cookies during OAuth callback")
-                return false // Reject sign-in if we don't know where to attach the tokens
+                return true
             }
 
             try {
@@ -175,6 +183,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 return false
             }
         },
+        async session({ session, token }: { session: any, token: any }) {
+            if (token?.sub && session.user) {
+                session.user.id = token.sub;
+            }
+            return session;
+        },
+        async jwt({ token, user }: { token: any, user: any }) {
+            if (user) {
+                token.id = user.id;
+            }
+            return token;
+        }
     },
 })
 

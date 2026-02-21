@@ -10,37 +10,49 @@ const defaultProvider = getProvider({
  * Validates a Threads handle by checking if its profile page 
  * has the generic "Log in" title (invalid) or a real name (valid).
  */
-async function validateThreadsHandle(handle: string): Promise<boolean> {
-    try {
-        const url = `https://www.threads.net/@${handle}`;
-        // Using a crawler User-Agent helps get the social meta tags populated
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "facebookexternalhit/1.1",
-            },
-            next: { revalidate: 3600 } // Cache results for an hour
-        });
-        const html = await response.text();
+async function validateThreadsHandle(handle: string, retries = 2): Promise<boolean> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const url = `https://www.threads.net/@${handle}`;
+            const response = await fetch(url, {
+                headers: {
+                    "User-Agent": "facebookexternalhit/1.1",
+                },
+                next: { revalidate: 3600 }
+            });
 
-        // Check for common fallback/error titles
-        if (html.includes("<title>Threads • Log in</title>") ||
-            html.includes("content=\"Threads • Log in\"") ||
-            (html.includes("Say more") && html.includes("<title>Threads</title>"))) {
+            if (!response.ok) {
+                if (response.status === 429 && attempt < retries) {
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+                return false;
+            }
+
+            const html = await response.text();
+
+            if (html.includes("<title>Threads • Log in</title>") ||
+                html.includes("content=\"Threads • Log in\"") ||
+                (html.includes("Say more") && html.includes("<title>Threads</title>"))) {
+                return false;
+            }
+
+            const lowerHandle = handle.toLowerCase();
+            return html.toLowerCase().includes(`(@${lowerHandle})`) ||
+                html.includes(`&#064;${lowerHandle}`);
+
+        } catch (e: any) {
+            if (attempt < retries && (e.code === 'ETIMEDOUT' || e.message?.includes('fetch failed'))) {
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            console.error(`[Discovery] Validation error for @${handle}:`, e);
             return false;
         }
-
-        // Check if the handle (with @ or encoded) exists in the title/meta
-        const lowerHandle = handle.toLowerCase();
-        if (html.toLowerCase().includes(`(@${lowerHandle})`) ||
-            html.includes(`&#064;${lowerHandle}`)) {
-            return true;
-        }
-
-        return false;
-    } catch (e) {
-        console.error(`[Discovery] Validation error for @${handle}:`, e);
-        return false;
     }
+    return false;
 }
 
 export async function POST(req: NextRequest) {
@@ -86,17 +98,28 @@ export async function POST(req: NextRequest) {
         const parsed = JSON.parse(raw);
         const potentialHandles: string[] = parsed.handles || [];
 
-        console.log(`[Discovery] Generated ${potentialHandles.length} potential handles. Validating...`);
+        console.log(`[Discovery] Generated ${potentialHandles.length} potential handles. Validating in batches...`);
 
-        // Concurrently validate all handles
-        const results = await Promise.all(
-            potentialHandles.map(async (handle) => {
-                const isValid = await validateThreadsHandle(handle);
-                return isValid ? handle : null;
-            })
-        );
+        // Validate handles in batches to avoid rate limits and timeouts
+        const validHandles: string[] = [];
+        const BATCH_SIZE = 5;
 
-        const validHandles = results.filter((h): h is string => h !== null);
+        for (let i = 0; i < potentialHandles.length; i += BATCH_SIZE) {
+            const batch = potentialHandles.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(
+                batch.map(async (handle) => {
+                    const isValid = await validateThreadsHandle(handle);
+                    return isValid ? handle : null;
+                })
+            );
+
+            validHandles.push(...batchResults.filter((h): h is string => h !== null));
+
+            // Small delay between batches to be respectful
+            if (i + BATCH_SIZE < potentialHandles.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
 
         console.log(`[Discovery] Validation complete. ${validHandles.length}/${potentialHandles.length} valid.`);
 
