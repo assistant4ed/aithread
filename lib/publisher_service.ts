@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { createContainer, publishContainer, waitForContainer, refreshLongLivedToken } from "./threads_client";
+import { stripPlatformReferences } from "./sanitizer";
 
 
 export interface PublisherConfig {
@@ -166,7 +167,8 @@ export async function publishArticle(
     },
     config: PublisherConfig
 ) {
-    let text = article.articleContent;
+    let rawText = article.articleContent;
+    let text = stripPlatformReferences(rawText);
 
     // Determine media
     let mediaUrl = "";
@@ -291,7 +293,7 @@ export async function publishArticle(
                 config.instagramAccessToken,
                 mediaType === "VIDEO" ? 'VIDEO' : 'IMAGE',
                 mediaUrl,
-                text, // Caption
+                text, // Cleaned caption
                 undefined,
                 undefined,
                 coverUrl

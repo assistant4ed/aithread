@@ -91,13 +91,16 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                         <p className="text-sm text-muted">No accounts configured</p>
                     ) : (
                         <div className="flex flex-wrap gap-2">
-                            {workspace.targetAccounts.map((acc) => (
-                                <span
+                            {workspace.targetAccounts.map((acc: string) => (
+                                <a
                                     key={acc}
-                                    className="text-sm px-3 py-1 rounded-full bg-surface border border-border text-foreground"
+                                    href={`https://www.threads.net/@${acc}`}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="text-sm px-3 py-1 rounded-full bg-surface border border-border text-foreground hover:bg-surface-hover hover:border-accent/30 transition-all"
                                 >
-                                    @{acc}
-                                </span>
+                                    @{acc} ↗
+                                </a>
                             ))}
                         </div>
                     )}
@@ -202,7 +205,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {recentArticles.map((article) => (
+                        {recentArticles.map((article: any) => (
                             <div
                                 key={article.id}
                                 className="border border-border rounded-lg p-5 hover:bg-surface-hover transition-colors"
@@ -224,7 +227,8 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                                 <div className="flex items-center gap-4 text-xs text-muted">
                                     <span>👥 {article.authorCount} sources</span>
                                     <span>📄 {article.postCount} posts</span>
-                                    {article.publishedUrl && (
+                                    <span>📊 {((article as any).views || 0).toLocaleString()} views</span>
+                                    {(article as any).publishedUrl && (
                                         <a
                                             href={article.publishedUrl}
                                             target="_blank"

@@ -99,7 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token_endpoint_auth_method: "client_secret_post",
             },
             authorization: {
-                url: "https://www.threads.com/oauth/authorize",
+                url: "https://www.threads.net/oauth/authorize",
                 params: {
                     scope: "threads_basic,threads_content_publish",
                     response_type: "code",

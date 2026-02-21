@@ -25,6 +25,10 @@ interface SynthesizedArticle {
     selectedMediaType?: string | null;
     scheduledPublishAt?: string | null;
     externalUrls?: string[];
+    views: number;
+    likes: number;
+    replies: number;
+    reposts: number;
 }
 
 const STATUS_TABS = ["ALL", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "ERROR"] as const;
@@ -214,6 +218,12 @@ export default function ArticlesPage() {
                                     </div>
                                     <div className="mt-2 text-xs text-muted">
                                         Sources: {article.authorCount} distinct authors, {article.postCount} posts
+                                        <div className="flex items-center gap-3 mt-1.5 font-mono text-[10px] text-muted-foreground">
+                                            <span className="bg-surface px-1.5 py-0.5 rounded border border-border">📊 {article.views.toLocaleString()} views</span>
+                                            <span className="bg-surface px-1.5 py-0.5 rounded border border-border">❤️ {article.likes.toLocaleString()} likes</span>
+                                            <span className="bg-surface px-1.5 py-0.5 rounded border border-border">💬 {article.replies.toLocaleString()} replies</span>
+                                            <span className="bg-surface px-1.5 py-0.5 rounded border border-border">🔄 {article.reposts.toLocaleString()} reposts</span>
+                                        </div>
                                     </div>
                                     {article.sourcePosts && article.sourcePosts.length > 0 && (
                                         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">

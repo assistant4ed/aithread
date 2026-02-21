@@ -1,6 +1,9 @@
 import { signIn } from "@/auth"
 
-export default function LoginPage() {
+export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
+    const searchParams = await props.searchParams;
+    const error = searchParams.error;
+
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-accent/5 via-background to-background">
             <div className="w-full max-w-md space-y-8 text-center bg-surface border border-border/50 p-10 rounded-2xl shadow-xl backdrop-blur-sm animate-fade-in">
@@ -15,6 +18,12 @@ export default function LoginPage() {
                         Secure access to your content monitoring and publishing Command Center
                     </p>
                 </div>
+
+                {error && (
+                    <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm font-medium animate-shake">
+                        {error === "CredentialsSignin" ? "Invalid email or password" : "Authentication failed"}
+                    </div>
+                )}
 
                 <div className="space-y-4">
                     <form

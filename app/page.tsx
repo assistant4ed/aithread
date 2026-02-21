@@ -110,6 +110,11 @@ export default async function HomePage() {
                                     <span className="text-xs text-muted font-mono">
                                         {ws.isActive ? "ACTIVE" : "PAUSED"}
                                     </span>
+                                    {ws.ownerId === userId ? (
+                                        <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded border border-accent/20 font-bold uppercase">Personal</span>
+                                    ) : !ws.ownerId ? (
+                                        <span className="text-[10px] bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20 font-bold uppercase">Shared/Legacy</span>
+                                    ) : null}
                                 </div>
                                 <span className="text-xs text-muted">
                                     {ws.targetAccounts.length} accounts
@@ -172,9 +177,9 @@ function StatCard({
             <p className="text-sm text-muted">{label}</p>
             <p
                 className={`text-2xl font-bold mt-1 ${accent ? "text-warning" :
-                        success ? "text-success" :
-                            info ? "text-accent" :
-                                "text-foreground"
+                    success ? "text-success" :
+                        info ? "text-accent" :
+                            "text-foreground"
                     }`}
             >
                 {value.toLocaleString()}

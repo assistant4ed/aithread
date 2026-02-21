@@ -56,3 +56,40 @@ export function sanitizeText(text: string | null | undefined, options: SanitizeO
 
     return clean;
 }
+
+/**
+ * Strips platform-specific references like @mentions and outbound links 
+ * just before publishing to keep platform algorithms happy.
+ * 
+ * - @[Author Name](url) -> Author Name
+ * - @[Author Name] -> Author Name
+ * - [Link Title](url) -> Link Title
+ * - [Link Title] -> Link Title
+ * - raw URLs -> removed
+ */
+export function stripPlatformReferences(text: string | null | undefined): string {
+    if (!text) return "";
+
+    let clean = text;
+
+    // 1. Strip @mentions with links: @[Author Name](url) -> Author Name
+    clean = clean.replace(/@?\[([^\]]+)\]\([^\)]+\)/g, "$1");
+
+    // 2. Strip standard Markdown Links: [Title](URL) -> Title
+    clean = clean.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+
+    // 3. Strip @mentions formatting but keep name: @[Author] -> Author
+    clean = clean.replace(/@\[([^\]]+)\]/g, "$1");
+
+    // 3. Strip raw URLs (http/https)
+    // We use a simplified regex for URLs to avoid aggressive stripping of other punctuation
+    clean = clean.replace(/https?:\/\/[^\s\n\)]+/gi, "");
+
+    // 4. Clean up any leftover empty brackets from misformatted markdown [Title] -> Title
+    clean = clean.replace(/\[([^\]]+)\]/g, "$1");
+
+    // 5. Final cleanup of whitespace and empty lines that might result from stripping
+    clean = clean.replace(/\n{3,}/g, "\n\n").trim();
+
+    return clean;
+}
