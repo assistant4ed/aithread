@@ -404,8 +404,26 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
+                {/* Clustering Prompt */}
+                <Field
+                    label="Clustering Prompt"
+                    hint="Instructions for the AI to group posts into news clusters"
+                    defaultValue="Group these posts into news clusters. Focus on the core event or announcement. Combine posts from different authors if they are about the SAME story. Ignore generic chatter."
+                >
+                    <textarea
+                        value={form.clusteringPrompt}
+                        onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
+                        rows={4}
+                        placeholder="Group these posts into news clusters..."
+                        className="input font-mono text-xs"
+                    />
+                </Field>
                 {/* Synthesis Prompt */}
-                <Field label="Synthesis Personality / Prompt" hint="Instructions for the AI on how to write the news articles (tone, style, etc.)">
+                <Field
+                    label="Synthesis Personality / Prompt"
+                    hint="Instructions for the AI on how to write the news articles (tone, style, etc.)"
+                    defaultValue="You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary."
+                >
                     <textarea
                         value={form.synthesisPrompt}
                         onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
@@ -781,11 +799,13 @@ function Field({
     label,
     hint,
     required,
+    defaultValue,
     children,
 }: {
     label: string;
     hint?: string;
     required?: boolean;
+    defaultValue?: string;
     children: React.ReactNode;
 }) {
     return (
@@ -796,6 +816,14 @@ function Field({
             </span>
             {hint && <span className="text-xs text-muted block mt-0.5">{hint}</span>}
             <div className="mt-1.5">{children}</div>
+            {defaultValue && (
+                <details className="mt-2 text-[10px] text-muted-foreground/60 cursor-pointer">
+                    <summary className="hover:text-muted-foreground transition-colors outline-none">Show Default Value</summary>
+                    <div className="mt-1 p-2 bg-white/5 rounded border border-border/30 font-mono italic whitespace-pre-wrap">
+                        {defaultValue}
+                    </div>
+                </details>
+            )}
 
             <style jsx global>{`
         .input {
