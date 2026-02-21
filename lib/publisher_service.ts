@@ -273,6 +273,7 @@ export async function publishArticle(
             } catch (e) { }
 
             results.threads = threadsUrl;
+            results.threads_id = publishedId;
             console.log(`[Publisher] Threads success: ${threadsUrl}`);
         } catch (e: any) {
             console.error(`[Publisher] Threads failed:`, e.message);
@@ -378,7 +379,7 @@ export async function publishArticle(
     const anySuccess = results.threads || results.instagram || results.twitter;
 
     if (anySuccess) {
-        await prisma.synthesizedArticle.update({
+        await (prisma as any).synthesizedArticle.update({
             where: { id: article.id },
             data: {
                 status: "PUBLISHED",
@@ -388,6 +389,7 @@ export async function publishArticle(
                 publishedAtInstagram: dates.instagram,
                 publishedAtTwitter: dates.twitter,
                 publishedAt: new Date(),
+                threadsMediaId: results.threads_id, // Store the raw media ID for metrics
             },
         });
     } else {

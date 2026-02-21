@@ -16,7 +16,50 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                <div className="pt-4">
+                <div className="space-y-4">
+                    <form
+                        action={async (formData) => {
+                            "use server"
+                            const email = formData.get("email") as string
+                            const password = formData.get("password") as string
+                            await signIn("credentials", { email, password, redirectTo: "/" })
+                        }}
+                        className="space-y-4 text-left"
+                    >
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted/80 ml-1">Email Address</label>
+                            <input
+                                name="email"
+                                type="email"
+                                required
+                                placeholder="name@example.com"
+                                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all text-foreground"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted/80 ml-1">Password</label>
+                            <input
+                                name="password"
+                                type="password"
+                                required
+                                placeholder="••••••••"
+                                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all text-foreground"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="w-full py-3.5 bg-accent text-accent-foreground hover:bg-accent/90 font-bold rounded-xl shadow-lg shadow-accent/20 transition-all active:scale-[0.98]"
+                        >
+                            Sign In
+                        </button>
+                    </form>
+
+                    <div className="relative flex items-center gap-4 py-2">
+                        <div className="h-[1px] flex-1 bg-border/40" />
+                        <span className="text-[10px] uppercase tracking-widest text-muted/40 font-bold">OR</span>
+                        <div className="h-[1px] flex-1 bg-border/40" />
+                    </div>
+
                     <form
                         action={async () => {
                             "use server"
@@ -25,9 +68,9 @@ export default function LoginPage() {
                     >
                         <button
                             type="submit"
-                            className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-foreground text-background hover:bg-foreground/90 font-semibold rounded-xl transition-all duration-200 group"
+                            className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-border/50 hover:bg-surface/50 text-foreground text-sm font-medium rounded-xl transition-all group"
                         >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" viewBox="0 0 24 24">
                                 <path
                                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                                     fill="#4285F4"

@@ -230,7 +230,7 @@ export async function processPost(
     }
 
     // 6. Save
-    const savedPost = await prisma.post.create({
+    const savedPost = await (prisma.post as any).create({
         data: {
             threadId: postData.threadId,
             sourceAccount,
@@ -247,6 +247,8 @@ export async function processPost(
             postedAt: validPostedAt || null,
             status: "PENDING_REVIEW",
             workspaceId,
+            sourceId: (source as any)?.id,
+            sourceType: source?.type || "ACCOUNT",
         },
     });
 

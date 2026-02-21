@@ -67,7 +67,9 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             externalUrls: true,
             hotScore: true,
             sourceUrl: true,
-        },
+            sourceType: true,
+            sourceId: true,
+        } as any,
     });
 
     if (posts.length === 0) {
@@ -77,10 +79,12 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
     // 2. Cluster using LLM
     const docs: Document[] = posts
-        .filter(p => p.contentOriginal && p.contentOriginal.length > 20)
+        .filter(p => !!p.contentOriginal && (p.contentOriginal as string).length > 20)
         .map(p => ({
             id: p.id,
             text: `[Author: @${p.sourceAccount}] ${p.contentOriginal || ""}`,
+            sourceType: (p as any).sourceType,
+            sourceId: (p as any).sourceId,
         }));
 
     console.log(`[Synthesis] Clustering ${docs.length} posts via LLM...`);
@@ -102,13 +106,14 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const authors = new Set(clusterPosts.map(p => p.sourceAccount));
 
 
-        // 3a. Check Threshold (Strict Coherence)
+        // 3a. Check Threshold (Strict Coherence for accounts, lenient for topics)
+        const hasTopicPost = clusterPosts.some(p => (p as any).sourceType === "TOPIC");
+        const thresholdCountForCluster = hasTopicPost ? 1 : thresholdCount;
 
-
-        const isCoherent = authors.size >= thresholdCount;
+        const isCoherent = authors.size >= thresholdCountForCluster;
 
         if (!isCoherent) {
-            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCount}).`);
+            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCountForCluster}).`);
             continue;
         }
 

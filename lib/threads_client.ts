@@ -230,3 +230,37 @@ export async function refreshLongLivedToken(
 
     return await response.json() as ThreadsTokenResponse;
 }
+
+/**
+ * Fetches metrics for a specific Threads media item.
+ * Requires a long-lived access token.
+ */
+export async function getThreadsMetrics(
+    mediaId: string,
+    accessToken: string
+): Promise<{
+    views: number;
+    likes: number;
+    replies: number;
+    reposts: number;
+}> {
+    // Note: The Threads Graph API metrics endpoint might vary. 
+    // Usually it's /{media-id}/insights or just part of the media fields.
+    // Based on Threads documentation, common metrics are: views, likes, replies, reposts, quotes.
+    const endpoint = `https://graph.threads.net/v1.0/${mediaId}?fields=views,like_count,reply_count,repost_count,quote_count&access_token=${accessToken}`;
+
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+        const errorData = await response.json() as ThreadsErrorResponse;
+        const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
+        throw new Error(`Threads API Metrics Error: ${errorMessage}`);
+    }
+
+    const data = await response.json() as any;
+    return {
+        views: data.views || 0,
+        likes: data.like_count || 0,
+        replies: data.reply_count || 0,
+        reposts: (data.repost_count || 0) + (data.quote_count || 0),
+    };
+}
