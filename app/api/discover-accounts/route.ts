@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProvider } from "@/lib/ai/provider";
+import { auth } from "@/auth";
 
 const defaultProvider = getProvider({
     provider: "GROQ",
@@ -56,6 +57,11 @@ async function validateThreadsHandle(handle: string, retries = 2): Promise<boole
 }
 
 export async function POST(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     try {
         const { topic } = await req.json();
 

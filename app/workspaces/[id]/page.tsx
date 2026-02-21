@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import WorkspaceActions from "./actions";
 import AutoRefresh from "@/components/AutoRefresh";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,17 @@ interface PageProps {
 
 export default async function WorkspaceDetailPage({ params }: PageProps) {
     const { id } = await params;
+    const session = await auth();
+    const userId = session?.user?.id;
 
-    const workspace = await prisma.workspace.findUnique({
-        where: { id },
+    const workspace = await (prisma as any).workspace.findUnique({
+        where: {
+            id,
+            OR: [
+                { ownerId: userId },
+                { ownerId: null }
+            ]
+        } as any,
         include: {
             _count: {
                 select: { articles: true },
@@ -26,14 +35,14 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
     // Article stats (replacing Post stats)
     const [pendingCount, approvedCount, publishedCount, errorCount] = await Promise.all([
-        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "PENDING_REVIEW" } }),
-        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "APPROVED" } }),
-        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "PUBLISHED" } }),
-        prisma.synthesizedArticle.count({ where: { workspaceId: id, status: "ERROR" } }),
+        (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "PENDING_REVIEW" } }),
+        (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "APPROVED" } }),
+        (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "PUBLISHED" } }),
+        (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "ERROR" } }),
     ]);
 
     // Recent articles
-    const recentArticles = await prisma.synthesizedArticle.findMany({
+    const recentArticles = await (prisma as any).synthesizedArticle.findMany({
         where: { workspaceId: id },
         orderBy: { createdAt: "desc" },
         take: 10,

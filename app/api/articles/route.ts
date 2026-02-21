@@ -1,9 +1,15 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 // GET /api/articles — query synthesized articles
 export async function GET(request: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const { searchParams } = new URL(request.url);
 
     const status = searchParams.get("status");
@@ -13,10 +19,30 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, any> = {};
     if (status) where.status = status;
-    if (workspaceId) where.workspaceId = workspaceId;
+
+    // Ownership scoping
+    if (workspaceId) {
+        // Verify user owns this workspace
+        const ws = await (prisma as any).workspace.findUnique({
+            where: { id: workspaceId },
+            select: { ownerId: true }
+        });
+        if (!ws || (ws.ownerId && ws.ownerId !== userId)) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        where.workspaceId = workspaceId;
+    } else {
+        // Only return articles from workspaces the user owns (or are public)
+        where.workspace = {
+            OR: [
+                { ownerId: userId },
+                { ownerId: null }
+            ]
+        };
+    }
 
     const [articles, total] = await Promise.all([
-        prisma.synthesizedArticle.findMany({
+        (prisma as any).synthesizedArticle.findMany({
             where,
             orderBy: { createdAt: "desc" },
             take: Math.min(limit, 100),
@@ -25,7 +51,7 @@ export async function GET(request: NextRequest) {
                 workspace: { select: { id: true, name: true } },
             },
         }),
-        prisma.synthesizedArticle.count({ where }),
+        (prisma as any).synthesizedArticle.count({ where }),
     ]);
 
     // Hydrate source posts for media display and source links

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -7,12 +8,18 @@ interface RouteParams {
 
 // GET /api/posts/:id — single post detail
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const { id } = await params;
 
-    const post = await prisma.post.findUnique({
+    const post = await (prisma as any).post.findUnique({
         where: { id },
         include: {
-            workspace: { select: { id: true, name: true } },
+            workspace: { select: { id: true, name: true, ownerId: true } },
         },
     });
 
@@ -20,14 +27,39 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
+    // Ownership check
+    if (post.workspace?.ownerId && post.workspace.ownerId !== userId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     return NextResponse.json(post);
 }
 
 // PATCH /api/posts/:id — update post status, translation, etc.
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const { id } = await params;
 
     try {
+        // Verify ownership
+        const post = await (prisma as any).post.findUnique({
+            where: { id },
+            select: { workspace: { select: { ownerId: true } } }
+        });
+
+        if (!post) {
+            return NextResponse.json({ error: "Post not found" }, { status: 404 });
+        }
+
+        if (post.workspace?.ownerId && post.workspace.ownerId !== userId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
         const body = await request.json();
 
         const allowedFields = [
@@ -46,12 +78,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             data.publishedAt = new Date();
         }
 
-        const post = await prisma.post.update({
+        const updated = await (prisma as any).post.update({
             where: { id },
             data,
         });
 
-        return NextResponse.json(post);
+        return NextResponse.json(updated);
     } catch (error: any) {
         if (error.code === "P2025") {
             return NextResponse.json({ error: "Post not found" }, { status: 404 });

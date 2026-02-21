@@ -9,7 +9,8 @@ export default async function HomePage() {
     const session = await auth();
     const userId = session?.user?.id;
 
-    const workspaces = await prisma.workspace.findMany({
+    // Fetch workspaces owned by user (or unowned)
+    const workspaces = await (prisma as any).workspace.findMany({
         where: {
             OR: [
                 { ownerId: userId },
@@ -18,14 +19,39 @@ export default async function HomePage() {
         },
         orderBy: { createdAt: "desc" },
         include: {
-            _count: { select: { posts: true } },
+            _count: { select: { articles: true } },
         },
     });
 
-    // Global stats
-    const totalPosts = await prisma.post.count();
-    const pendingPosts = await prisma.post.count({ where: { status: "PENDING_REVIEW" } });
-    const publishedPosts = await prisma.post.count({ where: { status: "PUBLISHED" } });
+    // Scope to user's workspaces for article stats
+    const workspaceFilter = {
+        workspace: {
+            OR: [
+                { ownerId: userId },
+                { ownerId: null }
+            ]
+        }
+    } as any;
+
+    // Global stats (Articles based) - Filtered by ownership
+    const totalArticles = await (prisma as any).synthesizedArticle.count({
+        where: workspaceFilter
+    });
+    const pendingArticles = await (prisma as any).synthesizedArticle.count({
+        where: { ...workspaceFilter, status: "PENDING_REVIEW" }
+    });
+    const publishedArticles = await (prisma as any).synthesizedArticle.count({
+        where: { ...workspaceFilter, status: "PUBLISHED" }
+    });
+
+    // Engagement stats - Filtered by ownership
+    const engagement = await (prisma as any).synthesizedArticle.aggregate({
+        where: workspaceFilter,
+        _sum: {
+            views: true,
+            likes: true
+        }
+    });
 
     return (
         <div className="space-y-8">
@@ -33,8 +59,8 @@ export default async function HomePage() {
             {/* Header */}
             <div className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Workspaces</h1>
-                    <p className="text-muted mt-1">Manage your content monitoring pipelines</p>
+                    <h1 className="text-3xl font-bold tracking-tight">Workspaces Dashboard</h1>
+                    <p className="text-muted mt-1">Monitor your topics and automated publishing</p>
                 </div>
                 <Link
                     href="/workspaces/new"
@@ -45,10 +71,11 @@ export default async function HomePage() {
             </div>
 
             {/* Global Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard label="Total Posts" value={totalPosts} />
-                <StatCard label="Pending Review" value={pendingPosts} accent />
-                <StatCard label="Published" value={publishedPosts} success />
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <StatCard label="Review Queue" value={pendingArticles} accent />
+                <StatCard label="Published" value={publishedArticles} success />
+                <StatCard label="Total Articles" value={totalArticles} />
+                <StatCard label="Total Views" value={engagement._sum?.views || 0} info />
             </div>
 
             {/* Workspace Grid */}
@@ -67,7 +94,7 @@ export default async function HomePage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {workspaces.map((ws, i) => (
+                    {workspaces.map((ws: any, i: number) => (
                         <Link
                             key={ws.id}
                             href={`/workspaces/${ws.id}`}
@@ -94,7 +121,9 @@ export default async function HomePage() {
                             </h3>
 
                             <div className="flex items-center gap-3 mt-3 text-sm text-muted">
-                                <span>{ws._count.posts} posts</span>
+                                <span className="flex items-center gap-1">
+                                    📄 {ws._count?.articles || 0} articles
+                                </span>
                                 <span>·</span>
                                 <span>Limit: {ws.dailyPostLimit}/day</span>
                             </div>
@@ -102,17 +131,17 @@ export default async function HomePage() {
                             {/* Account tags */}
                             {ws.targetAccounts.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-3">
-                                    {ws.targetAccounts.slice(0, 5).map((acc) => (
+                                    {ws.targetAccounts.slice(0, 3).map((acc: string) => (
                                         <span
                                             key={acc}
-                                            className="text-xs px-2 py-0.5 rounded-full bg-surface border border-border text-muted"
+                                            className="text-[10px] px-2 py-0.5 rounded-full bg-surface border border-border text-muted"
                                         >
                                             @{acc}
                                         </span>
                                     ))}
-                                    {ws.targetAccounts.length > 5 && (
-                                        <span className="text-xs px-2 py-0.5 text-muted">
-                                            +{ws.targetAccounts.length - 5} more
+                                    {ws.targetAccounts.length > 3 && (
+                                        <span className="text-[10px] px-2 py-0.5 text-muted">
+                                            +{ws.targetAccounts.length - 3} more
                                         </span>
                                     )}
                                 </div>
@@ -130,17 +159,23 @@ function StatCard({
     value,
     accent,
     success,
+    info,
 }: {
     label: string;
     value: number;
     accent?: boolean;
     success?: boolean;
+    info?: boolean;
 }) {
     return (
         <div className="border border-border rounded-xl p-4 bg-surface">
             <p className="text-sm text-muted">{label}</p>
             <p
-                className={`text-2xl font-bold mt-1 ${accent ? "text-accent" : success ? "text-success" : "text-foreground"}`}
+                className={`text-2xl font-bold mt-1 ${accent ? "text-warning" :
+                        success ? "text-success" :
+                            info ? "text-accent" :
+                                "text-foreground"
+                    }`}
             >
                 {value.toLocaleString()}
             </p>
