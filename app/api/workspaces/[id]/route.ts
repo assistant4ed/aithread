@@ -72,6 +72,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "twitterApiKey", "twitterApiSecret", "twitterAccessToken", "twitterAccessSecret",
             "autoApproveDrafts", "autoApprovePrompt",
             "aiProvider", "aiModel", "aiApiKey",
+            "synthesisPrompt",
         ];
 
         const data: Record<string, any> = {};

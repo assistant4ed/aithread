@@ -12,6 +12,7 @@ export interface SynthesisSettings {
     postLookbackHours?: number;
     targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
     hotScoreThreshold?: number;    // "Viral" threshold
+    synthesisPrompt?: string;      // User-defined personality
     aiProvider?: string;
     aiModel?: string;
     aiApiKey?: string | null;
@@ -135,7 +136,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             content: p.contentOriginal || "",
             account: p.sourceAccount,
             url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
-        })), formatId, settings);
+        })), formatId, settings.synthesisPrompt, settings);
 
         if (!synthesis) {
             console.log("  -> Synthesis failed / empty response.");
@@ -369,7 +370,7 @@ ${Object.values(POST_FORMATS).map(f =>
     }
 }
 
-export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string, settings?: SynthesisSettings): Promise<SynthesisResult | null> {
+export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string, synthesisPrompt?: string, settings?: SynthesisSettings): Promise<SynthesisResult | null> {
     const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
     const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
 
@@ -379,8 +380,11 @@ export async function synthesizeCluster(posts: { content: string; account: strin
         apiKey: settings?.aiApiKey || undefined
     });
 
+    const defaultPrompt = `You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary using the ${format.id} format.`;
+    const userPrompt = synthesisPrompt || defaultPrompt;
+
     const prompt = `
-    You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary using the ${format.id} format.
+    ${userPrompt}
     
     ## FORMAT RULES
     Structure: ${format.structure}
@@ -461,6 +465,7 @@ if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
                     synthesisLanguage: ws.synthesisLanguage,
                     postLookbackHours: ws.postLookbackHours,
                     hotScoreThreshold: ws.hotScoreThreshold, // Pass threshold
+                    synthesisPrompt: (ws as any).synthesisPrompt,
                     aiProvider: (ws as any).aiProvider,
                     aiModel: (ws as any).aiModel,
                     aiApiKey: (ws as any).aiApiKey,

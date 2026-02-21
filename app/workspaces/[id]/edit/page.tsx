@@ -42,6 +42,7 @@ export default function EditWorkspacePage() {
         aiProvider: "GROQ",
         aiModel: "llama-3.3-70b-versatile",
         aiApiKey: "",
+        synthesisPrompt: "",
     });
 
     useEffect(() => {
@@ -79,6 +80,7 @@ export default function EditWorkspacePage() {
                     aiProvider: data.aiProvider || "GROQ",
                     aiModel: data.aiModel || "llama-3.3-70b-versatile",
                     aiApiKey: data.aiApiKey || "",
+                    synthesisPrompt: data.synthesisPrompt || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -131,6 +133,7 @@ export default function EditWorkspacePage() {
                     aiProvider: form.aiProvider,
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
+                    synthesisPrompt: form.synthesisPrompt,
                 }),
             });
 
@@ -392,6 +395,16 @@ export default function EditWorkspacePage() {
                         onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
                         rows={4}
                         placeholder="Group these posts into news clusters..."
+                        className="input font-mono text-xs"
+                    />
+                </Field>
+                {/* Synthesis Prompt */}
+                <Field label="Synthesis Personality / Prompt" hint="Instructions for the AI on how to write the news articles (tone, style, etc.)">
+                    <textarea
+                        value={form.synthesisPrompt}
+                        onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
+                        rows={4}
+                        placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
                         className="input font-mono text-xs"
                     />
                 </Field>

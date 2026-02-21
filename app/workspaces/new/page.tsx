@@ -37,6 +37,7 @@ export default function NewWorkspacePage() {
         aiProvider: "GROQ",
         aiModel: "llama-3.3-70b-versatile",
         aiApiKey: "",
+        synthesisPrompt: "You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary.",
     });
 
     const handleConnectOAuth = async (provider: string) => {
@@ -71,6 +72,7 @@ export default function NewWorkspacePage() {
                     aiProvider: form.aiProvider,
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
+                    synthesisPrompt: form.synthesisPrompt,
                 }),
             });
 
@@ -113,14 +115,11 @@ export default function NewWorkspacePage() {
                     reviewWindowHours: Number(form.reviewWindowHours),
                     topicFilter: form.topicFilter || null,
                     clusteringPrompt: form.clusteringPrompt || null,
-                    instagramAccountId: form.instagramAccountId || null,
-                    instagramAccessToken: form.instagramAccessToken || null,
-                    twitterAccessToken: form.twitterAccessToken || null,
-                    twitterAccessSecret: form.twitterAccessSecret || null,
                     sources: form.sources,
                     aiProvider: form.aiProvider,
                     aiModel: form.aiModel,
                     aiApiKey: form.aiApiKey || null,
+                    synthesisPrompt: form.synthesisPrompt,
                 }),
             });
 
@@ -405,13 +404,13 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                {/* Clustering Prompt */}
-                <Field label="Clustering Prompt (Optional)" hint="Instructions for the AI to group posts into news clusters">
+                {/* Synthesis Prompt */}
+                <Field label="Synthesis Personality / Prompt" hint="Instructions for the AI on how to write the news articles (tone, style, etc.)">
                     <textarea
-                        value={form.clusteringPrompt}
-                        onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
+                        value={form.synthesisPrompt}
+                        onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
                         rows={4}
-                        placeholder="Group these posts into news clusters..."
+                        placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
                         className="input font-mono text-xs"
                     />
                 </Field>

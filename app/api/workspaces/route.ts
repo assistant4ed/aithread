@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
             aiProvider,
             aiModel,
             aiApiKey,
+            synthesisPrompt,
         } = body;
 
         if (!name || !translationPrompt) {
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
                 aiProvider: aiProvider || "GROQ",
                 aiModel: aiModel || "llama-3.3-70b-versatile",
                 aiApiKey: aiApiKey || null,
+                synthesisPrompt: synthesisPrompt || undefined,
                 ownerId: session.user.id,
             },
             include: { sources: true }
