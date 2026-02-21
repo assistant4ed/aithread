@@ -64,9 +64,9 @@ export async function POST(request: NextRequest) {
             coherenceThreshold,
         } = body;
 
-        if (!name || !translationPrompt) {
+        if (!name) {
             return NextResponse.json(
-                { error: "name and translationPrompt are required" },
+                { error: "Workspace name is required" },
                 { status: 400 }
             );
         }
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
             data: {
                 name,
                 targetAccounts: targetAccounts || [],
-                translationPrompt,
+                translationPrompt: translationPrompt || "",
                 clusteringPrompt: clusteringPrompt || undefined,
                 synthesisLanguage: synthesisLanguage || "Traditional Chinese (HK/TW)",
                 hotScoreThreshold: hotScoreThreshold ?? 50,

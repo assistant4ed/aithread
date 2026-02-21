@@ -14,6 +14,11 @@ export default function EditWorkspacePage() {
     const [saving, setSaving] = useState(false);
     const [discovering, setDiscovering] = useState(false);
     const [error, setError] = useState("");
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const [form, setForm] = useState({
         name: "",
@@ -567,7 +572,9 @@ export default function EditWorkspacePage() {
                     {/* Pipeline Preview */}
                     <div className="mt-4 p-3 bg-white/5 rounded-lg text-xs font-mono text-muted/80">
                         <div className="mb-2 font-sans font-semibold text-muted">Pipeline Preview:</div>
-                        {form.publishTimes.length > 0 ? form.publishTimes.map((time) => {
+                        {!mounted ? (
+                            <div className="animate-pulse">Loading preview...</div>
+                        ) : form.publishTimes.length > 0 ? form.publishTimes.map((time) => {
                             const [h, m] = time.split(":").map(Number);
                             const pubDate = new Date();
                             pubDate.setHours(h, m, 0, 0);
@@ -897,8 +904,8 @@ export default function EditWorkspacePage() {
                         Cancel
                     </Link>
                 </div>
-            </form >
-        </div >
+            </form>
+        </div>
     );
 }
 
@@ -916,7 +923,7 @@ function Field({
     children: React.ReactNode;
 }) {
     return (
-        <label className="block">
+        <div className="block">
             <span className="text-sm font-medium text-foreground">
                 {label}
                 {required && <span className="text-danger ml-1">*</span>}
@@ -931,26 +938,6 @@ function Field({
                     </div>
                 </details>
             )}
-
-            <style jsx global>{`
-        .input {
-          width: 100%;
-          padding: 0.5rem 0.75rem;
-          background: var(--surface);
-          border: 1px solid var(--border-color);
-          border-radius: 0.5rem;
-          color: var(--foreground);
-          font-size: 0.875rem;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .input:focus {
-          border-color: var(--accent);
-        }
-        .input::placeholder {
-          color: var(--muted);
-        }
-      `}</style>
-        </label>
+        </div>
     );
 }
