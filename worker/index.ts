@@ -43,7 +43,7 @@ cron.schedule("* * * * *", async () => {
             // 1. Initial Scrape for new/never-scraped workspaces
             if (!ws.lastScrapedAt) {
                 console.log(`[Heartbeat] 🆕 New workspace detected (${ws.name}). Triggering initial scrape...`);
-                await runScrape(ws);
+                runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e));
                 // We continue to allow other phases (like synthesis) if they happen to match, 
                 // but usually the first scrape needs minutes to complete.
             }
@@ -75,20 +75,20 @@ cron.schedule("* * * * *", async () => {
                 // Trigger if in window and haven't scraped in last 28 mins (allow slight drift)
                 if (isWithinScrapeWindow && minutesSinceLastScrape >= 28) {
                     console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr}, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
-                    await runScrape(ws);
+                    runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e));
                 }
 
                 // --- SYNTHESIS PHASE ---
                 const synthHHMM = synthDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
                 if (currentHHMM === synthHHMM) {
                     console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr})`);
-                    await runSynthesis(ws, timeStr);
+                    runSynthesis(ws, timeStr).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e));
                 }
 
                 // --- PUBLISH PHASE ---
                 if (currentHHMM === timeStr) {
-                    console.log(`[Heartbeat] � Triggering PUBLISH for ${ws.name} (Time: ${timeStr})`);
-                    await runPublish(ws);
+                    console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr})`);
+                    runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e));
                 }
             }
         }
