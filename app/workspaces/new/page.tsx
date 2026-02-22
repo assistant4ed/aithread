@@ -340,11 +340,11 @@ export default function NewWorkspacePage() {
                         <div className="p-4 border border-dashed border-border/50 rounded-lg bg-surface/30">
                             <div className="flex gap-2 items-end">
                                 <div className="flex-1">
-                                    <label className="text-[10px] text-muted block mb-1">New Source (@user or #tag)</label>
+                                    <label className="text-[10px] text-muted block mb-1">New Source (@user or #topic)</label>
                                     <input
                                         type="text"
                                         id="new-source-value"
-                                        placeholder="@username or #hashtag"
+                                        placeholder="@username, #topic with space"
                                         className="input text-sm w-full"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
@@ -362,7 +362,7 @@ export default function NewWorkspacePage() {
                                         const val = input.value.trim();
                                         if (!val) return;
 
-                                        const values = val.split(/[\s,]+/).filter(Boolean);
+                                        const values = val.split(',').map(v => v.trim()).filter(Boolean);
                                         const newSources = values.map(v => {
                                             const type = v.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
                                             if (type === 'ACCOUNT' && !v.startsWith('@')) v = '@' + v;
