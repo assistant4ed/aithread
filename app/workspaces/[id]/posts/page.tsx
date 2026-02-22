@@ -163,50 +163,45 @@ export default function PostsPage() {
                             </div>
 
                             {/* Content */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                                <div>
-                                    <p className="text-xs text-muted mb-1 font-mono">ORIGINAL</p>
-                                    <p className="text-sm text-foreground/80">{post.contentOriginal || "—"}</p>
+                            <div className="space-y-4 mb-6">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-2">
+                                            <div className="w-1 h-1 rounded-full bg-muted"></div>
+                                            Original Content
+                                        </label>
+                                        <span className="text-[10px] text-muted-foreground font-mono">#{post.threadId.slice(-6)}</span>
+                                    </div>
+                                    <div className="text-sm text-foreground/80 bg-surface/30 border border-border/50 rounded-lg p-3 italic line-clamp-3">
+                                        {post.contentOriginal}
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-xs text-muted mb-1 font-mono">TRANSLATED</p>
-                                    <p className="text-sm text-foreground">
-                                        {post.contentTranslated || (
-                                            <span className="text-muted italic">Not yet translated</span>
-                                        )}
-                                    </p>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2">
+                                            <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                                            Refined / Translated
+                                        </label>
+                                    </div>
+                                    <div className="text-sm text-foreground leading-relaxed bg-background border border-border rounded-xl p-4 shadow-inner min-h-[80px]">
+                                        {post.contentTranslated || "No translation generated yet."}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Engagement */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4 text-xs text-muted">
-                                    <span>❤️ {post.likes}</span>
-                                    <span>💬 {post.replies}</span>
-                                    <span>🔄 {post.reposts}</span>
-                                    {post.sourceUrl && (
-                                        <a
-                                            href={post.sourceUrl}
-                                            target="_blank"
-                                            rel="noopener"
-                                            className="text-accent hover:text-accent-hover"
-                                        >
-                                            View Original ↗
-                                        </a>
-                                    )}
-                                    {post.publishedUrl && (
-                                        <a
-                                            href={post.publishedUrl}
-                                            target="_blank"
-                                            rel="noopener"
-                                            className="text-success"
-                                        >
-                                            Published ↗
-                                        </a>
-                                    )}
+                            {/* Metrics & Actions Footer */}
+                            <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-1.5 bg-surface/50 px-2 py-0.5 rounded border border-border/50" title="Hot Score">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.256 1.182-3.153"></path></svg>
+                                        <span className="font-bold text-foreground">{post.hotScore.toFixed(0)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5" title="Engagement">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+                                        <span>{post.likes + post.replies + post.reposts}</span>
+                                    </div>
                                 </div>
-
-                                {/* Actions */}
                                 <div className="flex gap-2">
                                     {post.status === "PENDING_REVIEW" && (
                                         <>
@@ -259,45 +254,71 @@ export default function PostsPage() {
             {/* Edit Modal */}
             {editingPost && (
                 <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-surface border border-border rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-border flex items-center justify-between">
-                            <h3 className="font-bold text-lg">Edit Post</h3>
+                    <div className="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+                        <div className="p-5 border-b border-border flex items-center justify-between bg-surface/50">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-blue-500/10 p-2 rounded-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-xl">Edit Post Content</h3>
+                                    <p className="text-xs text-muted">Modify the original or translated version of this post.</p>
+                                </div>
+                            </div>
                             <button
                                 onClick={() => setEditingPost(null)}
-                                className="text-muted hover:text-foreground p-1 transition-colors"
+                                className="text-muted hover:text-foreground p-2 rounded-full hover:bg-surface-hover transition-all"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
                         </div>
-                        <div className="p-4 overflow-y-auto space-y-4">
-                            <div>
-                                <label className="block text-xs font-mono text-muted mb-1">ORIGINAL CONTENT</label>
+                        <div className="p-6 overflow-y-auto space-y-6 bg-surface">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-muted"></div>
+                                        Original Content (Source)
+                                    </label>
+                                    <span className="text-[10px] text-muted font-mono">{editingPost.contentOriginal?.length || 0} chars</span>
+                                </div>
                                 <textarea
                                     value={editingPost.contentOriginal || ""}
                                     onChange={(e) => setEditingPost({ ...editingPost, contentOriginal: e.target.value })}
-                                    className="w-full h-32 bg-background border border-border rounded-md p-3 text-sm focus:border-accent outline-none font-mono"
+                                    placeholder="Enter original post content..."
+                                    className="w-full h-40 bg-background border border-border rounded-xl p-4 text-sm focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none font-mono transition-all resize-none"
                                 />
+                                <p className="text-[10px] text-muted italic">This is the raw content scraped from the source account.</p>
                             </div>
-                            <div>
-                                <label className="block text-xs font-mono text-muted mb-1">TRANSLATED CONTENT</label>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-blue-500 uppercase tracking-wider flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                        Translated / Refined Content
+                                    </label>
+                                    <span className="text-[10px] text-muted font-mono">{editingPost.contentTranslated?.length || 0} chars</span>
+                                </div>
                                 <textarea
                                     value={editingPost.contentTranslated || ""}
                                     onChange={(e) => setEditingPost({ ...editingPost, contentTranslated: e.target.value })}
-                                    className="w-full h-32 bg-background border border-border rounded-md p-3 text-sm focus:border-accent outline-none font-sans"
+                                    placeholder="Enter translated or refined content..."
+                                    className="w-full h-40 bg-background border border-border rounded-xl p-4 text-sm focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none font-sans transition-all resize-none leading-relaxed"
                                 />
+                                <p className="text-[10px] text-muted italic">This version will be used for publishing if approved.</p>
                             </div>
                         </div>
-                        <div className="p-4 border-t border-border flex justify-end gap-2 bg-surface">
+                        <div className="p-5 border-t border-border flex justify-end gap-3 bg-surface/50 backdrop-blur-sm">
                             <button
                                 onClick={() => setEditingPost(null)}
-                                className="px-4 py-2 rounded-md border border-border text-muted hover:text-foreground transition-colors text-sm font-medium"
+                                className="px-6 py-2.5 rounded-xl border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-all text-sm font-semibold"
                             >
-                                Cancel
+                                Discard Changes
                             </button>
                             <button
                                 onClick={saveEdit}
-                                className="px-4 py-2 rounded-md bg-accent text-white hover:bg-accent-hover transition-colors text-sm font-medium"
+                                className="px-8 py-2.5 rounded-xl bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20 transition-all text-sm font-bold flex items-center gap-2"
                             >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                 Save Changes
                             </button>
                         </div>

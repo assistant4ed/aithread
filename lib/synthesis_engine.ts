@@ -51,14 +51,16 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     }
 
     // 1. Lookback: Configured hours or default 48h
-    const lookback = settings.postLookbackHours || 48;
-    const lookbackDate = new Date(Date.now() - lookback * 60 * 60 * 1000);
-    console.log(`[Synthesis] Looking back ${lookback} hours (since ${lookbackDate.toISOString()})...`);
+    const limitDate = new Date(Date.now() - (settings.postLookbackHours || 24) * 3600000);
+    const minHotScore = settings.hotScoreThreshold || 0;
+    console.log(`[Synthesis] Looking back ${settings.postLookbackHours || 24} hours (since ${limitDate.toISOString()}) for posts with hotScore >= ${minHotScore}...`);
 
     const posts = await prisma.post.findMany({
         where: {
             workspaceId,
-            createdAt: { gte: lookbackDate },
+            status: "PENDING_REVIEW",
+            postedAt: { gte: limitDate },
+            hotScore: { gte: minHotScore },
         },
         select: {
             id: true,

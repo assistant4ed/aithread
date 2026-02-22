@@ -196,15 +196,18 @@ export default function EditWorkspacePage() {
     if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
 
     return (
-        <div className="max-w-2xl mx-auto animate-fade-in">
-            <div className="mb-6">
+        <div className="max-w-4xl mx-auto animate-fade-in pb-12">
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight">Edit Workspace</h1>
+                    <p className="text-muted mt-1">Refine your workspace configuration and connections.</p>
+                </div>
                 <Link
                     href={`/workspaces/${workspaceId}`}
-                    className="text-sm text-muted hover:text-foreground transition-colors mb-2 block"
+                    className="text-sm text-muted hover:text-foreground transition-colors"
                 >
-                    ← Back to Workspace
+                    &larr; Back to Workspace
                 </Link>
-                <h1 className="text-2xl font-bold tracking-tight">Edit Workspace <span className="text-xs font-normal text-muted">(v0.2.1)</span></h1>
             </div>
 
             {error && (
@@ -430,7 +433,7 @@ export default function EditWorkspacePage() {
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
                         rows={3}
                         placeholder="e.g. Use a formal, journalistic tone."
-                        className="input font-mono text-xs"
+                        className="input font-mono text-xs w-full"
                     />
                 </Field>
 
@@ -445,7 +448,7 @@ export default function EditWorkspacePage() {
                         onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
                         rows={4}
                         placeholder="Group these posts into news clusters..."
-                        className="input font-mono text-xs"
+                        className="input font-mono text-xs w-full"
                     />
                 </Field>
                 {/* Coherence Threshold */}
@@ -927,17 +930,17 @@ export default function EditWorkspacePage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-4 pt-10 border-t border-border mt-10">
                     <button
                         type="submit"
                         disabled={saving}
-                        className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                        className="btn-primary px-10 py-3.5 text-base flex-1"
                     >
-                        {saving ? "Saving..." : "Save Changes"}
+                        {saving ? "Saving Changes..." : "Save Workspace Changes"}
                     </button>
                     <Link
                         href={`/workspaces/${workspaceId}`}
-                        className="px-6 py-2.5 border border-border text-muted hover:text-foreground text-sm rounded-lg transition-colors inline-block text-center"
+                        className="px-10 py-3.5 border border-border text-muted hover:text-foreground hover:bg-surface-hover text-sm font-semibold rounded-xl transition-all inline-block text-center flex-1 sm:flex-none"
                     >
                         Cancel
                     </Link>

@@ -180,8 +180,20 @@ export default function NewWorkspacePage() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto animate-fade-in">
-            <h1 className="text-2xl font-bold tracking-tight mb-6">Create Workspace</h1>
+        <div className="max-w-4xl mx-auto animate-fade-in pb-12">
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight">Create Workspace</h1>
+                    <p className="text-muted mt-1">Configure your scraping and publishing pipeline.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => router.back()}
+                    className="text-sm text-muted hover:text-foreground transition-colors"
+                >
+                    &larr; Go Back
+                </button>
+            </div>
 
             {error && (
                 <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
@@ -446,7 +458,7 @@ export default function NewWorkspacePage() {
                         onChange={(e) => setForm({ ...form, translationPrompt: e.target.value })}
                         rows={3}
                         placeholder="e.g. Use a formal, journalistic tone."
-                        className="input font-mono text-xs"
+                        className="input font-mono text-xs w-full"
                     />
                 </Field>
 
@@ -461,7 +473,7 @@ export default function NewWorkspacePage() {
                         onChange={(e) => setForm({ ...form, clusteringPrompt: e.target.value })}
                         rows={4}
                         placeholder="Group these posts into news clusters..."
-                        className="input font-mono text-xs"
+                        className="input font-mono text-xs w-full"
                     />
                 </Field>
                 {/* Synthesis Prompt */}
@@ -475,7 +487,7 @@ export default function NewWorkspacePage() {
                         onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
                         rows={4}
                         placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
-                        className="input font-mono text-xs"
+                        className="input font-mono text-xs w-full"
                     />
                 </Field>
                 {/* Coherence Threshold */}
@@ -840,18 +852,18 @@ export default function NewWorkspacePage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-4 pt-10 border-t border-border mt-10">
                     <button
                         type="submit"
                         disabled={loading}
-                        className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                        className="btn-primary px-10 py-3.5 text-base flex-1"
                     >
                         {loading ? "Creating..." : "Create Workspace"}
                     </button>
                     <button
                         type="button"
                         onClick={() => router.back()}
-                        className="px-6 py-2.5 border border-border text-muted hover:text-foreground text-sm rounded-lg transition-colors"
+                        className="px-10 py-3.5 border border-border text-muted hover:text-foreground hover:bg-surface-hover text-sm font-semibold rounded-xl transition-all"
                     >
                         Cancel
                     </button>

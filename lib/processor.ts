@@ -210,6 +210,11 @@ export async function processPost(
         // Use the tier-based gate result, but we also respect the freshness adjustment (if it returned 0)
         passesGate = scoreResult.passesGate && finalScore > 0;
 
+        // Apply workspace hotScoreThreshold if defined
+        if (settings.hotScoreThreshold && finalScore < settings.hotScoreThreshold) {
+            passesGate = false;
+        }
+
         if (!passesGate) {
             console.log(`[Processor] Topic post ${postData.threadId} rejected: score ${finalScore.toFixed(1)} (${scoreResult.tier} tier)`);
             return undefined;
@@ -222,7 +227,7 @@ export async function processPost(
         finalScore = isNaN(score) ? 0 : (score * (source?.trustWeight || 1.0));
 
         // 5. Hot score gate — skip low-engagement posts
-        const ingestThreshold = 10;
+        const ingestThreshold = settings.hotScoreThreshold || 10;
         if (finalScore < ingestThreshold) {
             console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(1)}, threshold: ${ingestThreshold})`);
             return undefined;

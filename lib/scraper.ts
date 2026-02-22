@@ -286,12 +286,12 @@ export class ThreadsScraper {
 
         const MAX_SCROLLS = 30; // Increased to allow scanning past old posts
         const allPosts = new Map<string, ThreadPost>();
-        const CONSECUTIVE_OLD_THRESHOLD = 10;
+        const CONSECUTIVE_OLD_THRESHOLD = 50;
         let consecutiveOldCount = 0;
 
         try {
             const cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
-            const searchUrl = `https://www.threads.net/search?q=%23${cleanHashtag}`;
+            const searchUrl = `https://www.threads.net/search?q=${encodeURIComponent(cleanHashtag)}&serp_type=default`;
             console.log(`[Scraper] Navigating to ${searchUrl}`);
             await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
             await page.waitForSelector('body', { timeout: 10000 });

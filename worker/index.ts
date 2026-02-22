@@ -187,7 +187,12 @@ async function runSynthesis(ws: any, targetPublishTime: string) {
         clusteringPrompt: ws.clusteringPrompt,
         synthesisLanguage: ws.synthesisLanguage,
         postLookbackHours: ws.postLookbackHours,
-        targetPublishTimeStr: targetPublishTime
+        targetPublishTimeStr: targetPublishTime,
+        hotScoreThreshold: ws.hotScoreThreshold,
+        coherenceThreshold: (ws as any).coherenceThreshold,
+        aiProvider: (ws as any).aiProvider,
+        aiModel: (ws as any).aiModel,
+        aiApiKey: (ws as any).aiApiKey,
     });
 }
 
