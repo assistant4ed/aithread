@@ -225,7 +225,18 @@ export default function NewWorkspacePage() {
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${source.type === 'TOPIC' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
                                             {source.type}
                                         </span>
-                                        <span className="text-sm font-medium">{source.value}</span>
+                                        {source.type === 'ACCOUNT' ? (
+                                            <a
+                                                href={`https://threads.net/${source.value}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-sm font-medium hover:underline"
+                                            >
+                                                {source.value}
+                                            </a>
+                                        ) : (
+                                            <span className="text-sm font-medium">{source.value}</span>
+                                        )}
                                     </div>
                                     <button
                                         type="button"
@@ -297,7 +308,7 @@ export default function NewWorkspacePage() {
                                         type="text"
                                         id="new-source-value"
                                         placeholder="@username or #hashtag"
-                                        className="input text-sm"
+                                        className="input text-sm w-full"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
@@ -311,24 +322,26 @@ export default function NewWorkspacePage() {
                                     id="add-source-btn"
                                     onClick={() => {
                                         const input = document.getElementById('new-source-value') as HTMLInputElement;
-                                        let val = input.value.trim();
+                                        const val = input.value.trim();
                                         if (!val) return;
 
-                                        const type = val.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
-                                        if (type === 'ACCOUNT' && !val.startsWith('@')) val = '@' + val;
+                                        const values = val.split(/[\s,]+/).filter(Boolean);
+                                        const newSources = values.map(v => {
+                                            const type = v.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
+                                            if (type === 'ACCOUNT' && !v.startsWith('@')) v = '@' + v;
+                                            return {
+                                                type,
+                                                value: v,
+                                                platform: 'THREADS',
+                                                isActive: true,
+                                                minLikes: type === 'TOPIC' ? 100 : null,
+                                                minReplies: type === 'TOPIC' ? 5 : null,
+                                                maxAgeHours: type === 'TOPIC' ? 3 : null,
+                                                trustWeight: type === 'ACCOUNT' ? 1.0 : 0.7,
+                                            };
+                                        });
 
-                                        const newSource = {
-                                            type,
-                                            value: val,
-                                            platform: 'THREADS',
-                                            isActive: true,
-                                            minLikes: type === 'TOPIC' ? 100 : null,
-                                            minReplies: type === 'TOPIC' ? 5 : null,
-                                            maxAgeHours: type === 'TOPIC' ? 3 : null,
-                                            trustWeight: type === 'ACCOUNT' ? 1.0 : 0.7,
-                                        };
-
-                                        setForm({ ...form, sources: [...form.sources, newSource] });
+                                        setForm({ ...form, sources: [...form.sources, ...newSources] });
                                         input.value = '';
                                     }}
                                     className="px-4 py-2 bg-white/5 border border-border rounded-lg text-sm hover:bg-white/10"
