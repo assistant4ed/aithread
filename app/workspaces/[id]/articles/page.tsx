@@ -78,6 +78,25 @@ export default function ArticlesPage() {
         fetchArticles();
     };
 
+    const deleteArticle = async (articleId: string) => {
+        if (!confirm("Are you sure you want to delete this article? This cannot be undone.")) return;
+
+        await fetch(`/api/articles/${articleId}`, {
+            method: "DELETE",
+        });
+        fetchArticles();
+    };
+
+    const updateSchedule = async (articleId: string, scheduledDateStr: string) => {
+        const scheduledPublishAt = scheduledDateStr ? new Date(scheduledDateStr).toISOString() : null;
+        await fetch(`/api/articles/${articleId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scheduledPublishAt }),
+        });
+        fetchArticles();
+    };
+
     const handleMediaSelect = async (articleId: string, url: string, type: "image" | "video") => {
         // Optimistic update
         setArticles(prev => prev.map(a =>
@@ -199,11 +218,22 @@ export default function ArticlesPage() {
                                     <span className="text-base font-bold text-accent">{article.topicName}</span>
                                     <StatusBadge status={article.status} />
                                 </div>
-                                <div className="text-right text-xs text-muted flex flex-col gap-0.5">
+                                <div className="text-right text-xs text-muted flex flex-col gap-0.5 items-end">
                                     <span>Generated: {new Date(article.createdAt).toLocaleString()}</span>
-                                    {article.scheduledPublishAt && (
+                                    {article.status !== "PUBLISHED" && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <label className="text-success font-medium">Schedule:</label>
+                                            <input
+                                                type="datetime-local"
+                                                defaultValue={article.scheduledPublishAt ? new Date(new Date(article.scheduledPublishAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
+                                                onChange={(e) => updateSchedule(article.id, e.target.value)}
+                                                className="text-[10px] bg-surface border border-border rounded px-2 py-1 outline-none focus:border-accent"
+                                            />
+                                        </div>
+                                    )}
+                                    {article.status === "PUBLISHED" && article.scheduledPublishAt && (
                                         <span className="text-success font-medium">
-                                            Scheduled: {new Date(article.scheduledPublishAt).toLocaleString()}
+                                            Published At: {new Date(article.scheduledPublishAt).toLocaleString()}
                                         </span>
                                     )}
                                 </div>
@@ -402,6 +432,12 @@ export default function ArticlesPage() {
                                             Retry
                                         </button>
                                     )}
+                                    <button
+                                        onClick={() => deleteArticle(article.id)}
+                                        className="px-4 py-1.5 rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors text-sm font-medium ml-auto"
+                                    >
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>

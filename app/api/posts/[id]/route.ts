@@ -63,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         const body = await request.json();
 
         const allowedFields = [
-            "status", "contentTranslated", "coherenceStatus", "topicClusterId",
+            "status", "contentTranslated", "contentOriginal", "mediaUrls", "coherenceStatus", "topicClusterId",
         ];
 
         const data: Record<string, any> = {};
@@ -90,5 +90,40 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
         console.error("Error updating post:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
+    const { id } = await params;
+
+    try {
+        // Verify ownership
+        const post = await (prisma as any).post.findUnique({
+            where: { id },
+            select: { workspace: { select: { ownerId: true } } }
+        });
+
+        if (!post) {
+            return NextResponse.json({ error: "Post not found" }, { status: 404 });
+        }
+
+        if (post.workspace?.ownerId && post.workspace.ownerId !== userId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
+        await (prisma as any).post.delete({
+            where: { id },
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Error deleting post:", error);
+        return NextResponse.json({ error: "Failed to delete post" }, { status: 500 });
     }
 }

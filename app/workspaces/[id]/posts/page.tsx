@@ -30,6 +30,7 @@ export default function PostsPage() {
     const [activeTab, setActiveTab] = useState<string>("PENDING_REVIEW");
     const [sortBy, setSortBy] = useState("createdAt");
     const [loading, setLoading] = useState(true);
+    const [editingPost, setEditingPost] = useState<Post | null>(null);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
@@ -65,6 +66,29 @@ export default function PostsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: newStatus }),
         });
+        fetchPosts();
+    };
+
+    const deletePost = async (postId: string) => {
+        if (!confirm("Are you sure you want to delete this post? This cannot be undone.")) return;
+
+        await fetch(`/api/posts/${postId}`, {
+            method: "DELETE",
+        });
+        fetchPosts();
+    };
+
+    const saveEdit = async () => {
+        if (!editingPost) return;
+        await fetch(`/api/posts/${editingPost.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contentOriginal: editingPost.contentOriginal,
+                contentTranslated: editingPost.contentTranslated,
+            }),
+        });
+        setEditingPost(null);
         fetchPosts();
     };
 
@@ -198,6 +222,12 @@ export default function PostsPage() {
                                             >
                                                 ✗ Reject
                                             </button>
+                                            <button
+                                                onClick={() => setEditingPost(post)}
+                                                className="text-xs px-3 py-1 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/30 hover:bg-blue-500/20 transition-colors"
+                                            >
+                                                ✎ Edit
+                                            </button>
                                         </>
                                     )}
                                     {post.status === "APPROVED" && (
@@ -213,10 +243,65 @@ export default function PostsPage() {
                                             ↻ Retry
                                         </button>
                                     )}
+                                    <button
+                                        onClick={() => deletePost(post.id)}
+                                        className="text-xs px-3 py-1 rounded-md bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 transition-colors ml-auto"
+                                    >
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Edit Modal */}
+            {editingPost && (
+                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-surface border border-border rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-border flex items-center justify-between">
+                            <h3 className="font-bold text-lg">Edit Post</h3>
+                            <button
+                                onClick={() => setEditingPost(null)}
+                                className="text-muted hover:text-foreground p-1 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto space-y-4">
+                            <div>
+                                <label className="block text-xs font-mono text-muted mb-1">ORIGINAL CONTENT</label>
+                                <textarea
+                                    value={editingPost.contentOriginal || ""}
+                                    onChange={(e) => setEditingPost({ ...editingPost, contentOriginal: e.target.value })}
+                                    className="w-full h-32 bg-background border border-border rounded-md p-3 text-sm focus:border-accent outline-none font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-mono text-muted mb-1">TRANSLATED CONTENT</label>
+                                <textarea
+                                    value={editingPost.contentTranslated || ""}
+                                    onChange={(e) => setEditingPost({ ...editingPost, contentTranslated: e.target.value })}
+                                    className="w-full h-32 bg-background border border-border rounded-md p-3 text-sm focus:border-accent outline-none font-sans"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-border flex justify-end gap-2 bg-surface">
+                            <button
+                                onClick={() => setEditingPost(null)}
+                                className="px-4 py-2 rounded-md border border-border text-muted hover:text-foreground transition-colors text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={saveEdit}
+                                className="px-4 py-2 rounded-md bg-accent text-white hover:bg-accent-hover transition-colors text-sm font-medium"
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
