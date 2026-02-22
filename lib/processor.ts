@@ -157,7 +157,7 @@ export async function processPost(
 
     // 2. Check if post exists
     const existing = await prisma.post.findUnique({
-        where: { threadId: postData.threadId },
+        where: { threadId_workspaceId: { threadId: postData.threadId, workspaceId } },
     });
 
     if (existing) {

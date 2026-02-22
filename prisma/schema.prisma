@@ -135,7 +135,7 @@ model ScraperSource {
 
 model Post {
   id                 String          @id @default(cuid())
-  threadId           String          @unique
+  threadId           String          
   sourceAccount      String
   contentOriginal    String?
   contentTranslated  String?
@@ -159,6 +159,8 @@ model Post {
   views              Int             @default(0)
   externalUrls       String[]        @default([])
   workspace          Workspace       @relation(fields: [workspaceId], references: [id])
+
+  @@unique([threadId, workspaceId])
 }
 
 model TrackedAccount {
