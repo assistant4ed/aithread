@@ -241,43 +241,68 @@ export default function EditWorkspacePage() {
                         Add specific accounts or hashtags to monitor. Topic-based scraping requires quality gates to filter noise.
                     </p>
 
-                    <div className="space-y-3">
-                        {form.sources.map((source, idx) => (
-                            <div key={idx} className="flex flex-col gap-3 p-3 bg-white/5 rounded-lg border border-border/50">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${source.type === 'TOPIC' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                                            {source.type}
-                                        </span>
-                                        {source.type === 'ACCOUNT' ? (
+                    <div className="space-y-4">
+                        {/* Account-based sources as tags */}
+                        {form.sources.some(s => s.type === 'ACCOUNT') && (
+                            <div className="flex flex-wrap gap-2 p-3 bg-white/5 rounded-lg border border-border/50">
+                                {form.sources.filter(s => s.type === 'ACCOUNT').map((source, idx) => {
+                                    const actualIdx = form.sources.findIndex(s => s === source);
+                                    return (
+                                        <div key={actualIdx} className="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md group">
                                             <a
                                                 href={`https://threads.net/${source.value}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-sm font-medium hover:underline"
+                                                className="text-xs font-medium text-blue-400 hover:underline"
                                             >
                                                 {source.value}
                                             </a>
-                                        ) : (
-                                            <span className="text-sm font-medium">{source.value}</span>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const newSources = [...form.sources];
-                                            newSources.splice(idx, 1);
-                                            setForm({ ...form, sources: newSources });
-                                        }}
-                                        className="text-muted hover:text-danger transition-colors"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newSources = [...form.sources];
+                                                    newSources.splice(actualIdx, 1);
+                                                    setForm({ ...form, sources: newSources });
+                                                }}
+                                                className="text-muted/60 hover:text-danger hover:bg-danger/10 rounded p-0.5 transition-colors"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
-                                {source.type === 'TOPIC' && (
+                        {/* Topic-based sources as cards */}
+                        {form.sources.filter(s => s.type === 'TOPIC').map((source, idx) => {
+                            const actualIdx = form.sources.findIndex(s => s === source);
+                            return (
+                                <div key={actualIdx} className="flex flex-col gap-3 p-3 bg-white/5 rounded-lg border border-border/50">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/20 text-purple-400">
+                                                TOPIC
+                                            </span>
+                                            <span className="text-sm font-medium">{source.value}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newSources = [...form.sources];
+                                                newSources.splice(actualIdx, 1);
+                                                setForm({ ...form, sources: newSources });
+                                            }}
+                                            className="text-muted hover:text-danger transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
                                     <div className="grid grid-cols-3 gap-3">
                                         <div>
                                             <label className="text-[10px] text-muted block mb-1">Min Likes</label>
@@ -286,7 +311,7 @@ export default function EditWorkspacePage() {
                                                 value={source.minLikes || 100}
                                                 onChange={(e) => {
                                                     const newSources = [...form.sources];
-                                                    newSources[idx] = { ...newSources[idx], minLikes: Number(e.target.value) };
+                                                    newSources[actualIdx] = { ...newSources[actualIdx], minLikes: Number(e.target.value) };
                                                     setForm({ ...form, sources: newSources });
                                                 }}
                                                 className="input text-xs py-1"
@@ -299,7 +324,7 @@ export default function EditWorkspacePage() {
                                                 value={source.minReplies || 5}
                                                 onChange={(e) => {
                                                     const newSources = [...form.sources];
-                                                    newSources[idx] = { ...newSources[idx], minReplies: Number(e.target.value) };
+                                                    newSources[actualIdx] = { ...newSources[actualIdx], minReplies: Number(e.target.value) };
                                                     setForm({ ...form, sources: newSources });
                                                 }}
                                                 className="input text-xs py-1"
@@ -312,16 +337,16 @@ export default function EditWorkspacePage() {
                                                 value={source.maxAgeHours || 3}
                                                 onChange={(e) => {
                                                     const newSources = [...form.sources];
-                                                    newSources[idx] = { ...newSources[idx], maxAgeHours: Number(e.target.value) };
+                                                    newSources[actualIdx] = { ...newSources[actualIdx], maxAgeHours: Number(e.target.value) };
                                                     setForm({ ...form, sources: newSources });
                                                 }}
                                                 className="input text-xs py-1"
                                             />
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                </div>
+                            );
+                        })}
 
                         {/* Add New Source */}
                         <div className="p-4 border border-dashed border-border/50 rounded-lg bg-surface/30">
