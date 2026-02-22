@@ -81,14 +81,16 @@ export function stripPlatformReferences(text: string | null | undefined): string
     // 3. Strip @mentions formatting but keep name: @[Author] -> Author
     clean = clean.replace(/@\[([^\]]+)\]/g, "$1");
 
-    // 3. Strip raw URLs (http/https)
-    // We use a simplified regex for URLs to avoid aggressive stripping of other punctuation
+    // 4. Strip standalone @handles (e.g., @openai -> openai)
+    clean = clean.replace(/@([a-zA-Z0-9_.]+)/g, "$1");
+
+    // 5. Strip raw URLs (http/https), matching standard url patterns
     clean = clean.replace(/https?:\/\/[^\s\n\)]+/gi, "");
 
-    // 4. Clean up any leftover empty brackets from misformatted markdown [Title] -> Title
+    // 6. Clean up any leftover empty brackets from misformatted markdown [Title] -> Title
     clean = clean.replace(/\[([^\]]+)\]/g, "$1");
 
-    // 5. Final cleanup of whitespace and empty lines that might result from stripping
+    // 7. Final cleanup of whitespace and empty lines that might result from stripping
     clean = clean.replace(/\n{3,}/g, "\n\n").trim();
 
     return clean;

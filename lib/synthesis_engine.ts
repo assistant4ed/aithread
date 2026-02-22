@@ -2,7 +2,7 @@
 import { prisma } from "./prisma";
 import { getProvider } from "./ai/provider";
 import { clusterPosts, Document } from "./clustering";
-import { sanitizeText } from "./sanitizer";
+import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
 
 export interface SynthesisSettings {
@@ -150,8 +150,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         // 5. Translate & Persist & Sanitize
         const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
         const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
-        CRITICAL: Keep any @[Author] mentions and [Link]s completely untouched. Do not translate usernames or URLs.
-        If the original text uses a listicle format like "🔥 [Title] - @[Author]:", maintain those exact formatting delimiters and emojis.
+        CRITICAL: Do NOT include any @usernames, author handles, or URLs.
+        If the original text uses a listicle format like "🔥 [Title] - [Generic Attribution]:", maintain those exact formatting delimiters and emojis.
         Output ONLY the translated text.`, settings);
         const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`, settings);
 
@@ -376,7 +376,7 @@ ${Object.values(POST_FORMATS).map(f =>
 
 export async function synthesizeCluster(posts: { content: string; account: string; url: string }[], formatId: string, synthesisPrompt?: string, settings?: SynthesisSettings): Promise<SynthesisResult | null> {
     const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
-    const textContext = posts.map(p => `[Author: @${p.account}] [URL: ${p.url}]\n${p.content}`).join("\n\n---\n\n");
+    const textContext = posts.map(p => `[Account: ${p.account}]\n${stripPlatformReferences(p.content)}`).join("\n\n---\n\n");
 
     const provider = getProvider({
         provider: settings?.aiProvider || "GROQ",
@@ -401,15 +401,19 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     1. NO ACADEMIC PHRASING: Do NOT use "Source 1 reports", "Author discusses", or "Post analyzes". 
     2. LEAD WITH VALUE: Hook the reader immediately.
     3. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
-    4. Make sure to attribute the original authors using @[Author Name] and their [Link]s matching the structure of the chosen format.
-    5. Output JSON: { "headline": "...", "content": "..." }
-    6. JSON ONLY. No preamble.
+    4. **CRITICAL PUBLISHING RULE:** The final output MUST be clean text. Do NOT include any @usernames, author handles, or URLs in the synthesized text. Refer to the sources generically (e.g., "Industry leaders," "Tech companies," or just state the facts).
+    5. HEADLINE CORRELATION: Your headline MUST match the structure of your content. If you write a headline promising "10 things", your content MUST actually contain a bulleted/numbered list with that exact number of items. Do not write listicle headlines for paragraph-based content.
+    6. Output JSON: { "headline": "...", "content": "..." }
+    7. JSON ONLY. No preamble.
     `;
 
     try {
         const raw = await provider.createChatCompletion([
             { role: "system", content: prompt },
-            { role: "user", content: `Posts:\n${textContext.slice(0, 15000)}` }, // Limit context
+            {
+                role: "user", content: `Posts: \n${textContext.slice(0, 15000)
+                    } `
+            }, // Limit context
         ], {
             model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
@@ -453,7 +457,7 @@ export async function translateText(text: string, prompt: string, settings?: Syn
     }
 }
 
-// Allow running directly via `tsx lib/synthesis_engine.ts`
+// Allow running directly via `tsx lib / synthesis_engine.ts`
 if (process.argv[1] && process.argv[1].endsWith("synthesis_engine.ts")) {
     (async () => {
         console.log("Running manual synthesis trigger...");
