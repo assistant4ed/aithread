@@ -31,9 +31,7 @@ export async function POST(req: NextRequest) {
 
         console.log("✅ [Proxy] Success! Patching response for NextAuth...");
 
-        // Threads response usually looks like: { access_token: "...", user_id: 123 }
-        // NextAuth/Auth.js often expects 'token_type' and 'expires_in' for some providers
-        // and 'access_token' must be present.
+
         const patchedData = {
             ...data,
             token_type: data.token_type || "Bearer",

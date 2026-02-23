@@ -106,7 +106,6 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Discovery] Generated ${potentialHandles.length} potential handles. Validating in batches...`);
 
-        // Validate handles in batches to avoid rate limits and timeouts
         const validHandles: string[] = [];
         const BATCH_SIZE = 5;
 

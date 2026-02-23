@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { SynthesizedArticle } from "@prisma/client";
 
 // GET /api/articles — query synthesized articles
 export async function GET(request: NextRequest) {
@@ -20,9 +21,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, any> = {};
     if (status) where.status = status;
 
-    // Ownership scoping
     if (workspaceId) {
-        // Verify user owns this workspace
         const ws = await (prisma as any).workspace.findUnique({
             where: { id: workspaceId },
             select: { ownerId: true }
@@ -32,7 +31,6 @@ export async function GET(request: NextRequest) {
         }
         where.workspaceId = workspaceId;
     } else {
-        // Only return articles from workspaces the user owns (or are public)
         where.workspace = {
             OR: [
                 { ownerId: userId },
@@ -54,8 +52,7 @@ export async function GET(request: NextRequest) {
         (prisma as any).synthesizedArticle.count({ where }),
     ]);
 
-    // Hydrate source posts for media display and source links
-    const hydratedArticles = await Promise.all(articles.map(async (art) => {
+    const hydratedArticles = await Promise.all(articles.map(async (art: SynthesizedArticle) => {
         const sourcePosts = await prisma.post.findMany({
             where: { id: { in: art.sourcePostIds } },
             select: { id: true, mediaUrls: true, sourceAccount: true, sourceUrl: true }
@@ -63,7 +60,6 @@ export async function GET(request: NextRequest) {
 
         let allMedia = Array.isArray(art.mediaUrls) ? art.mediaUrls : [];
 
-        // If stored media is empty, hydrate from source posts
         if (allMedia.length === 0) {
             allMedia = sourcePosts.flatMap(p => (Array.isArray(p.mediaUrls) ? p.mediaUrls : []));
         }
@@ -71,7 +67,7 @@ export async function GET(request: NextRequest) {
         return {
             ...art,
             mediaUrls: allMedia,
-            sourceAccounts: art.sourceAccounts, // already on model
+            sourceAccounts: art.sourceAccounts,
             sourcePosts: sourcePosts.map(p => ({
                 id: p.id,
                 sourceAccount: p.sourceAccount,

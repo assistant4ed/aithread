@@ -23,6 +23,7 @@ export interface ProviderConfig {
 import { GroqProvider } from "./groq";
 import { OpenAIProvider } from "./openai";
 import { AnthropicProvider } from "./anthropic";
+import { GeminiProvider } from "./gemini";
 
 export function getProvider(config: ProviderConfig): AIProvider {
     switch (config.provider.toUpperCase()) {
@@ -32,6 +33,8 @@ export function getProvider(config: ProviderConfig): AIProvider {
             return new OpenAIProvider(config.apiKey || process.env.OPENAI_API_KEY || "", config.model);
         case "CLAUDE":
             return new AnthropicProvider(config.apiKey || process.env.ANTHROPIC_API_KEY || "", config.model);
+        case "GEMINI":
+            return new GeminiProvider(config.apiKey || process.env.GEMINI_API_KEY || "", config.model);
         default:
             throw new Error(`Unsupported AI provider: ${config.provider}`);
     }

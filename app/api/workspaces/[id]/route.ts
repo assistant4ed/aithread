@@ -27,7 +27,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
-    // Check ownership
     if (workspace.ownerId && workspace.ownerId !== session.user.id) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -45,7 +44,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     try {
-        // Check ownership/permissions
         const existing = await prisma.workspace.findUnique({
             where: { id },
             select: { ownerId: true }
@@ -61,7 +59,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
         const body = await request.json();
 
-        // Only allow updating specific fields
         const allowedFields = [
             "name", "isActive", "targetAccounts", "translationPrompt",
             "hotScoreThreshold", "threadsAppId", "threadsToken", "dailyPostLimit",
@@ -82,10 +79,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             }
         }
 
-        // Handle sources if provided in body
         if (body.sources && Array.isArray(body.sources)) {
-            // Simple approach: delete existing sources and recreate
-            // In a production app, we'd use upserts or identified updates
             await prisma.scraperSource.deleteMany({
                 where: { workspaceId: id }
             });
@@ -104,7 +98,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             };
         }
 
-        // Auto-assign ownerId if it was null
         if (!existing.ownerId) {
             data.ownerId = session.user.id;
         }
@@ -138,7 +131,6 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     try {
-        // Check ownership
         const existing = await prisma.workspace.findUnique({
             where: { id },
             select: { ownerId: true }

@@ -21,9 +21,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, any> = {};
     if (status) where.status = status;
 
-    // Ownership scoping
     if (workspaceId) {
-        // Verify user owns this workspace
         const ws = await (prisma as any).workspace.findUnique({
             where: { id: workspaceId },
             select: { ownerId: true }
@@ -33,7 +31,6 @@ export async function GET(request: NextRequest) {
         }
         where.workspaceId = workspaceId;
     } else {
-        // Only return posts from workspaces the user owns (or are public)
         where.workspace = {
             OR: [
                 { ownerId: userId },
@@ -42,7 +39,6 @@ export async function GET(request: NextRequest) {
         };
     }
 
-    // Sorting: default by createdAt desc, allow hotScore sorting
     const sortBy = searchParams.get("sortBy") || "createdAt";
     const sortOrder = searchParams.get("sortOrder") || "desc";
     const allowedSortFields = ["createdAt", "hotScore", "likes", "postedAt"];

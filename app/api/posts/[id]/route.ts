@@ -27,7 +27,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    // Ownership check
     if (post.workspace?.ownerId && post.workspace.ownerId !== userId) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -46,7 +45,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     try {
-        // Verify ownership
         const post = await (prisma as any).post.findUnique({
             where: { id },
             select: { workspace: { select: { ownerId: true } } }
@@ -73,7 +71,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             }
         }
 
-        // Auto-set publishedAt when status changes to PUBLISHED
         if (data.status === "PUBLISHED") {
             data.publishedAt = new Date();
         }
@@ -103,7 +100,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     try {
-        // Verify ownership
         const post = await (prisma as any).post.findUnique({
             where: { id },
             select: { workspace: { select: { ownerId: true } } }

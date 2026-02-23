@@ -4,6 +4,34 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 
+const AI_MODELS: Record<string, { id: string, name: string }[]> = {
+    GROQ: [
+        { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" },
+        { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" },
+        { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B" },
+    ],
+    OPENAI: [
+        { id: "gpt-5.2", name: "GPT-5.2 (Latest)" },
+        { id: "gpt-5.2-pro", name: "GPT-5.2 Pro" },
+        { id: "gpt-5-mini", name: "GPT-5 Mini" },
+        { id: "o4-mini", name: "o4-mini" },
+        { id: "o3", name: "o3" },
+        { id: "gpt-4o", name: "GPT-4o" },
+    ],
+    CLAUDE: [
+        { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
+        { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
+    ],
+    GEMINI: [
+        { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)" },
+        { id: "gemini-3-pro-preview", name: "Gemini 3 Pro (Preview)" },
+        { id: "gemini-3-flash-preview", name: "Gemini 3 Flash (Preview)" },
+        { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+        { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+        { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite" },
+    ]
+};
+
 const DEFAULT_PROMPT = ""; // Empty by default, user can add style like "Use casual tone"
 
 export default function NewWorkspacePage() {
@@ -400,22 +428,34 @@ export default function NewWorkspacePage() {
                         <Field label="AI Provider">
                             <select
                                 value={form.aiProvider}
-                                onChange={(e) => setForm({ ...form, aiProvider: e.target.value })}
+                                onChange={(e) => {
+                                    const provider = e.target.value;
+                                    setForm({
+                                        ...form,
+                                        aiProvider: provider,
+                                        aiModel: AI_MODELS[provider]?.[0]?.id || ""
+                                    });
+                                }}
                                 className="input"
                             >
                                 <option value="GROQ">Groq (Fast, Llama 3)</option>
                                 <option value="OPENAI">OpenAI (GPT-4o/mini)</option>
                                 <option value="CLAUDE">Claude (Anthropic)</option>
+                                <option value="GEMINI">Google Gemini</option>
                             </select>
                         </Field>
                         <Field label="AI Model">
-                            <input
-                                type="text"
+                            <select
                                 value={form.aiModel}
                                 onChange={(e) => setForm({ ...form, aiModel: e.target.value })}
-                                placeholder={form.aiProvider === "GROQ" ? "llama-3.3-70b-versatile" : form.aiProvider === "OPENAI" ? "gpt-4o-mini" : "claude-3-5-sonnet-20241022"}
                                 className="input"
-                            />
+                            >
+                                {AI_MODELS[form.aiProvider]?.map(model => (
+                                    <option key={model.id} value={model.id}>
+                                        {model.name}
+                                    </option>
+                                ))}
+                            </select>
                         </Field>
                     </div>
 

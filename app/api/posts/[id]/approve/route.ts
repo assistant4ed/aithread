@@ -17,7 +17,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     try {
-        // Verify ownership
         const post = await (prisma as any).post.findUnique({
             where: { id },
             select: { workspace: { select: { ownerId: true } } }
