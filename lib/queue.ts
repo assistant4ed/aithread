@@ -1,5 +1,6 @@
 import { Queue, ConnectionOptions } from "bullmq";
 import { WorkspaceSettings } from "./processor";
+import type { YouTubeJobPayload } from "./youtube/types/youtube";
 
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -33,6 +34,7 @@ export const redisConnection: ConnectionOptions = parseRedisUrl(REDIS_URL);
 
 
 export const SCRAPE_QUEUE_NAME = "scrape-accounts";
+export const YOUTUBE_QUEUE_NAME = "youtube-automation";
 
 export interface ScrapeJobData {
     target: string; // username or hashtag
@@ -56,6 +58,15 @@ export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
         },
         removeOnComplete: { count: 500 },  // Keep last 500 completed
         removeOnFail: { count: 200 },       // Keep last 200 failed for debugging
+    },
+});
+
+export const youtubeQueue = new Queue<YouTubeJobPayload>(YOUTUBE_QUEUE_NAME, {
+    connection: redisConnection,
+    defaultJobOptions: {
+        attempts: 1, // Scripts can be expensive/slow, maybe don't auto-retry too much
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
     },
 });
 

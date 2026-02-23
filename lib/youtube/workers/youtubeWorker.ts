@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { Redis } from 'ioredis';
+import { YOUTUBE_QUEUE_NAME, redisConnection } from '../../queue.js';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { extractMetadata } from '../services/metadata.js';
@@ -8,10 +8,9 @@ import { generateScript } from '../services/llm/index.js';
 import { extractMediaAssets } from '../services/mediaAssets.js';
 import { generatePDF } from '../services/pdfGenerator.js';
 import { updateSheetsRow } from '../services/sheets.js';
+import { uploadToGCS } from '../services/storage.js';
 import type { YouTubeJobPayload } from '../types/youtube.js';
 
-const QUEUE_NAME = 'youtube-automation';
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const OUTPUT_DIR = path.join(process.cwd(), 'output');
 
 // Type enhancement for the result
@@ -27,14 +26,10 @@ export interface YouTubeJobResult {
 export async function startWorker() {
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
 
-    const connection = new Redis(REDIS_URL, {
-        maxRetriesPerRequest: null,
-    });
-
-    console.log(`[Worker] Starting YouTube Automation worker on queue: ${QUEUE_NAME}`);
+    console.log(`[Worker] Starting YouTube Automation worker on queue: ${YOUTUBE_QUEUE_NAME}`);
 
     const worker = new Worker<YouTubeJobPayload, YouTubeJobResult>(
-        QUEUE_NAME,
+        YOUTUBE_QUEUE_NAME,
         async (job: Job<YouTubeJobPayload>) => {
             const { videoUrl, outputLanguage, includeFrames, sheetsRowIndex } = job.data;
             console.log(`[Job ${job.id}] Processing ${videoUrl}...`);
@@ -68,9 +63,27 @@ export async function startWorker() {
                 const pdfPath = path.join(OUTPUT_DIR, outPdfName);
                 await generatePDF(script, assets, pdfPath);
 
+                // Upload to GCS
+                console.log(`[Job ${job.id}] Uploading to GCS...`);
+                const gcsDestination = `youtube/pdfs/${outPdfName}`;
+                await uploadToGCS(pdfPath, gcsDestination);
+
+                // Clean up local files
+                try {
+                    await fs.unlink(pdfPath);
+                    // Also cleanup assets if they exist locally
+                    if (assets.thumbnailPath) await fs.unlink(assets.thumbnailPath).catch(() => { });
+                    for (const s of Object.values(assets.chapterScreenshots) as string[]) {
+                        await fs.unlink(s).catch(() => { });
+                    }
+                    console.log(`[Job ${job.id}] Local cleanup successful`);
+                } catch (cleanupErr: any) {
+                    console.warn(`[Job ${job.id}] Cleanup warning: ${cleanupErr.message}`);
+                }
+
                 const result = {
                     videoId: metadata.id,
-                    pdfPath,
+                    pdfPath: gcsDestination, // Store GCS path now
                     oneLiner: script.oneLinerSummary,
                     success: true,
                     sheetsRowIndex
@@ -110,7 +123,7 @@ export async function startWorker() {
             }
         },
         {
-            connection: connection as any,
+            connection: redisConnection,
             concurrency: 2 // Handle 2 videos at a time
         }
     );

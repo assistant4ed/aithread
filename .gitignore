@@ -44,3 +44,4 @@ next-env.d.ts
 drive_tokens.json
 dev.db
 gcs-key.json
+output

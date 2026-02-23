@@ -10,7 +10,7 @@ export async function generatePDF(
     assets: MediaAssets,
     outputPath: string
 ): Promise<string> {
-    const templatePath = path.join(process.cwd(), 'src/templates/document.html');
+    const templatePath = path.join(process.cwd(), 'lib/youtube/templates/document.html');
     const templateHtml = await fs.readFile(templatePath, 'utf-8');
     const template = handlebars.compile(templateHtml);
 

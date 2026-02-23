@@ -38,6 +38,8 @@ export default async function RootLayout({
               <div className="flex items-center gap-4 text-sm text-muted">
                 <a href="/" className="hover:text-foreground transition-colors">Workspaces</a>
                 <span className="text-border">|</span>
+                <a href="/youtube" className="hover:text-foreground transition-colors text-accent">YouTube Automation</a>
+                <span className="text-border">|</span>
                 <span className="font-mono text-xs">v0.2.0</span>
               </div>
               {session?.user && (
