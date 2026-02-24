@@ -10,7 +10,9 @@ import { generatePDF } from '../services/pdfGenerator.js';
 import { updateSheetsRow } from '../services/sheets.js';
 import { uploadToGCS } from '../services/storage.js';
 import type { YouTubeJobPayload } from '../types/youtube.js';
+import { prisma } from '../../prisma.js';
 
+const WORKER_VERSION = 'v1.1 (Groq Fallback)';
 const OUTPUT_DIR = path.join(process.cwd(), 'output');
 
 // Type enhancement for the result
@@ -26,15 +28,23 @@ export interface YouTubeJobResult {
 export async function startWorker() {
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
 
-    console.log(`[Worker] Starting YouTube Automation worker on queue: ${YOUTUBE_QUEUE_NAME}`);
+    console.log(`[Worker] Starting YouTube Automation worker (${WORKER_VERSION}) on queue: ${YOUTUBE_QUEUE_NAME}`);
 
     const worker = new Worker<YouTubeJobPayload, YouTubeJobResult>(
         YOUTUBE_QUEUE_NAME,
         async (job: Job<YouTubeJobPayload>) => {
-            const { videoUrl, outputLanguage, includeFrames, sheetsRowIndex } = job.data;
-            console.log(`[Job ${job.id}] Processing ${videoUrl}...`);
+            const { dbJobId, videoUrl, outputLanguage, includeFrames, sheetsRowIndex } = job.data;
+            console.log(`[Job ${job.id} / DB ${dbJobId}] Processing ${videoUrl}...`);
 
             try {
+                // Mark job as processing
+                if (dbJobId) {
+                    await prisma.youtubeJob.update({
+                        where: { id: dbJobId },
+                        data: { status: 'PROCESSING' }
+                    });
+                }
+
                 job.updateProgress(10);
                 const metadata = await extractMetadata(videoUrl);
                 console.log(`[Job ${job.id}] Metadata extracted: ${metadata.title}`);
@@ -89,6 +99,19 @@ export async function startWorker() {
                     sheetsRowIndex
                 };
 
+                // Mark job as completed in DB
+                if (dbJobId) {
+                    await prisma.youtubeJob.update({
+                        where: { id: dbJobId },
+                        data: {
+                            status: 'COMPLETED',
+                            pdfUrl: gcsDestination,
+                            oneLiner: script.oneLinerSummary,
+                            videoId: metadata.id
+                        }
+                    });
+                }
+
                 if (sheetsRowIndex !== undefined) {
                     await updateSheetsRow({
                         rowIndex: sheetsRowIndex,
@@ -104,6 +127,17 @@ export async function startWorker() {
             } catch (err: any) {
                 console.error(`[Job ${job.id}] Failed: ${err.message}`);
 
+                // Mark job as failed in DB
+                if (dbJobId) {
+                    await prisma.youtubeJob.update({
+                        where: { id: dbJobId },
+                        data: {
+                            status: 'FAILED',
+                            error: err.message
+                        }
+                    });
+                }
+
                 if (sheetsRowIndex !== undefined) {
                     await updateSheetsRow({
                         rowIndex: sheetsRowIndex,
@@ -112,14 +146,7 @@ export async function startWorker() {
                     });
                 }
 
-                return {
-                    videoId: '',
-                    pdfPath: '',
-                    oneLiner: '',
-                    success: false,
-                    error: err.message,
-                    sheetsRowIndex
-                };
+                throw err;
             }
         },
         {

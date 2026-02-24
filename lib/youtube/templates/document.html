@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{title}}</title>
+    <title>{{cleanTitle}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -38,12 +38,20 @@
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
         }
 
+        .cover-page {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 80px); /* 100vh minus 40px top/bottom body padding */
+            page-break-after: always;
+        }
+
         .summary-box {
             background: var(--bg-gray);
             border-left: 4px solid var(--primary);
             padding: 20px;
             margin-bottom: 30px;
             border-radius: 0 8px 8px 0;
+            margin-top: auto;
         }
 
         .chapter {
@@ -67,6 +75,8 @@
         }
         .chapter-img {
             width: 320px;
+            max-width: 100%;
+            object-fit: contain;
             border-radius: 4px;
             float: right;
             margin-left: 20px;
@@ -99,23 +109,25 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="video-id">Video ID: {{videoId}}</div>
-        <h1 class="title">{{title}}</h1>
-        <div class="meta">
-            <span>Channel: <strong>{{channelName}}</strong></span>
-            <span>Generated: {{generatedAtFormatted}}</span>
+    <div class="cover-page">
+        <div class="header">
+            <div class="video-id">Video ID: {{videoId}}</div>
+            <h1 class="title">{{cleanTitle}}</h1>
+            <div class="meta">
+                <span>Channel: <strong>{{channelName}}</strong></span>
+                <span>Generated: {{generatedAtFormatted}}</span>
+            </div>
         </div>
-    </div>
 
-    {{#if thumbnailDataUri}}
-    <img src="{{thumbnailDataUri}}" class="main-thumbnail" alt="Video Thumbnail">
-    {{/if}}
+        {{#if thumbnailDataUri}}
+        <img src="{{thumbnailDataUri}}" class="main-thumbnail" alt="Video Thumbnail">
+        {{/if}}
 
-    <div class="summary-box">
-        <strong>One-Liner:</strong> {{oneLinerSummary}}<br>
-        <strong>Target Audience:</strong> {{targetAudience}}<br>
-        <strong>Difficulty Level:</strong> {{difficultyLevel}}
+        <div class="summary-box">
+            <strong>One-Liner:</strong> {{oneLinerSummary}}<br>
+            <strong>Target Audience:</strong> {{targetAudience}}<br>
+            <strong>Difficulty Level:</strong> {{difficultyLevel}}
+        </div>
     </div>
 
     {{#each chapters}}

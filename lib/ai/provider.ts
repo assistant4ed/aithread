@@ -1,6 +1,6 @@
 export interface AIChatMessage {
     role: "system" | "user" | "assistant";
-    content: string;
+    content: string | any[];
 }
 
 export interface AIChatOptions {

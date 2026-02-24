@@ -66,12 +66,34 @@ function parseTimestamp(ts: string): number {
 }
 
 function deduplicateSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
-    const seen = new Set<string>();
-    return segments.filter(seg => {
-        // Normalize for comparison: lowercase, strip punctuation
-        const normalized = seg.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
-        if (seen.has(normalized)) return false;
-        seen.add(normalized);
-        return true;
-    });
+    const result: TranscriptSegment[] = [];
+    for (let i = 0; i < segments.length; i++) {
+        const curr = segments[i];
+        const next = segments[i + 1];
+        if (next) {
+            // Check for overlap: does curr end with some prefix of next?
+            let overlapLength = 0;
+            const maxOverlap = Math.min(curr.text.length, next.text.length);
+            for (let j = 1; j <= maxOverlap; j++) {
+                if (curr.text.slice(-j) === next.text.slice(0, j)) {
+                    overlapLength = j;
+                }
+            }
+
+            if (overlapLength > 0) {
+                // They overlap. Append the non-overlapping prefix of curr to the result,
+                // and let the next segment carry the rest to preserve characters.
+                const nonOverlapping = curr.text.slice(0, -overlapLength).trim();
+                if (nonOverlapping) {
+                    result.push({
+                        ...curr,
+                        text: nonOverlapping
+                    });
+                }
+                continue;
+            }
+        }
+        result.push(curr);
+    }
+    return result;
 }

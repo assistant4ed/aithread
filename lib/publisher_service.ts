@@ -208,9 +208,6 @@ export async function publishArticle(
                         coverUrl = itemCover || "";
                         mediaType = "VIDEO";
                         break; // Prefer video
-                    } else if (!mediaUrl) {
-                        mediaUrl = url;
-                        mediaType = "IMAGE";
                     }
                 }
             }

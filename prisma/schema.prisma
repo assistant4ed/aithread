@@ -69,6 +69,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   workspaces    Workspace[]
+  youtubeJobs   YoutubeJob[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -257,4 +258,28 @@ model ScrapeLog {
   createdAt        DateTime    @default(now())
 
   @@index([sourceId])
+}
+
+model YoutubeJob {
+  id             String    @id @default(cuid())
+  videoId        String?
+  videoUrl       String
+  language       String
+  status         JobStatus @default(PENDING)
+  pdfUrl         String?
+  oneLiner       String?
+  error          String?
+  requestedById  String
+  requestedBy    User      @relation(fields: [requestedById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([requestedById])
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

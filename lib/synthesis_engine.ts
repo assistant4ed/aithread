@@ -73,6 +73,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             sourceUrl: true,
             sourceType: true,
             sourceId: true,
+            mediaUrls: true,
         } as any,
     });
 
@@ -147,6 +148,47 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             continue;
         }
 
+        // 4b. Filter Relevant Media (Vision)
+        let selectedMediaUrl: string | null = null;
+        let selectedMediaType: string | null = null;
+
+        let allMedia: { url: string, type: string }[] = [];
+        for (const p of clusterPosts) {
+            if (p.mediaUrls && Array.isArray(p.mediaUrls)) {
+                const mediaArray = p.mediaUrls as any[];
+                for (const m of mediaArray) {
+                    if (m) {
+                        const mObj = m as any;
+                        if (typeof mObj === 'string') {
+                            allMedia.push({ url: mObj, type: 'image' });
+                        } else if (mObj.url) {
+                            allMedia.push({ url: mObj.url, type: mObj.type || 'image' });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Priority 1: If there's a video, just use it (Vision can't filter videos easily)
+        const videoMedia = allMedia.find(m => m.type === 'video' || m.url.toLowerCase().includes('.mp4'));
+        if (videoMedia) {
+            selectedMediaUrl = videoMedia.url;
+            selectedMediaType = 'video';
+            console.log(`  -> Auto-selected video: ${selectedMediaUrl}`);
+        } else {
+            // Candidates are images
+            const imageCandidates = allMedia.filter(m => m.type === 'image' || !m.url.toLowerCase().includes('.mp4')).map(m => m.url);
+            if (imageCandidates.length > 0) {
+                selectedMediaUrl = await filterRelevantMedia(synthesis.content, imageCandidates, settings);
+                if (selectedMediaUrl) {
+                    selectedMediaType = 'image';
+                    console.log(`  -> Vision selected image: ${selectedMediaUrl}`);
+                } else {
+                    console.log(`  -> Vision rejected all images as irrelevant/memes.`);
+                }
+            }
+        }
+
         // 5. Translate & Persist & Sanitize
         const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
         const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
@@ -201,6 +243,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 scheduledPublishAt: scheduledAt,
                 externalUrls: uniqueUrls,
                 formatUsed: formatId,
+                selectedMediaUrl: selectedMediaUrl,
+                selectedMediaType: selectedMediaType,
             },
         });
 
@@ -454,6 +498,61 @@ export async function translateText(text: string, prompt: string, settings?: Syn
         return result || text;
     } catch (e) {
         return text;
+    }
+}
+
+async function filterRelevantMedia(articleContent: string, candidateUrls: string[], settings?: SynthesisSettings): Promise<string | null> {
+    if (!candidateUrls || candidateUrls.length === 0) return null;
+
+    // De-duplicate and limit
+    const uniqueUrls = Array.from(new Set(candidateUrls)).slice(0, 5); // Max 5 to avoid model overload
+
+    const provider = getProvider({
+        provider: "OPENAI", // Force OpenAI for Vision
+        model: "gpt-4o",
+        apiKey: process.env.OPENAI_API_KEY || settings?.aiApiKey || undefined
+    });
+
+    const promptText = `You are a social media editor.
+We have an article below. We also have ${uniqueUrls.length} candidate images.
+We need to select the MOST RELEVANT image to accompany this article.
+CRITICAL RULES:
+1. REJECT memes, reaction images, selfies, random screenshots, or completely unrelated pictures.
+2. ACCEPT high-quality, professional, or directly relevant imagery (e.g. tech logos, charts, products, events).
+3. Output a JSON object: { "selectedIndex": number_or_null, "reason": "brief explanation" }
+4. If NO image is suitable, explicitly set "selectedIndex" to null! Only pick an image if it's genuinely good.
+
+Article Content:
+${articleContent.slice(0, 1500)}`;
+
+    const contentArray: any[] = [
+        { type: "text", text: promptText }
+    ];
+
+    uniqueUrls.forEach((url, i) => {
+        contentArray.push({ type: "text", text: `Image [${i}]:` });
+        contentArray.push({ type: "image_url", image_url: { url } });
+    });
+
+    try {
+        const raw = await provider.createChatCompletion([
+            { role: "user", content: contentArray },
+        ], {
+            model: "gpt-4o",
+            temperature: 0.1,
+            response_format: { type: "json_object" },
+        });
+
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+
+        if (parsed.selectedIndex !== null && parsed.selectedIndex !== undefined && parsed.selectedIndex >= 0 && parsed.selectedIndex < uniqueUrls.length) {
+            return uniqueUrls[parsed.selectedIndex];
+        }
+        return null;
+    } catch (e) {
+        console.error("[Synthesis] Vision filtering failed:", e);
+        return null; // Fallback to no image instead of returning a bad meme
     }
 }
 

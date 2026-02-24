@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { youtubeQueue } from "@/lib/queue";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -17,7 +18,18 @@ export async function POST(req: NextRequest) {
 
         console.log(`[YouTube API] Queuing job for: ${videoUrl} (Lang: ${language})`);
 
+        // Create Database Record First
+        const dbJob = await prisma.youtubeJob.create({
+            data: {
+                videoUrl,
+                language,
+                status: "PENDING",
+                requestedById: session.user.id
+            }
+        });
+
         const job = await youtubeQueue.add("process-video", {
+            dbJobId: dbJob.id,
             videoUrl,
             outputLanguage: language,
             includeFrames,
@@ -43,24 +55,20 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        // Get last 20 jobs from the queue to show status
-        const jobs = await youtubeQueue.getJobs(["waiting", "active", "completed", "failed", "delayed"], 0, 19, false);
+        // Query the database for the user's jobs
+        const dbJobs = await prisma.youtubeJob.findMany({
+            where: {
+                requestedById: session.user.id
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            take: 20
+        });
 
-        const jobData = await Promise.all(jobs.map(async (job) => {
-            const state = await job.getState();
-            return {
-                id: job.id,
-                data: job.data,
-                state,
-                progress: job.progress,
-                failedReason: job.failedReason,
-                timestamp: job.timestamp,
-                finishedOn: job.finishedOn,
-                result: job.returnvalue
-            };
-        }));
-
-        return NextResponse.json({ jobs: jobData });
+        // We can optionally format this to match the previous structure
+        // or just return the DB records directly. Returning DB records is cleaner.
+        return NextResponse.json({ jobs: dbJobs });
     } catch (error: any) {
         console.error("[YouTube API] Error fetching jobs:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -27,6 +27,7 @@ export async function generatePDF(
 
     const templateData = {
         ...script,
+        cleanTitle: script.cleanTitle || script.title,
         thumbnailDataUri,
         chapters: enrichedChapters,
         generatedAtFormatted: new Date(script.generatedAt).toLocaleDateString('en-US', {

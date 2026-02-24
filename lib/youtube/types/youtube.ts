@@ -43,6 +43,7 @@ export interface ScriptChapter {
 export interface GeneratedScript {
     videoId: string;
     title: string;
+    cleanTitle: string;
     channelName: string;
     oneLinerSummary: string;
     targetAudience: string;
@@ -63,6 +64,7 @@ export interface PDFGenerationResult {
 
 // The job payload shape — what gets enqueued into BullMQ
 export interface YouTubeJobPayload {
+    dbJobId: string;            // ID of the YoutubeJob record in Prisma
     videoUrl: string;
     requestedBy?: string;       // useful for tracking who triggered it
     outputLanguage: 'zh-HK' | 'en' | 'zh-TW';

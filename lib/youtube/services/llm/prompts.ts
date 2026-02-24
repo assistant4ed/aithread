@@ -11,10 +11,10 @@ STRICT OUTPUT RULES:
 
 CONTENT RULES:
 - keyPoints: Actionable or factual statements. Max 6 per chapter. Each 1–2 sentences.
-- actionItems: Things the viewer should DO. Only include if explicitly instructed in the video.
+- actionItems: For self-improvement, productivity, or how-to content, there will ALWAYS be action items. Look for imperatives, recommendations, and "you should" statements. If the video gives a framework, each component of that framework IS an action item.
 - notableQuotes: Only include if the speaker says something genuinely quotable — a memorable principle, counterintuitive insight, or strong statement. MAX 2 per chapter. If nothing qualifies, use [].
 - toolsMentioned: Software, hardware, services, frameworks, methods mentioned by name.
-- overallTakeaways: The 3–5 things a viewer should remember a week after watching. These are synthesis statements, not summaries of individual chapters.
+- overallTakeaways: YOU MUST PROVIDE EXACTLY 5 TO 8 ITEMS. This is a strict constraint. Each must be a standalone actionable or conceptual insight. Do not restate chapter headings. Include at least one specific technique or framework with its name.
 - prerequisites: What prior knowledge or tools does a viewer need? Empty if not applicable.
 - difficultyLevel: Your honest assessment of the content complexity.
 
@@ -22,6 +22,7 @@ JSON SCHEMA:
 {
   "videoId": string,
   "title": string,
+  "cleanTitle": string, // A properly formatted title in the output language
   "channelName": string,
   "oneLinerSummary": string,
   "targetAudience": string,

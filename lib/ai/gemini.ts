@@ -29,18 +29,18 @@ export class GeminiProvider implements AIProvider {
             // Format history for Gemini (excluding the last message which we'll send as the prompt)
             const history = chatMessages.slice(0, -1).map(m => ({
                 role: m.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: m.content }] as Part[],
+                parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] as Part[],
             }));
 
             const lastMessage = chatMessages[chatMessages.length - 1];
 
             // If there's a system message, we either use it in model configuration (newer SDKs)
             // or prepended to the first message. For simplicity and broad compatibility:
-            let promptContent = lastMessage.content;
+            let promptContent = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
             const chat = model.startChat({
                 history,
-                systemInstruction: systemMessage?.content,
+                systemInstruction: typeof systemMessage?.content === 'string' ? systemMessage?.content : (systemMessage?.content ? JSON.stringify(systemMessage.content) : undefined),
             });
 
             const result = await chat.sendMessage(promptContent);
