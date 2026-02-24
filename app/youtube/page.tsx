@@ -5,19 +5,13 @@ import { useRouter } from "next/navigation";
 
 interface JobData {
     id: string;
-    data: {
-        videoUrl: string;
-        outputLanguage: string;
-    };
-    state: string;
-    progress: number;
-    failedReason?: string;
-    timestamp: number;
-    finishedOn?: number;
-    result?: {
-        pdfPath: string;
-        videoId: string;
-    };
+    videoUrl: string;
+    language: string;
+    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    pdfUrl?: string | null;
+    error?: string | null;
+    createdAt: string;
+    videoId?: string | null;
 }
 
 export default function YoutubeAutomationPage() {
@@ -152,23 +146,23 @@ export default function YoutubeAutomationPage() {
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${job.state === 'completed' ? 'bg-success/10 text-success border border-success/20' :
-                                                        job.state === 'failed' ? 'bg-danger/10 text-danger border border-danger/20' :
-                                                            job.state === 'active' ? 'bg-accent/10 text-accent border border-accent/20 animate-pulse' :
-                                                                'bg-muted/10 text-muted border border-muted/20'
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${job.status === 'COMPLETED' ? 'bg-success/10 text-success border border-success/20' :
+                                                    job.status === 'FAILED' ? 'bg-danger/10 text-danger border border-danger/20' :
+                                                        job.status === 'PROCESSING' || job.status === 'PENDING' ? 'bg-accent/10 text-accent border border-accent/20 animate-pulse' :
+                                                            'bg-muted/10 text-muted border border-muted/20'
                                                     }`}>
-                                                    {job.state}
+                                                    {job.status}
                                                 </span>
                                                 <span className="text-[10px] text-muted font-mono">ID: {job.id}</span>
                                                 <span className="text-[10px] text-muted">·</span>
-                                                <span className="text-[10px] text-muted">{new Date(job.timestamp).toLocaleString()}</span>
+                                                <span className="text-[10px] text-muted">{new Date(job.createdAt).toLocaleString()}</span>
                                             </div>
-                                            <p className="text-sm font-medium text-foreground truncate">{job.data.videoUrl}</p>
+                                            <p className="text-sm font-medium text-foreground truncate">{job.videoUrl}</p>
                                         </div>
 
-                                        {job.state === 'completed' && job.result?.videoId && (
+                                        {job.status === 'COMPLETED' && job.videoId && (
                                             <a
-                                                href={`/api/youtube/download/${job.result.videoId}?lang=${job.data.outputLanguage}`}
+                                                href={`/api/youtube/download/${job.videoId}?lang=${job.language}`}
                                                 className="shrink-0 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold rounded-lg border border-accent/20 transition-all"
                                             >
                                                 Download PDF
@@ -176,25 +170,24 @@ export default function YoutubeAutomationPage() {
                                         )}
                                     </div>
 
-                                    {/* Progress Bar */}
-                                    {(job.state === 'active' || job.state === 'completed') && (
+                                    {/* Progress Bar (Simulated or based on status) */}
+                                    {(job.status === 'PROCESSING' || job.status === 'COMPLETED') && (
                                         <div className="mt-3">
                                             <div className="flex items-center justify-between text-[10px] text-muted mb-1">
-                                                <span>{job.state === 'completed' ? '100%' : `${job.progress || 0}%`}</span>
-                                                <span>{job.state === 'completed' ? 'Finished' : 'Processing...'}</span>
+                                                <span>{job.status === 'COMPLETED' ? '100%' : 'Processing %'}</span>
+                                                <span>{job.status === 'COMPLETED' ? 'Finished' : 'Processing...'}</span>
                                             </div>
                                             <div className="h-1.5 w-full bg-background rounded-full overflow-hidden">
                                                 <div
-                                                    className="h-full bg-accent transition-all duration-500 rounded-full shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]"
-                                                    style={{ width: `${job.state === 'completed' ? 100 : job.progress || 0}%` }}
+                                                    className={`h-full bg-accent transition-all duration-500 rounded-full shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)] ${job.status === 'PROCESSING' ? 'w-1/2 animate-pulse' : 'w-full'}`}
                                                 />
                                             </div>
                                         </div>
                                     )}
 
-                                    {job.state === 'failed' && (
+                                    {job.status === 'FAILED' && (
                                         <div className="mt-2 text-[10px] text-danger bg-danger/5 p-2 rounded border border-danger/10">
-                                            Error: {job.failedReason}
+                                            Error: {job.error || "Unknown error"}
                                         </div>
                                     )}
                                 </div>
