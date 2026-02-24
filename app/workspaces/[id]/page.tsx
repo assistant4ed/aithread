@@ -224,10 +224,13 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                                 <p className="text-sm text-foreground line-clamp-3 mb-3 whitespace-pre-wrap">
                                     {article.articleContent}
                                 </p>
-                                <div className="flex items-center gap-4 text-xs text-muted">
-                                    <span>👥 {article.authorCount} sources</span>
-                                    <span>📄 {article.postCount} posts</span>
-                                    <span>📊 {((article as any).views || 0).toLocaleString()} views</span>
+                                <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
+                                    <span className="flex items-center gap-1" title="Sources">👥 {article.authorCount}</span>
+                                    <span className="flex items-center gap-1" title="Posts">📄 {article.postCount}</span>
+                                    <span className="flex items-center gap-1" title="Views">👁️ {((article as any).views || 0).toLocaleString()}</span>
+                                    <span className="flex items-center gap-1" title="Likes">❤️ {((article as any).likes || 0).toLocaleString()}</span>
+                                    <span className="flex items-center gap-1" title="Replies">💬 {((article as any).replies || 0).toLocaleString()}</span>
+                                    <span className="flex items-center gap-1" title="Reposts">🔄 {((article as any).reposts || 0).toLocaleString()}</span>
                                     {(article as any).publishedUrl && (
                                         <a
                                             href={article.publishedUrl}

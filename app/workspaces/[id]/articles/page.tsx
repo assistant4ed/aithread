@@ -400,26 +400,49 @@ export default function ArticlesPage() {
                             {/* Actions */}
                             <div className="flex items-end justify-between border-t border-border pt-4 mt-4">
                                 <div className="text-xs text-muted flex flex-col gap-1.5">
-                                    {(article.publishedUrl || article.publishedUrlInstagram || article.publishedUrlTwitter) && (
-                                        <div className="flex flex-col gap-1">
-                                            {article.publishedUrl && (
-                                                <a href={article.publishedUrl} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-accent font-medium">
-                                                    <span>Threads</span>
-                                                    <span className="text-[10px] opacity-70">↗</span>
-                                                </a>
-                                            )}
-                                            {article.publishedUrlInstagram && (
-                                                <a href={article.publishedUrlInstagram} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-purple-400 font-medium">
-                                                    <span>Instagram</span>
-                                                    <span className="text-[10px] opacity-70">↗</span>
-                                                </a>
-                                            )}
-                                            {article.publishedUrlTwitter && (
-                                                <a href={article.publishedUrlTwitter} target="_blank" rel="noopener" className="flex items-center gap-1.5 text-foreground/80 hover:text-blue-400 font-medium">
-                                                    <span>X (Twitter)</span>
-                                                    <span className="text-[10px] opacity-70">↗</span>
-                                                </a>
-                                            )}
+                                    {article.status === "PUBLISHED" && (
+                                        <div className="flex flex-col gap-3 w-full">
+                                            {/* Metrics Row */}
+                                            <div className="flex items-center gap-4 py-2 px-3 bg-background/50 border border-border/50 rounded-lg">
+                                                <div className="flex items-center gap-1.5" title="Views">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                    <span className="text-foreground font-semibold">{article.views.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5" title="Likes">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+                                                    <span className="text-foreground font-semibold">{article.likes.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5" title="Replies">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                                    <span className="text-foreground font-semibold">{article.replies.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5" title="Reposts">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-success"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
+                                                    <span className="text-foreground font-semibold">{article.reposts.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Links Row */}
+                                            <div className="flex flex-wrap gap-2">
+                                                {article.publishedUrl && (
+                                                    <a href={article.publishedUrl} target="_blank" rel="noopener" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border hover:border-accent/40 hover:bg-accent/5 transition-all text-[11px] font-bold">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+                                                        Threads ↗
+                                                    </a>
+                                                )}
+                                                {article.publishedUrlInstagram && (
+                                                    <a href={article.publishedUrlInstagram} target="_blank" rel="noopener" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border hover:border-purple-500/40 hover:bg-purple-500/5 transition-all text-[11px] font-bold">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line></svg>
+                                                        Instagram ↗
+                                                    </a>
+                                                )}
+                                                {article.publishedUrlTwitter && (
+                                                    <a href={article.publishedUrlTwitter} target="_blank" rel="noopener" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border hover:border-blue-400/40 hover:bg-blue-400/5 transition-all text-[11px] font-bold">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path></svg>
+                                                        X (Twitter) ↗
+                                                    </a>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>

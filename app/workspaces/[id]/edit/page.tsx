@@ -43,6 +43,30 @@ export default function EditWorkspacePage() {
     const [discovering, setDiscovering] = useState(false);
     const [error, setError] = useState("");
     const [mounted, setMounted] = useState(false);
+    const [testingKey, setTestingKey] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    const handleTestKey = async () => {
+        setTestingKey(true);
+        setTestResult(null);
+        try {
+            const res = await fetch("/api/test-ai-key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    provider: form.aiProvider,
+                    model: form.aiModel,
+                    apiKey: form.aiApiKey || undefined,
+                }),
+            });
+            const data = await res.json();
+            setTestResult({ success: data.success, message: data.message });
+        } catch (err: any) {
+            setTestResult({ success: false, message: err.message || "Network error" });
+        } finally {
+            setTestingKey(false);
+        }
+    };
 
     useEffect(() => {
         setMounted(true);
@@ -765,13 +789,28 @@ export default function EditWorkspacePage() {
                     </div>
 
                     <Field label="Provider API Key (Optional)" hint="Override the global API key for this workspace.">
-                        <input
-                            type="password"
-                            value={form.aiApiKey}
-                            onChange={(e) => setForm({ ...form, aiApiKey: e.target.value })}
-                            placeholder="sk-..."
-                            className="input"
-                        />
+                        <div className="flex gap-2">
+                            <input
+                                type="password"
+                                value={form.aiApiKey}
+                                onChange={(e) => { setForm({ ...form, aiApiKey: e.target.value }); setTestResult(null); }}
+                                placeholder="sk-..."
+                                className="input flex-1"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleTestKey}
+                                disabled={testingKey}
+                                className="px-4 py-2 bg-surface border border-border rounded-lg text-sm hover:bg-white/5 disabled:opacity-50 whitespace-nowrap transition-colors"
+                            >
+                                {testingKey ? "Testing..." : "🔑 Test Key"}
+                            </button>
+                        </div>
+                        {testResult && (
+                            <div className={`mt-2 p-2 rounded-lg text-xs border ${testResult.success ? "bg-success/10 border-success/30 text-success" : "bg-danger/10 border-danger/30 text-danger"}`}>
+                                {testResult.success ? "✓" : "✗"} {testResult.message}
+                            </div>
+                        )}
                     </Field>
                 </div>
 
