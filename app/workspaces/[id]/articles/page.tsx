@@ -234,16 +234,29 @@ export default function ArticlesPage() {
                                             <input
                                                 type="datetime-local"
                                                 defaultValue={article.scheduledPublishAt ? new Date(new Date(article.scheduledPublishAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
-                                                onChange={(e) => updateSchedule(article.id, e.target.value)}
+                                                onBlur={(e) => updateSchedule(article.id, e.target.value)}
                                                 className="text-xs bg-transparent border-none outline-none text-foreground font-medium p-0"
                                             />
                                         </div>
                                     )}
-                                    {article.status === "PUBLISHED" && article.scheduledPublishAt && (
-                                        <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-lg px-3 py-1.5">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-success"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                            <span className="text-xs font-semibold text-success uppercase">Published</span>
-                                            <span className="text-xs text-success/80">{new Date(article.scheduledPublishAt).toLocaleString()}</span>
+                                    {(article.status === "PUBLISHED" || article.status === "APPROVED") && article.scheduledPublishAt && (
+                                        <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${article.status === "PUBLISHED"
+                                                ? "bg-success/10 border border-success/30"
+                                                : "bg-accent/10 border border-accent/30"
+                                            }`}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={article.status === "PUBLISHED" ? "text-success" : "text-accent"}>
+                                                {article.status === "PUBLISHED" ? (
+                                                    <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></>
+                                                ) : (
+                                                    <><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></>
+                                                )}
+                                            </svg>
+                                            <span className={`text-xs font-semibold uppercase ${article.status === "PUBLISHED" ? "text-success" : "text-accent"}`}>
+                                                {article.status === "PUBLISHED" ? "Published" : "Scheduled"}
+                                            </span>
+                                            <span className={`text-xs ${article.status === "PUBLISHED" ? "text-success/80" : "text-accent/80"}`}>
+                                                {new Date(article.scheduledPublishAt).toLocaleString()}
+                                            </span>
                                         </div>
                                     )}
                                 </div>

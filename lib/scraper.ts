@@ -135,74 +135,95 @@ export class ThreadsScraper {
                             });
                         const uniqueExternalLinks = Array.from(new Set(extractedLinks));
 
-                        const viewEl = el.querySelector('[aria-label*="views"]');
+                        // Language-agnostic selectors (using partial matches for common metric words)
+                        const viewEl = el.querySelector('[aria-label*="view"], [aria-label*="次查看"], [aria-label*="播放"], [aria-label*="浏览"]');
                         if (viewEl) {
                             const str = viewEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                views = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    views = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const likeEl = el.querySelector('[aria-label*="likes"]');
+                        const likeEl = el.querySelector('[aria-label*="like"], [aria-label*="讚"], [aria-label*="赞"], [aria-label*="喜"]');
                         if (likeEl) {
                             const str = likeEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                likes = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    likes = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const replyEl = el.querySelector('[aria-label*="replies"]');
+                        const replyEl = el.querySelector('[aria-label*="repl"], [aria-label*="回覆"], [aria-label*="回复"]');
                         if (replyEl) {
                             const str = replyEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                replies = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    replies = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const repostEl = el.querySelector('[aria-label*="reposts"]');
+                        const repostEl = el.querySelector('[aria-label*="repost"], [aria-label*="轉發"], [aria-label*="转发"]');
                         if (repostEl) {
                             const str = repostEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                reposts = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    reposts = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
+                        // Robust text-based fallback
                         if (likes === 0 && replies === 0 && reposts === 0) {
-                            const numberLines = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?$/));
-                            if (numberLines.length >= 2) {
-                                const metrics = numberLines.slice(0, 4);
-                                if (metrics.length >= 1) {
-                                    const s = metrics[0];
-                                    let n = parseFloat(s.replace(/,/g, ''));
+                            // Look for lines that contain a number, possibly followed by K/M and some text
+                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 4);
+                            if (metrics.length >= 1) {
+                                const s = metrics[0];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
                                     if (s.toUpperCase().includes('K')) n = n * 1000;
                                     if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    likes = isNaN(n) ? 0 : n;
+                                    likes = n;
                                 }
-                                if (metrics.length >= 2) {
-                                    const s = metrics[1];
-                                    let n = parseFloat(s.replace(/,/g, ''));
+                            }
+                            if (metrics.length >= 2) {
+                                const s = metrics[1];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
                                     if (s.toUpperCase().includes('K')) n = n * 1000;
                                     if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    replies = isNaN(n) ? 0 : n;
+                                    replies = n;
                                 }
-                                if (metrics.length >= 3) {
-                                    const s = metrics[2];
-                                    let n = parseFloat(s.replace(/,/g, ''));
+                            }
+                            if (metrics.length >= 3) {
+                                const s = metrics[2];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
                                     if (s.toUpperCase().includes('K')) n = n * 1000;
                                     if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    reposts = isNaN(n) ? 0 : n;
+                                    reposts = n;
                                 }
                             }
                         }
@@ -343,47 +364,97 @@ export class ThreadsScraper {
 
                         let views = 0, likes = 0, replies = 0, reposts = 0;
 
-                        const viewEl = el.querySelector('[aria-label*="views"]');
+                        // Language-agnostic selectors
+                        const viewEl = el.querySelector('[aria-label*="view"], [aria-label*="次查看"], [aria-label*="播放"], [aria-label*="浏览"]');
                         if (viewEl) {
                             const str = viewEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                views = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    views = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const likeEl = el.querySelector('[aria-label*="likes"]');
+                        const likeEl = el.querySelector('[aria-label*="like"], [aria-label*="讚"], [aria-label*="赞"], [aria-label*="喜"]');
                         if (likeEl) {
                             const str = likeEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                likes = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    likes = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const replyEl = el.querySelector('[aria-label*="replies"]');
+                        const replyEl = el.querySelector('[aria-label*="repl"], [aria-label*="回覆"], [aria-label*="回复"]');
                         if (replyEl) {
                             const str = replyEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                replies = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    replies = isNaN(n) ? 0 : n;
+                                }
                             }
                         }
 
-                        const repostEl = el.querySelector('[aria-label*="reposts"]');
+                        const repostEl = el.querySelector('[aria-label*="repost"], [aria-label*="轉發"], [aria-label*="转发"]');
                         if (repostEl) {
                             const str = repostEl.getAttribute('aria-label');
                             if (str) {
-                                let n = parseFloat(str.replace(/,/g, ''));
-                                if (str.toUpperCase().includes('K')) n = n * 1000;
-                                if (str.toUpperCase().includes('M')) n = n * 1000000;
-                                reposts = isNaN(n) ? 0 : n;
+                                const match = str.match(/(\d[\d,\.]*)/);
+                                if (match) {
+                                    let n = parseFloat(match[1].replace(/,/g, ''));
+                                    if (str.toUpperCase().includes('K')) n = n * 1000;
+                                    if (str.toUpperCase().includes('M')) n = n * 1000000;
+                                    reposts = isNaN(n) ? 0 : n;
+                                }
+                            }
+                        }
+
+                        // Robust text-based fallback (missing in scrapeTopic original version)
+                        if (likes === 0 && replies === 0 && reposts === 0) {
+                            const innerText = el.innerText || "";
+                            const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 4);
+                            if (metrics.length >= 1) {
+                                const s = metrics[0];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    likes = n;
+                                }
+                            }
+                            if (metrics.length >= 2) {
+                                const s = metrics[1];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    replies = n;
+                                }
+                            }
+                            if (metrics.length >= 3) {
+                                const s = metrics[2];
+                                const match = s.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    let n = parseFloat(match[1]);
+                                    if (s.toUpperCase().includes('K')) n = n * 1000;
+                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
+                                    reposts = n;
+                                }
                             }
                         }
 

@@ -1,9 +1,11 @@
 import { prisma } from "./prisma";
 import { getProvider } from "./ai/provider";
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { clusterPosts, Document } from "./clustering";
 import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
+import { uploadBufferToGCS } from "./storage";
 
 export interface SynthesisSettings {
     translationPrompt: string;
@@ -570,7 +572,7 @@ ${articleContent.slice(0, 1500)}`;
     }
 }
 
-async function generateFallbackImage(content: string, settings?: SynthesisSettings): Promise<string | null> {
+export async function generateFallbackImage(content: string, settings?: SynthesisSettings): Promise<string | null> {
     try {
         const apiKey = process.env.OPENAI_API_KEY || settings?.aiApiKey;
         if (!apiKey) {
@@ -627,20 +629,47 @@ Follow the Style Rules to create 4 unique iPhone 15 Pro prompts based on the con
             console.error("[Synthesis] Failed to generate image prompts:", promptErr);
         }
 
-        console.log(`  -> nano-banana-pro prompt: ${imagePromptText}`);
+        console.log(`  -> Gemini image prompt: ${imagePromptText}`);
 
-        const client = new OpenAI({ apiKey });
-        const response = await client.images.generate({
-            model: "nano-banana-pro",
-            prompt: imagePromptText,
-            n: 1,
-            size: "1024x1024"
-        });
+        // 1. Try Gemini (gemini-3-pro-image-preview)
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (geminiApiKey) {
+            try {
+                const genAI = new GoogleGenerativeAI(geminiApiKey);
+                const model = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
+                const result = await model.generateContent(imagePromptText);
 
-        return response?.data?.[0]?.url || null;
+                const part = result.response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (part?.inlineData) {
+                    const buffer = Buffer.from(part.inlineData.data, 'base64');
+                    const filename = `generated/${Date.now()}_gemini.png`;
+                    return await uploadBufferToGCS(buffer, filename, 'image/png');
+                }
+            } catch (geminiErr: any) {
+                console.warn(`[Synthesis] Gemini image generation failed: ${geminiErr.message}`);
+            }
+        }
+
+        // 2. Fallback to DALL-E 3
+        const openaiApiKey = process.env.OPENAI_API_KEY || settings?.aiApiKey;
+        if (openaiApiKey) {
+            const client = new OpenAI({ apiKey: openaiApiKey });
+            try {
+                const response = await client.images.generate({
+                    model: "dall-e-3",
+                    prompt: imagePromptText,
+                    n: 1,
+                    size: "1024x1024"
+                });
+                return response?.data?.[0]?.url || null;
+            } catch (dalleErr: any) {
+                console.error("[Synthesis] DALL-E 3 fallback failed:", dalleErr.message);
+            }
+        }
+
+        return null;
     } catch (e: any) {
-        console.error("[Synthesis] Fallback image generation errored:", e.message || e);
-        // "no image if it errors"
+        console.error("[Synthesis] Both image generation attempts failed:", e.message || e);
         return null;
     }
 }

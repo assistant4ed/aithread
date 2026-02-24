@@ -244,23 +244,37 @@ export async function getThreadsMetrics(
     replies: number;
     reposts: number;
 }> {
-    // Note: The Threads Graph API metrics endpoint might vary. 
-    // Usually it's /{media-id}/insights or just part of the media fields.
-    // Based on Threads documentation, common metrics are: views, likes, replies, reposts, quotes.
-    const endpoint = `https://graph.threads.net/v1.0/${mediaId}?fields=views,like_count,reply_count,repost_count,quote_count&access_token=${accessToken}`;
+    // Media Insights endpoint returns an array of metric objects
+    const endpoint = `https://graph.threads.net/v1.0/${mediaId}/insights?metric=likes,replies,reposts&access_token=${accessToken}`;
 
-    const response = await fetch(endpoint);
-    if (!response.ok) {
-        const errorData = await response.json() as ThreadsErrorResponse;
-        const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
-        throw new Error(`Threads API Metrics Error: ${errorMessage}`);
+    try {
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            const errorData = await response.json() as ThreadsErrorResponse;
+            const errorMessage = errorData.error ? errorData.error.message : 'Unknown error';
+            console.warn(`[Threads API] Metrics Fetch Failed (${mediaId}): ${errorMessage}`);
+            return { views: 0, likes: 0, replies: 0, reposts: 0 };
+        }
+
+        const json = await response.json() as any;
+        const metricsData = json.data || [];
+
+        const getVal = (name: string) => {
+            const m = metricsData.find((item: any) => item.name === name);
+            if (m && m.values && m.values.length > 0) {
+                return m.values[0].value || 0;
+            }
+            return 0;
+        };
+
+        return {
+            views: getVal('views'),
+            likes: getVal('likes'),
+            replies: getVal('replies'),
+            reposts: getVal('reposts'),
+        };
+    } catch (err: any) {
+        console.warn(`[Threads API] Metrics Fetch Exception (${mediaId}):`, err.message);
+        return { views: 0, likes: 0, replies: 0, reposts: 0 };
     }
-
-    const data = await response.json() as any;
-    return {
-        views: data.views || 0,
-        likes: data.like_count || 0,
-        replies: data.reply_count || 0,
-        reposts: (data.repost_count || 0) + (data.quote_count || 0),
-    };
 }

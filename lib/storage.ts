@@ -50,3 +50,32 @@ export async function uploadMediaToGCS(url: string, filename: string): Promise<s
         throw error;
     }
 }
+export async function uploadBufferToGCS(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+    if (!GCS_BUCKET_NAME) {
+        throw new Error("GCS_BUCKET_NAME is not defined in environment variables.");
+    }
+
+    console.log(`[Storage] Uploading buffer to GCS: ${filename}`);
+
+    const storage = new Storage({
+        projectId: process.env.GOOGLE_PROJECT_ID,
+    });
+
+    try {
+        const bucket = storage.bucket(GCS_BUCKET_NAME);
+        const file = bucket.file(filename);
+
+        await file.save(buffer, {
+            contentType: mimeType,
+            resumable: false,
+            predefinedAcl: "publicRead",
+        });
+
+        const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${filename}`;
+        console.log(`[Storage] Uploaded buffer: ${publicUrl}`);
+        return publicUrl;
+    } catch (error: any) {
+        console.error("[Storage] Error uploading buffer to GCS:", error.message);
+        throw error;
+    }
+}

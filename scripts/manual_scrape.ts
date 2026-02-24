@@ -20,8 +20,14 @@ async function main() {
     console.log(`[Debug] Using Database Port: ${actualPort}`);
 
     try {
-        const ws = await prisma.workspace.findUnique({
-            where: { name: workspaceName },
+        const ws = await (prisma as any).workspace.findFirst({
+            where: {
+                OR: [
+                    { id: workspaceName },
+                    { name: workspaceName }
+                ]
+            },
+            include: { sources: true }
         });
 
         if (!ws) {
@@ -29,8 +35,11 @@ async function main() {
             process.exit(1);
         }
 
-        if (ws.targetAccounts.length === 0) {
-            console.error(`Error: Workspace "${workspaceName}" has no target accounts.`);
+        const legacyAccounts = ws.targetAccounts || [];
+        const sources = ws.sources || [];
+
+        if (legacyAccounts.length === 0 && sources.length === 0) {
+            console.error(`Error: Workspace "${ws.name}" has no target accounts or sources.`);
             process.exit(1);
         }
 
@@ -41,9 +50,35 @@ async function main() {
             maxPostAgeHours: ws.maxPostAgeHours,
         };
 
-        console.log(`Enqueuing ${ws.targetAccounts.length} jobs for ${ws.name}...`);
+        console.log(`Enqueuing jobs for ${ws.name}...`);
+        let count = 0;
 
-        for (const username of ws.targetAccounts) {
+        // 1. Process ScraperSource (New System)
+        for (const source of sources) {
+            if (!source.isActive) continue;
+
+            const jobData: ScrapeJobData = {
+                target: source.value,
+                type: source.type,
+                workspaceId: ws.id,
+                settings,
+                skipTranslation: false,
+                sourceId: source.id,
+            };
+
+            await scrapeQueue.add(`manual-scrape-${source.id}-${Date.now()}`, jobData, {
+                removeOnComplete: true,
+                removeOnFail: { count: 100 },
+            });
+            console.log(`  + Enqueued Source: [${source.type}] ${source.value}`);
+            count++;
+        }
+
+        // 2. Process legacy targetAccounts (Backward Compatibility)
+        for (const username of legacyAccounts) {
+            // Skip if already in sources as an ACCOUNT
+            if (sources.some((s: any) => s.type === 'ACCOUNT' && s.value === username)) continue;
+
             const jobData: ScrapeJobData = {
                 target: username,
                 type: 'ACCOUNT',
@@ -52,11 +87,12 @@ async function main() {
                 skipTranslation: false,
             };
 
-            await scrapeQueue.add(`manual-scrape-${ws.id}-${username}-${Date.now()}`, jobData, {
+            await scrapeQueue.add(`manual-scrape-legacy-${ws.id}-${username}-${Date.now()}`, jobData, {
                 removeOnComplete: true,
                 removeOnFail: { count: 100 },
             });
-            console.log(`  + Enqueued: @${username}`);
+            console.log(`  + Enqueued Legacy Account: @${username}`);
+            count++;
         }
 
         console.log("\nDone! Check the 'npm run worker:scraper' terminal for real-time logs.");
