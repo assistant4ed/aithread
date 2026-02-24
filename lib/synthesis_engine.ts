@@ -205,10 +205,17 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         }
 
         // 5. Translate & Persist & Sanitize
+        // Safety net: strip any trailing editorial sections before translation
+        let cleanContent = synthesis.content;
+        cleanContent = cleanContent
+            .replace(/\n{2,}(?:📌|🎥|🖼️|💡|🔑|📝)\s*(?:What it signals|Video idea|Image idea|Visuals to use|Content idea)[^\n]*(?:\n[\s\S]*)?$/gu, '')
+            .replace(/\n{2,}(?:What it signals|Visuals to use|Video idea|Image idea|Content idea)[:\s][\s\S]*/i, '')
+            .trim();
+
         const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
-        const rawContent = await translateText(synthesis.content, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
+        const rawContent = await translateText(cleanContent, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
         CRITICAL: Do NOT include any @usernames, author handles, or URLs.
-        If the original text uses a listicle format like "🔥 [Title] - [Generic Attribution]:", maintain those exact formatting delimiters and emojis.
+        If the original text uses a listicle format like "\uD83D\uDD25 [Title] - [Generic Attribution]:", maintain those exact formatting delimiters and emojis.
         Output ONLY the translated text.`, settings);
         const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`, settings);
 
@@ -463,7 +470,9 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     4. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
     5. **CRITICAL PUBLISHING RULE:** The final output MUST be clean text. Do NOT include any @usernames, author handles, or URLs in the synthesized text. Refer to the sources generically (e.g., "Industry leaders," "Tech companies," or just state the facts).
     6. HEADLINE CORRELATION: Your headline MUST match the structure of your content. If you write a headline promising "10 things", your content MUST actually contain a bulleted/numbered list with that exact number of items. Do not write listicle headlines for paragraph-based content.
-    7. Output JSON: { "headline": "...", "content": "..." }
+    7. Output JSON: { "headline": "...", "content": "...", "suggestions": "..." }
+       - "content" = the FINAL social media post, ready to publish as-is directly to audiences. Nothing else — no media ideas, no editorial notes, no "what it signals" commentary.
+       - "suggestions" = any editorial notes, media ideas, visual recommendations, or analysis. This is for internal use only and will NOT be published.
     8. JSON ONLY. No preamble.
     `;
 
@@ -482,6 +491,9 @@ export async function synthesizeCluster(posts: { content: string; account: strin
 
         if (!raw) return null;
         const parsed = JSON.parse(raw);
+
+        // Discard editorial suggestions — only keep headline + content
+        delete parsed.suggestions;
 
         // Safety: If content is an array, join it
         if (Array.isArray(parsed.content)) {
