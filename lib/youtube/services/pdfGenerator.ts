@@ -48,6 +48,9 @@ export async function generatePDF(
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
 
+        // 2.5 Wait for web fonts to load (CRITICAL for Chinese characters on Linux)
+        await page.evaluateHandle('document.fonts.ready');
+
         // 3. Generate PDF
         await page.pdf({
             path: outputPath,
