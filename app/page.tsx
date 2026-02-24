@@ -20,6 +20,7 @@ export default async function HomePage() {
         orderBy: { createdAt: "desc" },
         include: {
             _count: { select: { articles: true } },
+            sources: true,
         },
     });
 
@@ -117,7 +118,7 @@ export default async function HomePage() {
                                     ) : null}
                                 </div>
                                 <span className="text-xs text-muted">
-                                    {ws.targetAccounts.length} accounts
+                                    {ws.sources.length} sources
                                 </span>
                             </div>
 
@@ -133,20 +134,21 @@ export default async function HomePage() {
                                 <span>Limit: {ws.dailyPostLimit}/day</span>
                             </div>
 
-                            {/* Account tags */}
-                            {ws.targetAccounts.length > 0 && (
+                            {/* Source tags */}
+                            {ws.sources.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-3">
-                                    {ws.targetAccounts.slice(0, 3).map((acc: string) => (
+                                    {ws.sources.slice(0, 3).map((source: any) => (
                                         <span
-                                            key={acc}
-                                            className="text-[10px] px-2 py-0.5 rounded-full bg-surface border border-border text-muted"
+                                            key={source.id}
+                                            className={`text-[10px] px-2 py-0.5 rounded-full bg-surface border ${source.type === 'TOPIC' ? 'border-purple-500/30 text-purple-400' : 'border-blue-500/30 text-blue-400'
+                                                }`}
                                         >
-                                            @{acc}
+                                            {source.type === 'TOPIC' ? '#' : '@'}{source.value.replace(/^[@#]/, '')}
                                         </span>
                                     ))}
-                                    {ws.targetAccounts.length > 3 && (
+                                    {ws.sources.length > 3 && (
                                         <span className="text-[10px] px-2 py-0.5 text-muted">
-                                            +{ws.targetAccounts.length - 3} more
+                                            +{ws.sources.length - 3} more
                                         </span>
                                     )}
                                 </div>

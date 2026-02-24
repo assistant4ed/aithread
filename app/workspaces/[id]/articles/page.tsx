@@ -42,8 +42,8 @@ export default function ArticlesPage() {
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
 
-    const fetchArticles = useCallback(async () => {
-        setLoading(true);
+    const fetchArticles = useCallback(async (showLoading = true) => {
+        if (showLoading) setLoading(true);
         const status = activeTab === "ALL" ? "" : activeTab;
         const qs = new URLSearchParams({
             workspaceId,
@@ -55,15 +55,15 @@ export default function ArticlesPage() {
         const data = await res.json();
         setArticles(data.articles);
         setTotal(data.total);
-        setLoading(false);
+        if (showLoading) setLoading(false);
     }, [workspaceId, activeTab]);
 
     useEffect(() => {
-        fetchArticles();
+        fetchArticles(true); // Initial load with spinner
 
-        // Polling: refresh every 60 seconds
+        // Polling: refresh every 60 seconds - SILENT refresh
         const interval = setInterval(() => {
-            fetchArticles();
+            fetchArticles(false);
         }, 60000);
 
         return () => clearInterval(interval);
@@ -241,8 +241,8 @@ export default function ArticlesPage() {
                                     )}
                                     {(article.status === "PUBLISHED" || article.status === "APPROVED") && article.scheduledPublishAt && (
                                         <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${article.status === "PUBLISHED"
-                                                ? "bg-success/10 border border-success/30"
-                                                : "bg-accent/10 border border-accent/30"
+                                            ? "bg-success/10 border border-success/30"
+                                            : "bg-accent/10 border border-accent/30"
                                             }`}>
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={article.status === "PUBLISHED" ? "text-success" : "text-accent"}>
                                                 {article.status === "PUBLISHED" ? (

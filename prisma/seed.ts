@@ -19,7 +19,6 @@ async function main() {
         create: {
             name: "Default Workspace",
             isActive: true,
-            targetAccounts: [],
             translationPrompt: DEFAULT_TRANSLATION_PROMPT,
             hotScoreThreshold: 50,
             threadsAppId: process.env.THREADS_APP_ID || null,

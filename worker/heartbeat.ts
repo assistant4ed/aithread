@@ -122,6 +122,20 @@ setInterval(() => {
                         setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
                     }
                 }
+
+                // --- SCHEDULED ARTICLE CHECK (independent of publishTimes) ---
+                // Catch any approved articles whose scheduledPublishAt has passed
+                const overdueCount = await prisma.synthesizedArticle.count({
+                    where: {
+                        workspaceId: ws.id,
+                        status: "APPROVED",
+                        scheduledPublishAt: { lte: now },
+                    },
+                });
+                if (overdueCount > 0) {
+                    console.log(`[Heartbeat] ⏰ ${overdueCount} overdue scheduled article(s) for ${ws.name}. Triggering publish...`);
+                    setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                }
             }));
 
             const elapsedLoop = Date.now() - startLoop;

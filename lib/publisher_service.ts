@@ -247,7 +247,7 @@ export async function publishArticle(
             const containerId = await createContainer(
                 config.threadsUserId,
                 config.threadsAccessToken,
-                mediaType === "VIDEO" ? 'VIDEO' : 'IMAGE', // Threads assumes IMAGE if simple text or IMAGE
+                mediaType, // Pass the actual detected type (TEXT, IMAGE, or VIDEO)
                 mediaUrl || undefined,
                 threadsText || undefined,
                 undefined,
