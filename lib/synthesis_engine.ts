@@ -457,11 +457,12 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     Rules:
     1. NO ACADEMIC PHRASING: Do NOT use "Source 1 reports", "Author discusses", or "Post analyzes". 
     2. LEAD WITH VALUE: Hook the reader immediately.
-    3. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
-    4. **CRITICAL PUBLISHING RULE:** The final output MUST be clean text. Do NOT include any @usernames, author handles, or URLs in the synthesized text. Refer to the sources generically (e.g., "Industry leaders," "Tech companies," or just state the facts).
-    5. HEADLINE CORRELATION: Your headline MUST match the structure of your content. If you write a headline promising "10 things", your content MUST actually contain a bulleted/numbered list with that exact number of items. Do not write listicle headlines for paragraph-based content.
-    6. Output JSON: { "headline": "...", "content": "..." }
-    7. JSON ONLY. No preamble.
+    3. DO NOT OUTPUT STRUCTURAL LABELS: Do not include the structural labels from the "Structure" section (e.g. "Hook", "Key fact", "Why it matters", "CTA") in your output. These are for your internal logic and formatting only, and must not appear as text in the final output.
+    4. "content" MUST be a string, NOT an array of strings. Fill it with the markdown content matching the chosen format.
+    5. **CRITICAL PUBLISHING RULE:** The final output MUST be clean text. Do NOT include any @usernames, author handles, or URLs in the synthesized text. Refer to the sources generically (e.g., "Industry leaders," "Tech companies," or just state the facts).
+    6. HEADLINE CORRELATION: Your headline MUST match the structure of your content. If you write a headline promising "10 things", your content MUST actually contain a bulleted/numbered list with that exact number of items. Do not write listicle headlines for paragraph-based content.
+    7. Output JSON: { "headline": "...", "content": "..." }
+    8. JSON ONLY. No preamble.
     `;
 
     try {
