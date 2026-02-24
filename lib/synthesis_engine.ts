@@ -1,6 +1,6 @@
-
 import { prisma } from "./prisma";
 import { getProvider } from "./ai/provider";
+import OpenAI from "openai";
 import { clusterPosts, Document } from "./clustering";
 import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
@@ -186,6 +186,19 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 } else {
                     console.log(`  -> Vision rejected all images as irrelevant/memes.`);
                 }
+            }
+        }
+
+        // 4c. Image Generation Fallback (Nano Banana Pro)
+        if (!selectedMediaUrl) {
+            console.log(`  -> No media selected. Falling back to image generation using nano-banana-pro...`);
+            const generatedUrl = await generateFallbackImage(synthesis.content, settings);
+            if (generatedUrl) {
+                selectedMediaUrl = generatedUrl;
+                selectedMediaType = 'image';
+                console.log(`  -> Generated fallback image: ${selectedMediaUrl}`);
+            } else {
+                console.log(`  -> Image generation failed or disabled. Proceeding text-only.`);
             }
         }
 
@@ -553,6 +566,81 @@ ${articleContent.slice(0, 1500)}`;
     } catch (e) {
         console.error("[Synthesis] Vision filtering failed:", e);
         return null; // Fallback to no image instead of returning a bad meme
+    }
+}
+
+async function generateFallbackImage(content: string, settings?: SynthesisSettings): Promise<string | null> {
+    try {
+        const apiKey = process.env.OPENAI_API_KEY || settings?.aiApiKey;
+        if (!apiKey) {
+            return null; // Don't crash if no API key is available
+        }
+
+        // 1. Generate prompts based on content
+        const provider = getProvider({
+            provider: settings?.aiProvider || "OPENAI",
+            model: "gpt-4o",
+            apiKey
+        });
+
+        const systemPrompt = `### ROLE
+Professional HK Photographer (iPhone 15 Pro).
+
+### CORE DIRECTIVE
+Analyze the source content and identify 4 distinct visual moments. Generate 4 separate image prompts.
+
+### PHOTOGRAPHY STYLE RULES
+
+### OUTPUT FORMAT (STRICT)
+Return a single JSON object containing an array of 4 prompts. 
+Do not include markdown backticks (\`\`\`json). 
+Do not include any intro or outro text.`;
+
+        const userPrompt = `### SOURCE CONTENT
+${content.slice(0, 3000)}
+
+### EXECUTION
+Follow the Style Rules to create 4 unique iPhone 15 Pro prompts based on the content above.`;
+
+        let imagePromptText = "Professional editorial tech illustration, clean modern corporate aesthetic.";
+        try {
+            const rawFormat = await provider.createChatCompletion([
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ], {
+                model: "gpt-4o",
+                temperature: 0.7,
+                response_format: { type: "json_object" }
+            });
+
+            if (rawFormat) {
+                const parsed = JSON.parse(rawFormat);
+                for (const key of Object.keys(parsed)) {
+                    if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
+                        imagePromptText = parsed[key][0];
+                        break;
+                    }
+                }
+            }
+        } catch (promptErr) {
+            console.error("[Synthesis] Failed to generate image prompts:", promptErr);
+        }
+
+        console.log(`  -> nano-banana-pro prompt: ${imagePromptText}`);
+
+        const client = new OpenAI({ apiKey });
+        const response = await client.images.generate({
+            model: "nano-banana-pro",
+            prompt: imagePromptText,
+            n: 1,
+            size: "1024x1024"
+        });
+
+        return response?.data?.[0]?.url || null;
+    } catch (e: any) {
+        console.error("[Synthesis] Fallback image generation errored:", e.message || e);
+        // "no image if it errors"
+        return null;
     }
 }
 
