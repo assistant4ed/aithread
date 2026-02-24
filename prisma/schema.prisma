@@ -12,7 +12,6 @@ model Workspace {
   id                    String               @id @default(cuid())
   name                  String               @unique
   isActive              Boolean              @default(true)
-  targetAccounts        String[]
   translationPrompt     String
   hotScoreThreshold     Float                @default(50)
   threadsAppId          String?

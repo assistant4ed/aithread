@@ -28,6 +28,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
             _count: {
                 select: { articles: true },
             },
+            sources: true,
         },
     });
 
@@ -82,25 +83,40 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
             {/* Configuration */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Target Accounts */}
+                {/* Scraper Sources */}
                 <section className="border border-border rounded-xl p-5">
                     <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
-                        Target Accounts ({workspace.targetAccounts.length})
+                        Scraper Sources ({workspace.sources.length})
                     </h2>
-                    {workspace.targetAccounts.length === 0 ? (
-                        <p className="text-sm text-muted">No accounts configured</p>
+                    {workspace.sources.length === 0 ? (
+                        <p className="text-sm text-muted">No sources configured</p>
                     ) : (
                         <div className="flex flex-wrap gap-2">
-                            {workspace.targetAccounts.map((acc: string) => (
-                                <a
-                                    key={acc}
-                                    href={`https://www.threads.net/@${acc}`}
-                                    target="_blank"
-                                    rel="noopener"
-                                    className="text-sm px-3 py-1 rounded-full bg-surface border border-border text-foreground hover:bg-surface-hover hover:border-accent/30 transition-all"
+                            {workspace.sources.map((source: any) => (
+                                <div
+                                    key={source.id}
+                                    className={`flex items-center gap-2 px-3 py-1 rounded-full bg-surface border text-sm font-medium transition-all ${source.isActive
+                                            ? "border-accent/40 text-foreground"
+                                            : "border-border text-muted opacity-50"
+                                        }`}
                                 >
-                                    @{acc} ↗
-                                </a>
+                                    <span className={`text-[10px] font-bold p-0.5 rounded ${source.type === 'TOPIC' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+                                        }`}>
+                                        {source.type}
+                                    </span>
+                                    {source.type === 'ACCOUNT' ? (
+                                        <a
+                                            href={`https://www.threads.net/${source.value.replace(/^@/, '')}`}
+                                            target="_blank"
+                                            rel="noopener"
+                                            className="hover:text-accent hover:underline"
+                                        >
+                                            {source.value}
+                                        </a>
+                                    ) : (
+                                        <span>{source.value}</span>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     )}

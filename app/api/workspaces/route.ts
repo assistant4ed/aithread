@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const {
             name,
-            targetAccounts,
             translationPrompt,
             clusteringPrompt,
             hotScoreThreshold,
@@ -74,7 +73,6 @@ export async function POST(request: NextRequest) {
         const workspace = await prisma.workspace.create({
             data: {
                 name,
-                targetAccounts: targetAccounts || [],
                 translationPrompt: translationPrompt || "",
                 clusteringPrompt: clusteringPrompt || undefined,
                 synthesisLanguage: synthesisLanguage || "Traditional Chinese (HK/TW)",

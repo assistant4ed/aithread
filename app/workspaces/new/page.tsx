@@ -47,7 +47,6 @@ export default function NewWorkspacePage() {
 
     const [form, setForm] = useState({
         name: "",
-        targetAccounts: "",
         translationPrompt: DEFAULT_PROMPT,
         clusteringPrompt: "",
         synthesisLanguage: "Traditional Chinese (HK/TW)",
@@ -90,10 +89,6 @@ export default function NewWorkspacePage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...form,
-                    targetAccounts: form.targetAccounts
-                        .split(",")
-                        .map((a) => a.trim().replace(/^@/, ""))
-                        .filter(Boolean),
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
                     maxPostAgeHours: Number(form.maxPostAgeHours),
@@ -134,14 +129,6 @@ export default function NewWorkspacePage() {
 
         try {
             const res = await fetch("/api/workspaces", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...form,
-                    targetAccounts: form.targetAccounts
-                        .split(",")
-                        .map((a) => a.trim().replace(/^@/, ""))
-                        .filter(Boolean),
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
                     maxPostAgeHours: Number(form.maxPostAgeHours),
@@ -173,39 +160,6 @@ export default function NewWorkspacePage() {
         }
     };
 
-    const handleDiscover = async () => {
-        const topic = form.topicFilter || form.name;
-        if (!topic) {
-            setError("Please enter a workspace name or topic filter first to help the AI find accounts.");
-            return;
-        }
-
-        setDiscovering(true);
-        setError("");
-
-        try {
-            const res = await fetch("/api/discover-accounts", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ topic }),
-            });
-
-            if (!res.ok) throw new Error("Failed to discover accounts");
-
-            const { handles } = await res.json();
-            if (handles && handles.length > 0) {
-                const existing = form.targetAccounts ? form.targetAccounts.split(",").map(a => a.trim()) : [];
-                const combined = Array.from(new Set([...existing, ...handles.map((h: string) => `@${h}`)]));
-                setForm({ ...form, targetAccounts: combined.join(", ") });
-            } else {
-                setError("AI couldn't find any valid accounts for this topic. Try a broader topic.");
-            }
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setDiscovering(false);
-        }
-    };
 
     return (
         <div className="max-w-4xl mx-auto animate-fade-in pb-12">
@@ -470,26 +424,6 @@ export default function NewWorkspacePage() {
                     </Field>
                 </div>
 
-                {/* Legacy Target Accounts (for reference) */}
-                <Field label="Target Accounts (Legacy)" hint="Comma-separated Threads usernames. Prefer the 'Scraper Sources' section above.">
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={form.targetAccounts}
-                            onChange={(e) => setForm({ ...form, targetAccounts: e.target.value })}
-                            placeholder="@openai, @nvidia, @meta"
-                            className="input flex-1"
-                        />
-                        <button
-                            type="button"
-                            onClick={handleDiscover}
-                            disabled={discovering}
-                            className="px-4 py-2 bg-surface border border-border rounded-lg text-sm hover:bg-white/5 disabled:opacity-50 whitespace-nowrap"
-                        >
-                            {discovering ? "Finding..." : "🤖 Auto-Discover"}
-                        </button>
-                    </div>
-                </Field>
 
                 {/* Translation Prompt -> Style Instructions */}
                 <Field label="Translation Style / Instructions (Optional)" hint="Add specific instructions (e.g. 'Use professional tone', 'Avoid slang'). Target language is controlled below.">

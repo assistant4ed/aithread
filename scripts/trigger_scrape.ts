@@ -46,22 +46,6 @@ async function main() {
             await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData);
             console.log(`  -> Enqueued ${source.type}: ${source.value}`);
         }
-
-        // 2. Process legacy targetAccounts (Backward Compatibility)
-        for (const username of ws.targetAccounts) {
-            // Skip if already in sources as an ACCOUNT
-            if (ws.sources.some((s: any) => s.type === 'ACCOUNT' && s.value === username)) continue;
-
-            const jobData: ScrapeJobData = {
-                target: username,
-                type: 'ACCOUNT',
-                workspaceId: ws.id,
-                settings,
-                skipTranslation: false
-            };
-            await scrapeQueue.add("scrape-account", jobData, { jobId: `manual-legacy-${Date.now()}-${username}` });
-            console.log(`  -> Enqueued Legacy ACCOUNT: @${username}`);
-        }
     }
     await prisma.$disconnect();
     process.exit(0);

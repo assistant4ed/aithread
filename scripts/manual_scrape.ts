@@ -35,11 +35,10 @@ async function main() {
             process.exit(1);
         }
 
-        const legacyAccounts = ws.targetAccounts || [];
         const sources = ws.sources || [];
 
-        if (legacyAccounts.length === 0 && sources.length === 0) {
-            console.error(`Error: Workspace "${ws.name}" has no target accounts or sources.`);
+        if (sources.length === 0) {
+            console.error(`Error: Workspace "${ws.name}" has no scraper sources.`);
             process.exit(1);
         }
 
@@ -71,27 +70,6 @@ async function main() {
                 removeOnFail: { count: 100 },
             });
             console.log(`  + Enqueued Source: [${source.type}] ${source.value}`);
-            count++;
-        }
-
-        // 2. Process legacy targetAccounts (Backward Compatibility)
-        for (const username of legacyAccounts) {
-            // Skip if already in sources as an ACCOUNT
-            if (sources.some((s: any) => s.type === 'ACCOUNT' && s.value === username)) continue;
-
-            const jobData: ScrapeJobData = {
-                target: username,
-                type: 'ACCOUNT',
-                workspaceId: ws.id,
-                settings,
-                skipTranslation: false,
-            };
-
-            await scrapeQueue.add(`manual-scrape-legacy-${ws.id}-${username}-${Date.now()}`, jobData, {
-                removeOnComplete: true,
-                removeOnFail: { count: 100 },
-            });
-            console.log(`  + Enqueued Legacy Account: @${username}`);
             count++;
         }
 

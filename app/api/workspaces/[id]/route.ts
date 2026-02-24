@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         const body = await request.json();
 
         const allowedFields = [
-            "name", "isActive", "targetAccounts", "translationPrompt",
+            "name", "isActive", "translationPrompt",
             "hotScoreThreshold", "threadsAppId", "threadsToken", "dailyPostLimit",
             "topicFilter", "maxPostAgeHours", "synthesisLanguage",
             "publishTimes", "reviewWindowHours", "clusteringPrompt",
