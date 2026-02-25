@@ -129,6 +129,10 @@ export default function NewWorkspacePage() {
 
         try {
             const res = await fetch("/api/workspaces", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...form,
                     hotScoreThreshold: Number(form.hotScoreThreshold),
                     dailyPostLimit: Number(form.dailyPostLimit),
                     maxPostAgeHours: Number(form.maxPostAgeHours),
