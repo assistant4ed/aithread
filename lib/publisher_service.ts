@@ -94,7 +94,7 @@ export async function ensureValidThreadsToken(workspaceId: string): Promise<stri
 /**
  * Find and publish APPROVED synthesized articles for a workspace.
  */
-export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
+export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxPublish: number = 1) {
     const { workspaceId, dailyLimit } = config;
 
     // Ensure token is valid before starting
@@ -114,6 +114,9 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
     }
 
     const remaining = dailyLimit - articlesToday;
+    const toPublish = Math.min(remaining, maxPublish);
+
+    if (toPublish <= 0) return;
 
     const approvedArticles = await prisma.synthesizedArticle.findMany({
         where: {
@@ -125,7 +128,7 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig) {
             ]
         },
         orderBy: { createdAt: "asc" },
-        take: remaining,
+        take: toPublish,
     });
 
     if (approvedArticles.length === 0) {
