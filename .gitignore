@@ -45,3 +45,4 @@ drive_tokens.json
 dev.db
 gcs-key.json
 output
+.azure_config
