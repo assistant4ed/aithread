@@ -41,7 +41,10 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         if (err.stderr?.includes('Video unavailable')) {
             throw new Error(`VIDEO_UNAVAILABLE: ${videoUrl}`);
         }
-        throw new Error(`yt-dlp metadata failed: ${err.stderr}`);
+        if (err.code === 'ENOENT') {
+            throw new Error(`yt-dlp binary not found — is it installed?`);
+        }
+        throw new Error(`yt-dlp metadata failed: ${err.stderr || err.message}`);
     }
 
     const info: YtDlpInfo = JSON.parse(stdout);
