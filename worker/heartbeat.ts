@@ -86,6 +86,7 @@ setInterval(() => {
                 }).catch(() => { });
 
                 // Check each cycle for this workspace
+                let publishTriggered = false;
                 for (const timeStr of publishTimes) {
                     const [pubH, pubM] = timeStr.split(":").map(Number);
 
@@ -120,21 +121,25 @@ setInterval(() => {
                     if (currentHHMM === timeStr) {
                         console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr})`);
                         setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                        publishTriggered = true;
                     }
                 }
 
                 // --- SCHEDULED ARTICLE CHECK (independent of publishTimes) ---
                 // Catch any approved articles whose scheduledPublishAt has passed
-                const overdueCount = await prisma.synthesizedArticle.count({
-                    where: {
-                        workspaceId: ws.id,
-                        status: "APPROVED",
-                        scheduledPublishAt: { lte: now },
-                    },
-                });
-                if (overdueCount > 0) {
-                    console.log(`[Heartbeat] ⏰ ${overdueCount} overdue scheduled article(s) for ${ws.name}. Triggering publish...`);
-                    setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                // Skip if we already triggered publish via publishTimes this tick to avoid duplicate posts
+                if (!publishTriggered) {
+                    const overdueCount = await prisma.synthesizedArticle.count({
+                        where: {
+                            workspaceId: ws.id,
+                            status: "APPROVED",
+                            scheduledPublishAt: { lte: now },
+                        },
+                    });
+                    if (overdueCount > 0) {
+                        console.log(`[Heartbeat] ⏰ ${overdueCount} overdue scheduled article(s) for ${ws.name}. Triggering publish...`);
+                        setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                    }
                 }
             }));
 

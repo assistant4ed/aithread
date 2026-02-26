@@ -91,74 +91,89 @@ export async function ensureValidThreadsToken(workspaceId: string): Promise<stri
     return workspace.threadsToken;
 }
 
+// Per-workspace in-flight guard to prevent concurrent publish runs
+const publishingInProgress = new Set<string>();
+
 /**
  * Find and publish APPROVED synthesized articles for a workspace.
  */
 export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxPublish: number = 1) {
     const { workspaceId, dailyLimit } = config;
 
-    // Ensure token is valid before starting
-    const validToken = await ensureValidThreadsToken(workspaceId);
-    if (validToken) {
-        config.threadsAccessToken = validToken;
-    }
-
-    console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
-
-    const articlesToday = await getDailyPublishCount(workspaceId);
-    console.log(`[Publisher] Articles published today: ${articlesToday}/${dailyLimit}`);
-
-    if (articlesToday >= dailyLimit) {
-        console.log(`[Publisher] Daily limit reached. Skipping.`);
+    // Prevent concurrent publish runs for the same workspace (race-condition guard)
+    if (publishingInProgress.has(workspaceId)) {
+        console.log(`[Publisher] Publish already in progress for workspace ${workspaceId}. Skipping.`);
         return;
     }
+    publishingInProgress.add(workspaceId);
 
-    const remaining = dailyLimit - articlesToday;
-    const toPublish = Math.min(remaining, maxPublish);
-
-    if (toPublish <= 0) return;
-
-    const approvedArticles = await prisma.synthesizedArticle.findMany({
-        where: {
-            workspaceId,
-            status: "APPROVED",
-            OR: [
-                { scheduledPublishAt: null },
-                { scheduledPublishAt: { lte: new Date() } }
-            ]
-        },
-        orderBy: { createdAt: "asc" },
-        take: toPublish,
-    });
-
-    if (approvedArticles.length === 0) {
-        console.log(`[Publisher] No APPROVED articles ready to publish.`);
-        return;
-    }
-
-    console.log(`[Publisher] Found ${approvedArticles.length} articles to publish.`);
-
-    for (const article of approvedArticles) {
-        try {
-            await publishArticle(article, config);
-
-            // Wait between posts to avoid rate limits
-            console.log("[Publisher] Waiting 30 seconds before next post...");
-            await new Promise(resolve => setTimeout(resolve, 30000));
-        } catch (err) {
-            console.error(`[Publisher] Failed to publish article ${article.id}:`, err);
-            // We might want to mark as ERROR or PARTIAL_ERROR depending on if any platform succeeded.
-            // For now, if it throws, it means critical failure or all failed (if we handle inside).
-            // Let's rely on publishArticle to mask partial failures if needed, 
-            // but if it propagates an error, mark as ERROR.
-
-            await prisma.synthesizedArticle.update({
-                where: { id: article.id },
-                data: { status: "ERROR" },
-            });
+    try {
+        // Ensure token is valid before starting
+        const validToken = await ensureValidThreadsToken(workspaceId);
+        if (validToken) {
+            config.threadsAccessToken = validToken;
         }
+
+        console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
+
+        const articlesToday = await getDailyPublishCount(workspaceId);
+        console.log(`[Publisher] Articles published today: ${articlesToday}/${dailyLimit}`);
+
+        if (articlesToday >= dailyLimit) {
+            console.log(`[Publisher] Daily limit reached. Skipping.`);
+            return;
+        }
+
+        const remaining = dailyLimit - articlesToday;
+        const toPublish = Math.min(remaining, maxPublish);
+
+        if (toPublish <= 0) return;
+
+        const approvedArticles = await prisma.synthesizedArticle.findMany({
+            where: {
+                workspaceId,
+                status: "APPROVED",
+                OR: [
+                    { scheduledPublishAt: null },
+                    { scheduledPublishAt: { lte: new Date() } }
+                ]
+            },
+            orderBy: { createdAt: "asc" },
+            take: toPublish,
+        });
+
+        if (approvedArticles.length === 0) {
+            console.log(`[Publisher] No APPROVED articles ready to publish.`);
+            return;
+        }
+
+        console.log(`[Publisher] Found ${approvedArticles.length} articles to publish.`);
+
+        for (const article of approvedArticles) {
+            try {
+                await publishArticle(article, config);
+
+                // Wait between posts to avoid rate limits
+                console.log("[Publisher] Waiting 30 seconds before next post...");
+                await new Promise(resolve => setTimeout(resolve, 30000));
+            } catch (err) {
+                console.error(`[Publisher] Failed to publish article ${article.id}:`, err);
+                // We might want to mark as ERROR or PARTIAL_ERROR depending on if any platform succeeded.
+                // For now, if it throws, it means critical failure or all failed (if we handle inside).
+                // Let's rely on publishArticle to mask partial failures if needed, 
+                // but if it propagates an error, mark as ERROR.
+
+                await prisma.synthesizedArticle.update({
+                    where: { id: article.id },
+                    data: { status: "ERROR" },
+                });
+            }
+        }
+    } finally {
+        publishingInProgress.delete(workspaceId);
     }
 }
+
 
 export async function publishArticle(
     article: {
