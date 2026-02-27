@@ -64,7 +64,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            <AutoRefresh />
+            <AutoRefresh intervalMs={latestRuns.SCRAPE?.status === "RUNNING" ? 10000 : 60000} />
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
@@ -83,7 +83,10 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                         </span>
                     </div>
                 </div>
-                <WorkspaceActions workspace={workspace} />
+                <WorkspaceActions
+                    workspace={workspace}
+                    isScraping={latestRuns.SCRAPE?.status === "RUNNING"}
+                />
             </div>
 
             {/* Stats Row */}
@@ -313,7 +316,7 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
     }
 
     const statusColors: Record<string, string> = {
-        RUNNING: "bg-warning animate-pulse",
+        RUNNING: "bg-success animate-pulse",
         COMPLETED: "bg-success",
         FAILED: "bg-danger",
     };

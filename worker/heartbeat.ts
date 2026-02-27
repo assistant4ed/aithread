@@ -254,7 +254,8 @@ async function runScrape(ws: WorkspaceWithSources) {
                 sourceId: source.id,
             };
 
-            await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData, {
+            await scrapeQueue.add(`scrape:${ws.id}:${source.id}`, jobData, {
+                jobId: `scrape:${ws.id}:${source.id}`, // Deduplication
                 removeOnComplete: true,
                 removeOnFail: { count: 100 },
             });

@@ -51,13 +51,13 @@ export interface ScrapeJobData {
 export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
     connection: redisConnection,
     defaultJobOptions: {
-        attempts: 3,
+        attempts: 2, // Reduced for faster feedback on manual trigger
         backoff: {
             type: "exponential",
-            delay: 30_000, // 30s, 60s, 120s
+            delay: 15_000, // 15s start
         },
-        removeOnComplete: { count: 500 },  // Keep last 500 completed
-        removeOnFail: { count: 200 },       // Keep last 200 failed for debugging
+        removeOnComplete: { count: 300 },
+        removeOnFail: { count: 100 },
     },
 });
 

@@ -56,229 +56,247 @@ async function getOrFetchFollowerCount(username: string, scraper: ThreadsScraper
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
 async function processScrapeJob(job: Job<ScrapeJobData>) {
-    let { target, type, workspaceId, settings, skipTranslation, sourceId } = job.data;
-    const slotId = jobCounter++ % CONCURRENCY;
+    const JOB_TIMEOUT_MS = 600_000; // 10 minutes
 
-    // Normalize target: strip leading @ or # if present (scrapers handle those prefixes themselves)
-    if (type === 'ACCOUNT' && target.startsWith('@')) {
-        target = target.substring(1);
-    }
-    if (type === 'TOPIC' && target.startsWith('#')) {
-        target = target.substring(1);
-    }
+    // Create an abort controller for manual timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), JOB_TIMEOUT_MS);
 
-    console.log(`[ScrapeWorker] Processing ${type}:${target} (workspace: ${workspaceId}, slot: ${slotId}, attempt: ${job.attemptsMade + 1})`);
+    try {
+        let { target, type, workspaceId, settings, skipTranslation, sourceId } = job.data;
+        const slotId = jobCounter++ % CONCURRENCY;
 
-    const scraper = await getScraperForSlot(slotId);
-
-    // Fetch source details if sourceId is provided
-    let sourceDetails: any = null;
-    if (sourceId) {
-        sourceDetails = await prisma.scraperSource.findUnique({ where: { id: sourceId } });
-    }
-
-    // Rate-limit delay (stagger requests)
-    await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
-
-    const maxAgeHours = settings?.maxPostAgeHours || 172;
-    const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
-
-    let posts = [];
-    let followerCount = 0;
-    let followerMap = new Map<string, number>();
-
-    if (type === 'TOPIC') {
-        console.log(`[ScrapeWorker] Scraping topic #${target} since ${since.toISOString()}...`);
-        posts = await scraper.scrapeTopic(target, since);
-
-        if (posts.length > 0) {
-            console.log(`[ScrapeWorker] Resolving follower counts for ${posts.length} posts...`);
-            followerMap = await resolveFollowerCounts(posts, scraper);
+        // Normalize target: strip leading @ or # if present
+        if (type === 'ACCOUNT' && target.startsWith('@')) {
+            target = target.substring(1);
         }
-    } else {
-        console.log(`[ScrapeWorker] Scraping @${target} since ${since.toISOString()}...`);
-        posts = await scraper.scrapeAccount(target, since);
-        // Fetch (or use cached) follower count for this account
-        followerCount = await getOrFetchFollowerCount(target, scraper);
-        console.log(`[ScrapeWorker] @${target} follower count: ${followerCount}`);
-    }
-
-    console.log(`[ScrapeWorker] Found ${posts.length} posts for ${target}`);
-
-    let newCount = 0;
-    let failedFreshness = 0;
-    let failedEngagement = 0;
-    let unknownFollowers = 0;
-
-    const discoveredAuthors = new Set<string>();
-
-    for (const post of posts) {
-        // Skip empty posts
-        if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
-
-        // Determine follower count for this post
-        const currentFollowerCount = type === 'TOPIC' ? (followerMap.get(post.authorId) ?? 0) : followerCount;
-        if (type === 'TOPIC' && (followerMap.get(post.authorId) === undefined)) {
-            unknownFollowers++;
+        if (type === 'TOPIC' && target.startsWith('#')) {
+            target = target.substring(1);
         }
 
-        const hasVideo = post.mediaUrls.some(m => m.type === 'video');
-        if (hasVideo && post.postUrl) {
-            try {
-                console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
-                const enriched = await scraper.enrichPost(post.postUrl);
-                if (enriched && enriched.videoUrl) {
-                    console.log(`[ScrapeWorker]   -> Found HQ video: ${enriched.videoUrl.substring(0, 50)}...`);
-                    post.mediaUrls = post.mediaUrls.map(m => {
-                        if (m.type === 'video') {
-                            return {
-                                ...m,
-                                url: enriched.videoUrl!,
-                                coverUrl: enriched.coverUrl
-                            };
-                        }
-                        return m;
-                    });
-                } else {
-                    console.log(`[ScrapeWorker]   -> No better video found.`);
+        console.log(`[ScrapeWorker] Processing ${type}:${target} (workspace: ${workspaceId}, slot: ${slotId}, attempt: ${job.attemptsMade + 1})`);
+
+        const scraper = await getScraperForSlot(slotId);
+
+        // Fetch source details if sourceId is provided
+        let sourceDetails: any = null;
+        if (sourceId) {
+            sourceDetails = await prisma.scraperSource.findUnique({ where: { id: sourceId } });
+        }
+
+        // Rate-limit delay (stagger requests) - respecting the abort signal
+        await new Promise((resolve, reject) => {
+            const t = setTimeout(resolve, 2000 + Math.random() * 3000);
+            controller.signal.addEventListener('abort', () => {
+                clearTimeout(t);
+                reject(new Error("Job exceeded 10 minute timeout"));
+            });
+        });
+
+        const maxAgeHours = settings?.maxPostAgeHours || 172;
+        const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+
+        let posts = [];
+        let followerCount = 0;
+        let followerMap = new Map<string, number>();
+
+        // We wrap the scraper calls to check for abort signal
+        if (type === 'TOPIC') {
+            console.log(`[ScrapeWorker] Scraping topic #${target} since ${since.toISOString()}...`);
+            posts = await scraper.scrapeTopic(target, since);
+
+            if (posts.length > 0) {
+                if (controller.signal.aborted) throw new Error("Job timed out during scrape");
+                console.log(`[ScrapeWorker] Resolving follower counts for ${posts.length} posts...`);
+                followerMap = await resolveFollowerCounts(posts, scraper);
+            }
+        } else {
+            console.log(`[ScrapeWorker] Scraping @${target} since ${since.toISOString()}...`);
+            posts = await scraper.scrapeAccount(target, since);
+
+            if (controller.signal.aborted) throw new Error("Job timed out during scrape");
+
+            // Fetch (or use cached) follower count for this account
+            followerCount = await getOrFetchFollowerCount(target, scraper);
+            console.log(`[ScrapeWorker] @${target} follower count: ${followerCount}`);
+        }
+
+        console.log(`[ScrapeWorker] Found ${posts.length} posts for ${target}`);
+
+        let newCount = 0;
+        let failedFreshness = 0;
+        let failedEngagement = 0;
+        let unknownFollowers = 0;
+
+        const discoveredAuthors = new Set<string>();
+
+        for (const post of posts) {
+            if (controller.signal.aborted) throw new Error("Job timed out during processing");
+
+            // Skip empty posts
+            if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
+
+            // Determine follower count for this post
+            const currentFollowerCount = type === 'TOPIC' ? (followerMap.get(post.authorId) ?? 0) : followerCount;
+            if (type === 'TOPIC' && (followerMap.get(post.authorId) === undefined)) {
+                unknownFollowers++;
+            }
+
+            const hasVideo = post.mediaUrls.some(m => m.type === 'video');
+            if (hasVideo && post.postUrl) {
+                try {
+                    console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
+                    const enriched = await scraper.enrichPost(post.postUrl);
+                    if (enriched && enriched.videoUrl) {
+                        console.log(`[ScrapeWorker]   -> Found HQ video: ${enriched.videoUrl.substring(0, 50)}...`);
+                        post.mediaUrls = post.mediaUrls.map(m => {
+                            if (m.type === 'video') {
+                                return {
+                                    ...m,
+                                    url: enriched.videoUrl!,
+                                    coverUrl: enriched.coverUrl
+                                };
+                            }
+                            return m;
+                        });
+                    }
+                } catch (enrichErr: any) {
+                    console.warn(`[ScrapeWorker]   ⚠ Enrichment failed for ${post.postUrl}: ${enrichErr.message}`);
                 }
-            } catch (enrichErr: any) {
-                console.warn(`[ScrapeWorker]   ⚠ Enrichment failed for ${post.postUrl}: ${enrichErr.message}`);
+            }
+
+            const savedPost = await processPost(
+                {
+                    ...post,
+                    postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
+                },
+                type === 'TOPIC' ? (post.authorUsername || `topic_${target}`) : target,
+                workspaceId,
+                settings,
+                { skipTranslation },
+                currentFollowerCount,
+                sourceDetails
+            );
+
+            if (!savedPost) {
+                const ageMs = post.postedAt ? Date.now() - new Date(post.postedAt).getTime() : 0;
+                const ageHours = ageMs / (1000 * 60 * 60);
+                if (ageHours > 72) failedFreshness++;
+                else failedEngagement++;
+                continue;
+            }
+
+            // Discovery: Collect author if they passed all filters
+            if (type === 'TOPIC' && post.authorUsername) {
+                discoveredAuthors.add(post.authorUsername);
+            }
+
+            newCount++;
+            console.log(`[ScrapeWorker]   + New: ${savedPost.threadId} (score: ${savedPost.hotScore})`);
+
+            // Upload media to storage if present
+            if (savedPost.mediaUrls) {
+                const mediaItems = Array.isArray(savedPost.mediaUrls) ? savedPost.mediaUrls : [];
+                if (mediaItems.length > 0) {
+                    let mediaUpdated = false;
+
+                    const updatedMedia = await Promise.all(mediaItems.map(async (item: any, idx: number) => {
+                        let newItem = { ...item };
+                        if (item.url && !item.url.includes('threadsmonitorblobs.blob.core.windows.net')) {
+                            try {
+                                const extension = item.type === "video" ? ".mp4" : ".jpg";
+                                const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}${extension}`;
+                                const storageUrl = await uploadMediaToStorage(item.url, filename);
+                                newItem.url = storageUrl;
+                                mediaUpdated = true;
+                            } catch (mediaErr: any) {
+                                console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr.message);
+                            }
+                        }
+                        return newItem;
+                    }));
+
+                    if (mediaUpdated) {
+                        await prisma.post.update({
+                            where: { id: savedPost.id },
+                            data: { mediaUrls: updatedMedia },
+                        });
+                    }
+                }
             }
         }
 
-        const savedPost = await processPost(
-            {
-                ...post,
-                postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
-            },
-            type === 'TOPIC' ? (post.authorUsername || `topic_${target}`) : target,
-            workspaceId,
-            settings,
-            { skipTranslation },
-            currentFollowerCount,
-            sourceDetails
-        );
-
-        if (!savedPost) {
-            // Heuristic check for rejection reason if we wanted to be precise we'd return reason from processPost
-            // Here we just increment counters for the log row
-            const ageMs = post.postedAt ? Date.now() - new Date(post.postedAt).getTime() : 0;
-            const ageHours = ageMs / (1000 * 60 * 60);
-            if (ageHours > 72) failedFreshness++;
-            else failedEngagement++;
-            continue;
-        }
-
-        // Discovery: Collect author if they passed all filters
-        if (type === 'TOPIC' && post.authorUsername) {
-            discoveredAuthors.add(post.authorUsername);
-        }
-
-        newCount++;
-        console.log(`[ScrapeWorker]   + New: ${savedPost.threadId} (score: ${savedPost.hotScore})`);
-
-        // Upload media to storage if present
-        if (savedPost.mediaUrls) {
-            const mediaItems = Array.isArray(savedPost.mediaUrls) ? savedPost.mediaUrls : [];
-            if (mediaItems.length > 0) {
-                let mediaUpdated = false;
-
-                const updatedMedia = await Promise.all(mediaItems.map(async (item: any, idx: number) => {
-                    let newItem = { ...item };
-
-                    // Upload main URL (Video or Image)
-                    if (item.url && !item.url.includes('threadsmonitorblobs.blob.core.windows.net')) {
-                        try {
-                            const extension = item.type === "video" ? ".mp4" : ".jpg";
-                            const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}${extension}`;
-                            const storageUrl = await uploadMediaToStorage(item.url, filename);
-                            console.log(`[ScrapeWorker]   📎 Media uploaded: ${storageUrl}`);
-                            newItem.url = storageUrl;
-                            mediaUpdated = true;
-                        } catch (mediaErr: any) {
-                            console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr.message);
-                        }
-                    }
-
-                    // Upload cover URL if present and valid
-                    if (item.coverUrl && !item.coverUrl.includes('threadsmonitorblobs.blob.core.windows.net')) {
-                        try {
-                            const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}_cover.jpg`;
-                            const storageUrl = await uploadMediaToStorage(item.coverUrl, filename);
-                            console.log(`[ScrapeWorker]   📎 Cover uploaded: ${storageUrl}`);
-                            newItem.coverUrl = storageUrl;
-                            mediaUpdated = true;
-                        } catch (mediaErr: any) {
-                            console.error(`[ScrapeWorker]   ⚠ Cover upload failed:`, mediaErr.message);
-                        }
-                    }
-                    return newItem;
-                }));
-
-                if (mediaUpdated) {
-                    await prisma.post.update({
-                        where: { id: savedPost.id },
-                        data: { mediaUrls: updatedMedia },
-                    });
-                }
-            }
-        }
-    }
-
-    // discovery: Add new accounts as sources
-    if (type === 'TOPIC' && discoveredAuthors.size > 0) {
-        console.log(`[ScrapeWorker] Discovered ${discoveredAuthors.size} qualifying accounts. Upserting sources...`);
-        for (const username of discoveredAuthors) {
-            try {
-                const added = await prisma.scraperSource.upsert({
-                    where: {
-                        workspaceId_type_value: {
+        // discovery: Add new accounts as sources
+        if (type === 'TOPIC' && discoveredAuthors.size > 0) {
+            for (const username of discoveredAuthors) {
+                try {
+                    await prisma.scraperSource.upsert({
+                        where: {
+                            workspaceId_type_value: { workspaceId, type: 'ACCOUNT', value: username }
+                        },
+                        update: {},
+                        create: {
                             workspaceId,
                             type: 'ACCOUNT',
-                            value: username
+                            value: username,
+                            platform: 'THREADS',
+                            isActive: true,
+                            minLikes: 50,
+                            minReplies: 0,
+                            maxAgeHours: 24,
+                            trustWeight: 1.0
                         }
-                    },
-                    update: {}, // No change if exists
-                    create: {
-                        workspaceId,
-                        type: 'ACCOUNT',
-                        value: username,
-                        platform: 'THREADS',
-                        isActive: true,
-                        minLikes: 50,
-                        minReplies: 0,
-                        maxAgeHours: 24,
-                        trustWeight: 1.0
-                    }
-                });
-                if (added.createdAt.getTime() > Date.now() - 5000) {
-                    console.log(`[ScrapeWorker]   + Auto-added account: @${username}`);
-                }
-            } catch (err: any) {
-                console.error(`[ScrapeWorker] Failed to auto-add account @${username}:`, err.message);
+                    });
+                } catch (err) { }
             }
         }
-    }
 
-    // structured logging
-    if (sourceId) {
-        await prisma.scrapeLog.create({
-            data: {
-                sourceId: sourceId,
-                sourceType: type,
-                pagesScraped: 0, // Not explicitly tracked in this loop but we could
-                rawCollected: posts.length,
-                failedFreshness,
-                failedEngagement,
-                unknownFollowers,
-                qualified: newCount,
+        // structured logging
+        if (sourceId) {
+            await prisma.scrapeLog.create({
+                data: {
+                    sourceId: sourceId,
+                    sourceType: type,
+                    pagesScraped: 0,
+                    rawCollected: posts.length,
+                    failedFreshness,
+                    failedEngagement,
+                    unknownFollowers,
+                    qualified: newCount,
+                }
+            });
+        }
+
+        console.log(`[ScrapeWorker] Done ${target}: ${newCount} new posts`);
+
+        // Anti-memory leak: periodically restart scraper for this slot
+        if (jobCounter % 10 === 0) {
+            console.log(`[ScrapeWorker] Slot ${slotId} reached 10 jobs. Recycling browser...`);
+            const scraper = scraperPool.get(slotId);
+            if (scraper) {
+                await scraper.close();
+                scraperPool.delete(slotId);
             }
-        });
-    }
+        }
 
-    console.log(`[ScrapeWorker] Done ${target}: ${newCount} new posts`);
-    return { target, newCount, total: posts.length };
+        return { target, newCount, total: posts.length };
+
+    } catch (error: any) {
+        console.error(`[ScrapeWorker] Error processing job ${job.id}:`, error.message);
+
+        // If we crashed or timed out, maybe the browser is in a bad state. Close it.
+        const slotId = (jobCounter - 1) % CONCURRENCY;
+        const scraper = scraperPool.get(slotId);
+        if (scraper) {
+            console.log(`[ScrapeWorker] Closing scraper in slot ${slotId} due to error.`);
+            await scraper.close();
+            scraperPool.delete(slotId);
+        }
+
+        throw error; // Let BullMQ handle the retry
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 // ─── Start Worker ────────────────────────────────────────────────────────────

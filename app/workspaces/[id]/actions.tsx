@@ -3,14 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import ScrapeButton from "./_components/ScrapeButton";
+
 interface WorkspaceActionsProps {
     workspace: {
         id: string;
         isActive: boolean;
     };
+    isScraping?: boolean;
 }
 
-export default function WorkspaceActions({ workspace }: WorkspaceActionsProps) {
+export default function WorkspaceActions({ workspace, isScraping }: WorkspaceActionsProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -53,6 +56,7 @@ export default function WorkspaceActions({ workspace }: WorkspaceActionsProps) {
 
     return (
         <div className="flex gap-2">
+            <ScrapeButton workspaceId={workspace.id} isScraping={isScraping} />
             <button
                 onClick={toggleActive}
                 disabled={loading}
