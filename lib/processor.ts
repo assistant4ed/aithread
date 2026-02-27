@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { getProvider } from "./ai/provider";
+import { getProvider, FallbackProvider } from "./ai/provider";
 import { calculateTopicScore, applyFreshnessAdjustment } from "./scoring/topicScore";
 import { ThreadPost, ThreadsScraper } from "./scraper";
 
@@ -18,9 +18,27 @@ export interface ProcessPostOptions {
 }
 
 /**
- * Helper to ensure we have a valid Date or undefined
+ * Centrally resolve AI provider based on workspace settings with consistent defaults.
  */
-// ─── Utilities ──────────────────────────────────────────────────────────────
+function getWorkspaceProvider(settings?: WorkspaceSettings, modelOverride?: string, providerOverride?: string) {
+    const primary = getProvider({
+        provider: providerOverride || settings?.aiProvider || "GROQ",
+        model: modelOverride || settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined,
+    });
+
+    // Automatically fallback to GROQ (Llama 3.3 70B) if the primary isn't GROQ already
+    const primaryProviderName = (providerOverride || settings?.aiProvider || "GROQ").toUpperCase();
+    if (primaryProviderName !== "GROQ") {
+        const fallback = getProvider({
+            provider: "GROQ",
+            model: "llama-3.3-70b-versatile",
+        });
+        return new FallbackProvider([primary, fallback]);
+    }
+
+    return primary;
+}
 
 function safeDate(d: any): Date | undefined {
     if (!d) return undefined;
@@ -304,11 +322,7 @@ export function calculateHotScore(post: {
 }
 
 export async function checkTopicRelevance(content: string, topic: string, aiSettings?: WorkspaceSettings): Promise<boolean> {
-    const provider = getProvider({
-        provider: aiSettings?.aiProvider || "GROQ",
-        model: aiSettings?.aiModel || "llama-3.1-8b-instant",
-        apiKey: aiSettings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(aiSettings, "llama-3.1-8b-instant");
 
     try {
         const answer = await provider.createChatCompletion([
@@ -338,11 +352,7 @@ Criteria:
 }
 
 export async function translateContent(text: string, translationPrompt: string, aiSettings?: WorkspaceSettings): Promise<string> {
-    const provider = getProvider({
-        provider: aiSettings?.aiProvider || "GROQ",
-        model: aiSettings?.aiModel || "llama-3.3-70b-versatile",
-        apiKey: aiSettings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(aiSettings);
 
     try {
         const result = await provider.createChatCompletion([

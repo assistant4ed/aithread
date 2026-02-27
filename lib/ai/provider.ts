@@ -14,6 +14,22 @@ export interface AIProvider {
     createChatCompletion(messages: AIChatMessage[], options?: AIChatOptions): Promise<string | null>;
 }
 
+export class FallbackProvider implements AIProvider {
+    constructor(private providers: AIProvider[]) { }
+
+    async createChatCompletion(messages: AIChatMessage[], options?: AIChatOptions): Promise<string | null> {
+        for (const provider of this.providers) {
+            try {
+                const result = await provider.createChatCompletion(messages, options);
+                if (result) return result;
+            } catch (e) {
+                console.error("[FallbackProvider] Step failed:", e);
+            }
+        }
+        return null;
+    }
+}
+
 export interface ProviderConfig {
     provider: string;
     model: string;
@@ -26,6 +42,15 @@ import { AnthropicProvider } from "./anthropic";
 import { GeminiProvider } from "./gemini";
 
 export function getProvider(config: ProviderConfig): AIProvider {
+    const primary = _createProvider(config);
+
+    // If it's a critical step, we can wrap it in a fallback
+    // For now, let's allow returning a single provider, 
+    // but the caller can now use FallbackProvider if they want.
+    return primary;
+}
+
+function _createProvider(config: ProviderConfig): AIProvider {
     switch (config.provider.toUpperCase()) {
         case "GROQ":
             return new GroqProvider(config.apiKey || process.env.GROQ_API_KEY || "", config.model);

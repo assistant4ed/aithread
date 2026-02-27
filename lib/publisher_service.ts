@@ -22,6 +22,10 @@ export interface PublisherConfig {
 
     translationPrompt: string;
     dailyLimit: number;
+
+    aiProvider?: string;
+    aiModel?: string;
+    aiApiKey?: string | null;
 }
 
 

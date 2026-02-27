@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { getProvider } from "./ai/provider";
+import { getProvider, FallbackProvider } from "./ai/provider";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { clusterPosts, Document } from "./clustering";
@@ -31,11 +31,34 @@ export interface SynthesisStats {
 }
 
 /**
+ * Centrally resolve AI provider based on workspace settings with consistent defaults.
+ */
+function getWorkspaceProvider(settings?: SynthesisSettings, modelOverride?: string, providerOverride?: string) {
+    const primary = getProvider({
+        provider: providerOverride || settings?.aiProvider || "GROQ",
+        model: modelOverride || settings?.aiModel || "llama-3.3-70b-versatile",
+        apiKey: settings?.aiApiKey || undefined,
+    });
+
+    // Automatically fallback to GROQ (Llama 3.3 70B) if the primary isn't GROQ already
+    const primaryProviderName = (providerOverride || settings?.aiProvider || "GROQ").toUpperCase();
+    if (primaryProviderName !== "GROQ") {
+        const fallback = getProvider({
+            provider: "GROQ",
+            model: "llama-3.3-70b-versatile",
+        });
+        return new FallbackProvider([primary, fallback]);
+    }
+
+    return primary;
+}
+
+/**
  * Run synthesis engine for a specific workspace.
  * 1. Fetch posts from last X hours (configured via postLookbackHours)
- * 2. Cluster them using LLM (Llama 3)
+ * 2. Cluster them using LLM
  * 3. Filter clusters by author threshold (min 2) OR viral score
- * 4. Synthesize articles using Groq
+ * 4. Synthesize articles using configured AI
  */
 export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings): Promise<SynthesisStats> {
     console.log(`[Synthesis] Starting for workspace ${workspaceId}...`);
@@ -186,58 +209,59 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             continue;
         }
 
-        // 4b. Filter Relevant Media (Vision)
+        // 4b. Media Selection & Generation (Isolated to prevent crashes)
         let selectedMediaUrl: string | null = null;
         let selectedMediaType: string | null = null;
 
-        let allMedia: { url: string, type: string }[] = [];
-        for (const p of clusterPosts) {
-            if (p.mediaUrls && Array.isArray(p.mediaUrls)) {
-                const mediaArray = p.mediaUrls as any[];
-                for (const m of mediaArray) {
-                    if (m) {
-                        const mObj = m as any;
-                        if (typeof mObj === 'string') {
-                            allMedia.push({ url: mObj, type: 'image' });
-                        } else if (mObj.url) {
-                            allMedia.push({ url: mObj.url, type: mObj.type || 'image' });
+        try {
+            let allMedia: { url: string, type: string }[] = [];
+            for (const p of clusterPosts) {
+                if (p.mediaUrls && Array.isArray(p.mediaUrls)) {
+                    const mediaArray = p.mediaUrls as any[];
+                    for (const m of mediaArray) {
+                        if (m) {
+                            const mObj = m as any;
+                            if (typeof mObj === 'string') {
+                                allMedia.push({ url: mObj, type: 'image' });
+                            } else if (mObj.url) {
+                                allMedia.push({ url: mObj.url, type: mObj.type || 'image' });
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Priority 1: If there's a video, just use it (Vision can't filter videos easily)
-        const videoMedia = allMedia.find(m => m.type === 'video' || m.url.toLowerCase().includes('.mp4'));
-        if (videoMedia) {
-            selectedMediaUrl = videoMedia.url;
-            selectedMediaType = 'video';
-            console.log(`  -> Auto-selected video: ${selectedMediaUrl}`);
-        } else {
-            // Candidates are images
-            const imageCandidates = allMedia.filter(m => m.type === 'image' || !m.url.toLowerCase().includes('.mp4')).map(m => m.url);
-            if (imageCandidates.length > 0) {
-                selectedMediaUrl = await filterRelevantMedia(synthesis.content, imageCandidates, settings);
-                if (selectedMediaUrl) {
-                    selectedMediaType = 'image';
-                    console.log(`  -> Vision selected image: ${selectedMediaUrl}`);
-                } else {
-                    console.log(`  -> Vision rejected all images as irrelevant/memes.`);
+            // Priority 1: If there's a video, just use it
+            const videoMedia = allMedia.find(m => m.type === 'video' || m.url.toLowerCase().includes('.mp4'));
+            if (videoMedia) {
+                selectedMediaUrl = videoMedia.url;
+                selectedMediaType = 'video';
+                console.log(`  -> Auto-selected video: ${selectedMediaUrl}`);
+            } else {
+                // Candidates are images
+                const imageCandidates = allMedia.filter(m => m.type === 'image' || !m.url.toLowerCase().includes('.mp4')).map(m => m.url);
+                if (imageCandidates.length > 0) {
+                    selectedMediaUrl = await filterRelevantMedia(synthesis.content, imageCandidates, settings);
+                    if (selectedMediaUrl) {
+                        selectedMediaType = 'image';
+                        console.log(`  -> Vision selected image: ${selectedMediaUrl}`);
+                    }
                 }
             }
-        }
 
-        // 4c. Image Generation Fallback (Nano Banana Pro)
-        if (!selectedMediaUrl) {
-            console.log(`  -> No media selected. Falling back to image generation using nano-banana-pro...`);
-            const generatedUrl = await generateFallbackImage(synthesis.content, settings);
-            if (generatedUrl) {
-                selectedMediaUrl = generatedUrl;
-                selectedMediaType = 'image';
-                console.log(`  -> Generated fallback image: ${selectedMediaUrl}`);
-            } else {
-                console.log(`  -> Image generation failed or disabled. Proceeding text-only.`);
+            // Fallback to Image Generation if no media selected/found
+            if (!selectedMediaUrl) {
+                console.log(`  -> No media selected. Attempting image generation...`);
+                const generatedUrl = await generateFallbackImage(synthesis.content, settings);
+                if (generatedUrl) {
+                    selectedMediaUrl = generatedUrl;
+                    selectedMediaType = 'image';
+                    console.log(`  -> Generated fallback image: ${selectedMediaUrl}`);
+                }
             }
+        } catch (mediaErr: any) {
+            console.error(`[Synthesis] Media selection/generation failed for cluster: ${mediaErr.message}`);
+            // Non-fatal, proceed with text-only
         }
 
         // 5. Translate & Persist & Sanitize
@@ -337,11 +361,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
  * Check if an article should be auto-approved using LLM.
  */
 async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<boolean> {
-    const provider = getProvider({
-        provider: settings?.aiProvider || "GROQ",
-        model: settings?.aiModel || "llama-3.3-70b-versatile",
-        apiKey: settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings);
+
 
     const prompt = `
     You are an AI Content Moderator.
@@ -384,17 +405,14 @@ import { RawCluster } from "./clustering";
 async function clusterPostsWithLLM(posts: Document[], promptInstruction: string, settings?: SynthesisSettings): Promise<RawCluster[]> {
     if (posts.length === 0) return [];
 
-    const provider = getProvider({
-        provider: settings?.aiProvider || "GROQ",
-        model: settings?.aiModel || "llama-3.3-70b-versatile",
-        apiKey: settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings);
+
 
     // Format posts for LLM
     const postsText = posts.map(p => `[ID: ${p.id}] ${p.text}`).join("\n\n");
 
     const systemPrompt = `
-    You are an AI News Editor using Llama 3.
+    You are an AI News Editor.
     Task: Group the following social media posts into thematic news clusters.
     
     Instructions:
@@ -447,11 +465,7 @@ interface SynthesisResult {
 async function classifyCluster(posts: any[], settings?: SynthesisSettings) {
     const postSummaries = posts.map(p => `- ${p.contentOriginal?.slice(0, 200)}`).join('\n');
 
-    const provider = getProvider({
-        provider: settings?.aiProvider || "GROQ",
-        model: settings?.aiModel || "llama-3.1-8b-instant",
-        apiKey: settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings, "llama-3.1-8b-instant");
 
     const prompt = `You are a social media editor. Read these posts about the same story and decide which format best fits the content.
 
@@ -490,11 +504,8 @@ export async function synthesizeCluster(posts: { content: string; account: strin
     const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
     const textContext = posts.map(p => `[Account: ${p.account}]\n${stripPlatformReferences(p.content)}`).join("\n\n---\n\n");
 
-    const provider = getProvider({
-        provider: settings?.aiProvider || "GROQ",
-        model: settings?.aiModel || "llama-3.3-70b-versatile",
-        apiKey: settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings);
+
 
     const defaultPrompt = `You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary using the ${format.id} format.`;
     const userPrompt = synthesisPrompt || defaultPrompt;
@@ -554,11 +565,8 @@ export async function synthesizeCluster(posts: { content: string; account: strin
 }
 
 export async function translateText(text: string, prompt: string, settings?: SynthesisSettings): Promise<string> {
-    const provider = getProvider({
-        provider: settings?.aiProvider || "GROQ",
-        model: settings?.aiModel || "llama-3.3-70b-versatile",
-        apiKey: settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings);
+
 
     try {
         const result = await provider.createChatCompletion([
@@ -581,11 +589,7 @@ async function filterRelevantMedia(articleContent: string, candidateUrls: string
     // De-duplicate and limit
     const uniqueUrls = Array.from(new Set(candidateUrls)).slice(0, 5); // Max 5 to avoid model overload
 
-    const provider = getProvider({
-        provider: "OPENAI", // Force OpenAI for Vision
-        model: "gpt-4o",
-        apiKey: process.env.OPENAI_API_KEY || settings?.aiApiKey || undefined
-    });
+    const provider = getWorkspaceProvider(settings, "gpt-4o", "OPENAI");
 
     const promptText = `You are a social media editor.
 We have an article below. We also have ${uniqueUrls.length} candidate images.
@@ -638,11 +642,7 @@ export async function generateFallbackImage(content: string, settings?: Synthesi
         }
 
         // 1. Generate prompts based on content
-        const provider = getProvider({
-            provider: settings?.aiProvider || "OPENAI",
-            model: "gpt-4o",
-            apiKey
-        });
+        const provider = getWorkspaceProvider(settings, "gpt-4o", "OPENAI");
 
         const systemPrompt = `### ROLE
 Professional HK Photographer (iPhone 15 Pro).
@@ -696,8 +696,8 @@ Follow the Style Rules to create 4 unique iPhone 15 Pro prompts based on the con
                 const genAI = new GoogleGenerativeAI(geminiApiKey);
                 const model = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
                 const result = await model.generateContent(imagePromptText);
-
-                const part = result.response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                const candidates = result?.response?.candidates;
+                const part = candidates?.[0]?.content?.parts?.find(p => p.inlineData);
                 if (part?.inlineData) {
                     const buffer = Buffer.from(part.inlineData.data, 'base64');
                     const filename = `generated/${Date.now()}_gemini.png`;

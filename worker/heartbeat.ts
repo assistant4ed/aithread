@@ -1,5 +1,7 @@
-import "dotenv/config";
 import { prisma } from "../lib/prisma";
+import { Prisma, Workspace } from "@prisma/client";
+
+type WorkspaceWithSources = Prisma.WorkspaceGetPayload<{ include: { sources: true } }>;
 import { scrapeQueue, ScrapeJobData, removePendingScrapes } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
@@ -212,7 +214,7 @@ function toUTCDate(hhmmHKT: string, referenceDate: Date): Date {
     return date;
 }
 
-async function runScrape(ws: any) {
+async function runScrape(ws: WorkspaceWithSources) {
     return trackPipelineRun(ws.id, "SCRAPE", async () => {
         const sources = ws.sources || [];
 
@@ -234,10 +236,13 @@ async function runScrape(ws: any) {
         }
 
         const settings: WorkspaceSettings = {
-            translationPrompt: ws.translationPrompt,
+            translationPrompt: ws.translationPrompt || "",
             hotScoreThreshold: ws.hotScoreThreshold,
             topicFilter: ws.topicFilter,
             maxPostAgeHours: ws.maxPostAgeHours,
+            aiProvider: ws.aiProvider,
+            aiModel: ws.aiModel,
+            aiApiKey: ws.aiApiKey,
         };
 
         let count = 0;
@@ -281,7 +286,7 @@ async function runScrape(ws: any) {
     });
 }
 
-async function runSynthesis(ws: any, targetPublishTime: string) {
+async function runSynthesis(ws: Workspace, targetPublishTime: string) {
     return trackPipelineRun(ws.id, "SYNTHESIS", async () => {
         console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
         await removePendingScrapes(ws.id);
@@ -292,21 +297,21 @@ async function runSynthesis(ws: any, targetPublishTime: string) {
         });
 
         return await runSynthesisEngine(ws.id, {
-            translationPrompt: ws.translationPrompt,
-            clusteringPrompt: ws.clusteringPrompt,
-            synthesisLanguage: ws.synthesisLanguage,
+            translationPrompt: ws.translationPrompt || "",
+            clusteringPrompt: ws.clusteringPrompt || "",
+            synthesisLanguage: ws.synthesisLanguage || "Traditional Chinese (HK/TW)",
             postLookbackHours: ws.postLookbackHours,
             targetPublishTimeStr: targetPublishTime,
             hotScoreThreshold: ws.hotScoreThreshold,
-            coherenceThreshold: (ws as any).coherenceThreshold,
-            aiProvider: (ws as any).aiProvider,
-            aiModel: (ws as any).aiModel,
-            aiApiKey: (ws as any).aiApiKey,
+            coherenceThreshold: ws.coherenceThreshold,
+            aiProvider: ws.aiProvider || "GROQ",
+            aiModel: ws.aiModel || "llama-3.3-70b-versatile",
+            aiApiKey: ws.aiApiKey || undefined,
         });
     });
 }
 
-async function runPublish(ws: any) {
+async function runPublish(ws: Workspace) {
     return trackPipelineRun(ws.id, "PUBLISH", async () => {
         if (!ws.threadsAppId || !ws.threadsToken) {
             console.log(`[Publish] Skipping ${ws.name} (No credentials)`);
@@ -321,15 +326,18 @@ async function runPublish(ws: any) {
         return await checkAndPublishApprovedPosts({
             workspaceId: ws.id,
             threadsUserId: ws.threadsAppId,
-            threadsAccessToken: ws.threadsToken,
-            instagramAccountId: ws.instagramAccountId,
-            instagramAccessToken: ws.instagramAccessToken,
-            twitterApiKey: ws.twitterApiKey,
-            twitterApiSecret: ws.twitterApiSecret,
-            twitterAccessToken: ws.twitterAccessToken,
-            twitterAccessSecret: ws.twitterAccessSecret,
-            translationPrompt: ws.translationPrompt,
+            threadsAccessToken: ws.threadsToken || undefined,
+            instagramAccountId: ws.instagramAccountId || undefined,
+            instagramAccessToken: ws.instagramAccessToken || undefined,
+            twitterApiKey: ws.twitterApiKey || undefined,
+            twitterApiSecret: ws.twitterApiSecret || undefined,
+            twitterAccessToken: ws.twitterAccessToken || undefined,
+            twitterAccessSecret: ws.twitterAccessSecret || undefined,
+            translationPrompt: ws.translationPrompt || "",
             dailyLimit: ws.dailyPostLimit,
+            aiProvider: ws.aiProvider,
+            aiModel: ws.aiModel,
+            aiApiKey: ws.aiApiKey,
         });
     });
 }
