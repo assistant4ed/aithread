@@ -110,6 +110,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
     let failedEngagement = 0;
     let unknownFollowers = 0;
 
+    const discoveredAuthors = new Set<string>();
+
     for (const post of posts) {
         // Skip empty posts
         if (!post.content && (!post.mediaUrls || post.mediaUrls.length === 0)) continue;
@@ -168,10 +170,15 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
             continue;
         }
 
+        // Discovery: Collect author if they passed all filters
+        if (type === 'TOPIC' && post.authorUsername) {
+            discoveredAuthors.add(post.authorUsername);
+        }
+
         newCount++;
         console.log(`[ScrapeWorker]   + New: ${savedPost.threadId} (score: ${savedPost.hotScore})`);
 
-        // Upload media to GCS if present
+        // Upload media to storage if present
         if (savedPost.mediaUrls) {
             const mediaItems = Array.isArray(savedPost.mediaUrls) ? savedPost.mediaUrls : [];
             if (mediaItems.length > 0) {
@@ -181,7 +188,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     let newItem = { ...item };
 
                     // Upload main URL (Video or Image)
-                    if (item.url && !item.url.includes('storage.googleapis.com')) {
+                    if (item.url && !item.url.includes('threadsmonitorblobs.blob.core.windows.net')) {
                         try {
                             const extension = item.type === "video" ? ".mp4" : ".jpg";
                             const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}${extension}`;
@@ -195,7 +202,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     }
 
                     // Upload cover URL if present and valid
-                    if (item.coverUrl && !item.coverUrl.includes('storage.googleapis.com')) {
+                    if (item.coverUrl && !item.coverUrl.includes('threadsmonitorblobs.blob.core.windows.net')) {
                         try {
                             const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}_cover.jpg`;
                             const storageUrl = await uploadMediaToStorage(item.coverUrl, filename);
@@ -215,6 +222,41 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                         data: { mediaUrls: updatedMedia },
                     });
                 }
+            }
+        }
+    }
+
+    // discovery: Add new accounts as sources
+    if (type === 'TOPIC' && discoveredAuthors.size > 0) {
+        console.log(`[ScrapeWorker] Discovered ${discoveredAuthors.size} qualifying accounts. Upserting sources...`);
+        for (const username of discoveredAuthors) {
+            try {
+                const added = await prisma.scraperSource.upsert({
+                    where: {
+                        workspaceId_type_value: {
+                            workspaceId,
+                            type: 'ACCOUNT',
+                            value: username
+                        }
+                    },
+                    update: {}, // No change if exists
+                    create: {
+                        workspaceId,
+                        type: 'ACCOUNT',
+                        value: username,
+                        platform: 'THREADS',
+                        isActive: true,
+                        minLikes: 50,
+                        minReplies: 0,
+                        maxAgeHours: 24,
+                        trustWeight: 1.0
+                    }
+                });
+                if (added.createdAt.getTime() > Date.now() - 5000) {
+                    console.log(`[ScrapeWorker]   + Auto-added account: @${username}`);
+                }
+            } catch (err: any) {
+                console.error(`[ScrapeWorker] Failed to auto-add account @${username}:`, err.message);
             }
         }
     }

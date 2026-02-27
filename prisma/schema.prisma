@@ -121,9 +121,9 @@ model ScraperSource {
   platform    Platform
   isActive    Boolean    @default(true)
 
-  minLikes    Int?       @default(100)
-  minReplies  Int?       @default(5)
-  maxAgeHours Int?       @default(3)
+  minLikes    Int?       @default(50)
+  minReplies  Int?       @default(0)
+  maxAgeHours Int?       @default(24)
 
   trustWeight Float      @default(1.0)
 
@@ -131,6 +131,8 @@ model ScraperSource {
   updatedAt DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, type, value])
 }
 
 model Post {
