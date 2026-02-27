@@ -269,18 +269,27 @@ async function runScrape(ws: WorkspaceWithSources) {
 
         console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
 
-        // Capture snapshot of recent active posts for diagnostic metadata
-        const recentPosts = await prisma.post.count({
-            where: {
-                workspaceId: ws.id,
-                createdAt: { gte: new Date(Date.now() - 600000) } // Last 10m (rough window for current cycle)
-            }
-        });
+        // Capture useful diagnostic metadata
+        const [recentPosts, totalPending] = await Promise.all([
+            prisma.post.count({
+                where: {
+                    workspaceId: ws.id,
+                    createdAt: { gte: new Date(Date.now() - 86400000) } // Last 24h
+                }
+            }),
+            prisma.post.count({
+                where: {
+                    workspaceId: ws.id,
+                    status: "PENDING_REVIEW",
+                }
+            }),
+        ]);
 
         return {
             jobsEnqueued: count,
             sourcesTotal: sources.length,
-            recentPostsCaptured: recentPosts,
+            postsLast24h: recentPosts,
+            totalPending,
             limitReached
         };
     });

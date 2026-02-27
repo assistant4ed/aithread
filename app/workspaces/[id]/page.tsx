@@ -331,8 +331,14 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
             return (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                     <span className="text-[10px] text-muted">🎯 {metadata.sourcesTotal || 0} Sources</span>
-                    <span className="text-[10px] text-muted">📦 {metadata.jobsEnqueued || 0} Jobs</span>
-                    {metadata.recentPostsCaptured > 0 && (
+                    {metadata.postsLast24h > 0 && (
+                        <span className="text-[10px] text-success">✨ {metadata.postsLast24h} Posts (24h)</span>
+                    )}
+                    {metadata.totalPending > 0 && (
+                        <span className="text-[10px] text-muted">📋 {metadata.totalPending} Pending</span>
+                    )}
+                    {/* Legacy field support */}
+                    {metadata.recentPostsCaptured > 0 && !metadata.postsLast24h && (
                         <span className="text-[10px] text-success">✨ {metadata.recentPostsCaptured} New Posts</span>
                     )}
                     {metadata.limitReached && (

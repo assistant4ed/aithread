@@ -401,58 +401,85 @@ async function checkAutoApproval(title: string, content: string, instruction: st
 
 import { RawCluster } from "./clustering";
 
-// New LLM Clustering
+// New LLM Clustering with TF-IDF fallback
 async function clusterPostsWithLLM(posts: Document[], promptInstruction: string, settings?: SynthesisSettings): Promise<RawCluster[]> {
     if (posts.length === 0) return [];
 
     const provider = getWorkspaceProvider(settings);
 
+    // Format posts for LLM — truncate each post to keep payload manageable
+    // Use a short index instead of the full CUID to save tokens
+    const indexMap = new Map<string, string>(); // index -> real ID
+    const postsForLLM = posts.map((p, i) => {
+        const idx = String(i + 1);
+        indexMap.set(idx, p.id);
+        const truncatedText = p.text.slice(0, 300);
+        return `[${idx}] ${truncatedText}`;
+    });
 
-    // Format posts for LLM
-    const postsText = posts.map(p => `[ID: ${p.id}] ${p.text}`).join("\n\n");
+    // Build payload, respecting a ~20k char budget
+    let payload = "";
+    let includedCount = 0;
+    for (const entry of postsForLLM) {
+        if (payload.length + entry.length + 2 > 20000) break;
+        payload += entry + "\n\n";
+        includedCount++;
+    }
 
-    const systemPrompt = `
-    You are an AI News Editor.
-    Task: Group the following social media posts into thematic news clusters.
-    
-    Instructions:
-    ${promptInstruction}
-    
-    Validation Rules:
-    1. A cluster MUST share a specific news topic (e.g., "Release of Claude 3.5 Sonnet", "SpaceX Launch").
-    2. Do NOT group unrelated posts or posts about different topics.
-    3. Ignore spam or irrelevant queries.
-    
-    Output Format:
-    Return a JSON object with a "clusters" array.
-    each cluster: { "topic": "string", "postIds": ["id1", "id2"] }
-    
-    JSON ONLY. No markdown, no "Here is the JSON".
-    `;
+    console.log(`[Synthesis] LLM clustering: sending ${includedCount}/${posts.length} posts (${payload.length} chars)`);
+
+    const systemPrompt = `You are an AI News Editor.
+Task: Group the following social media posts into thematic news clusters.
+
+Instructions:
+${promptInstruction}
+
+Validation Rules:
+1. A cluster MUST share a specific news topic (e.g., "Release of Claude 3.5 Sonnet", "SpaceX Launch").
+2. Do NOT group unrelated posts or posts about different topics.
+3. Ignore spam or irrelevant queries.
+4. Each cluster MUST have at least 2 posts.
+
+Output Format:
+Return a JSON object with a "clusters" array.
+each cluster: { "topic": "string", "postIds": ["1", "2"] }
+Use the numeric IDs from the brackets [1], [2], etc.
+
+JSON ONLY. No markdown, no explanation.`;
 
     try {
         const raw = await provider.createChatCompletion([
             { role: "system", content: systemPrompt },
-            { role: "user", content: `Posts to cluster:\n\n${postsText.slice(0, 25000)}` }, // Limit 25k chars ~ 6k tokens
+            { role: "user", content: `Posts to cluster:\n\n${payload}` },
         ], {
             model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
 
-        if (!raw) return [];
+        if (!raw) {
+            console.warn("[Synthesis] LLM returned null response. Falling back to TF-IDF clustering.");
+            return clusterPosts(posts);
+        }
 
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.clusters)) {
-            return parsed.clusters.map((c: any) => ({
-                postIds: c.postIds || [],
+        if (parsed && Array.isArray(parsed.clusters) && parsed.clusters.length > 0) {
+            // Map short indices back to real IDs
+            const mapped = parsed.clusters.map((c: any) => ({
+                postIds: (c.postIds || []).map((id: string) => indexMap.get(String(id)) || id).filter(Boolean),
                 terms: [c.topic || ""]
-            }));
+            })).filter((c: any) => c.postIds.length >= 2);
+
+            console.log(`[Synthesis] LLM returned ${parsed.clusters.length} clusters (${mapped.length} with 2+ posts)`);
+            if (mapped.length > 0) return mapped;
         }
-        return [];
-    } catch (e) {
-        console.error("[Synthesis] LLM Clustering failed:", e);
-        return [];
+
+        console.warn("[Synthesis] LLM returned 0 valid clusters. Falling back to TF-IDF clustering.");
+        return clusterPosts(posts);
+    } catch (e: any) {
+        console.error("[Synthesis] LLM Clustering failed:", e.message || e);
+        console.warn("[Synthesis] Falling back to TF-IDF clustering.");
+        return clusterPosts(posts);
     }
 }
 
