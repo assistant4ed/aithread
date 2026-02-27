@@ -4,7 +4,7 @@ set -e
 # Configuration
 ACR_NAME="threadsmonitoracr"
 RESOURCE_GROUP="john-threads"
-ENVIRONMENT="threads-monitor-env"
+ENVIRONMENT="threads-monitor-env-sg"
 REGISTRY_URL="${ACR_NAME}.azurecr.io"
 
 echo "🚀 Starting manual deployment to Azure..."

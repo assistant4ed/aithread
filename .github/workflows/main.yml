@@ -7,7 +7,7 @@ on:
 
 env:
   ACR_NAME: threadsmonitoracr
-  CONTAINER_APP_ENV: threads-monitor-env
+  CONTAINER_APP_ENV: threads-monitor-env-sg
   RESOURCE_GROUP: john-threads
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: web
+          containerAppName: web-sg
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-web:${{ github.sha }}
 
@@ -48,7 +48,7 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: worker-scraper
+          containerAppName: worker-scraper-sg
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }}
 
@@ -56,7 +56,7 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: worker-heartbeat
+          containerAppName: worker-heartbeat-sg
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }}
 
@@ -64,7 +64,7 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: worker-youtube
+          containerAppName: worker-youtube-sg
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }}
 
@@ -72,6 +72,6 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: worker-metrics
+          containerAppName: worker-metrics-sg
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }}
