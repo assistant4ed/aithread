@@ -6,7 +6,7 @@ import { processPost, resolveFollowerCounts } from "../lib/processor";
 import { uploadMediaToStorage } from "../lib/storage";
 import { prisma } from "../lib/prisma";
 
-const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "3", 10);
+const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "1", 10);
 
 const scraperPool: Map<number, ThreadsScraper> = new Map();
 

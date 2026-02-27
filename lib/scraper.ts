@@ -31,7 +31,22 @@ export class ThreadsScraper {
             puppeteer.use(StealthPlugin());
             this.browser = await puppeteer.launch({
                 headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--no-zygote',
+                    '--disable-extensions',
+                    '--disable-background-networking',
+                    '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-translate',
+                    '--mute-audio',
+                    '--no-first-run',
+                    '--js-flags=--max-old-space-size=256',
+                ],
             });
         }
     }
@@ -46,6 +61,7 @@ export class ThreadsScraper {
     async getPageContent(username: string): Promise<string> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+        await this.configurePage(page);
         try {
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
             return await page.content();
@@ -60,6 +76,7 @@ export class ThreadsScraper {
     async scrapeAccount(username: string, since?: Date): Promise<ThreadPost[]> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+        await this.configurePage(page);
 
         const MAX_SCROLLS = 20;
         const allPosts = new Map<string, ThreadPost>();
@@ -304,6 +321,7 @@ export class ThreadsScraper {
     async scrapeTopic(hashtag: string, since?: Date): Promise<ThreadPost[]> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+        await this.configurePage(page);
 
         const MAX_SCROLLS = 30; // Increased to allow scanning past old posts
         const allPosts = new Map<string, ThreadPost>();
@@ -541,6 +559,7 @@ export class ThreadsScraper {
     async getFollowerCount(username: string): Promise<number> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+        await this.configurePage(page);
         try {
             console.log(`[Scraper] Fetching follower count for @${username}`);
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -592,6 +611,7 @@ export class ThreadsScraper {
     async enrichPost(postUrl: string): Promise<{ videoUrl?: string; coverUrl?: string } | null> {
         if (!this.browser) await this.init();
         const page = await this.browser!.newPage();
+        await this.configurePage(page);
 
         try {
             console.log(`[Enricher] Visiting ${postUrl}`);
@@ -641,5 +661,18 @@ export class ThreadsScraper {
         } finally {
             await page.close();
         }
+    }
+    private async configurePage(page: Page): Promise<void> {
+        await page.setViewport({ width: 800, height: 600 });
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const type = req.resourceType();
+            // Block heavy binary data but allow document/scripts/XHR/stylesheets
+            if (['image', 'media', 'font'].includes(type)) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
     }
 }
