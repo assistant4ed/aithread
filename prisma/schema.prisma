@@ -48,6 +48,7 @@ model Workspace {
   autoApproveDrafts     Boolean              @default(false)
   autoApprovePrompt     String?
   sources               ScraperSource[]
+  pipelineRuns          PipelineRun[]
 
   // AI Configuration
   aiProvider            String               @default("GROQ")
@@ -276,6 +277,34 @@ model YoutubeJob {
   updatedAt      DateTime  @updatedAt
 
   @@index([requestedById])
+}
+
+model PipelineRun {
+  id          String       @id @default(cuid())
+  workspaceId String
+  step        PipelineStep
+  status      RunStatus    @default(RUNNING)
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  error       String?
+  metadata    Json?        // e.g. { postsScraped: 42, jobsEnqueued: 5 }
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, step])
+  @@index([startedAt])
+}
+
+enum PipelineStep {
+  SCRAPE
+  SYNTHESIS
+  PUBLISH
+}
+
+enum RunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 enum JobStatus {

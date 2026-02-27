@@ -4,6 +4,7 @@ import { scrapeQueue, ScrapeJobData, removePendingScrapes } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
 import { runSynthesisEngine } from "../lib/synthesis_engine";
+import { trackPipelineRun } from "../lib/pipeline_tracker";
 
 console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
@@ -162,6 +163,18 @@ setInterval(() => {
                 console.log(`[Heartbeat] ⚠️ Loop took ${elapsedLoop}ms!`);
             }
 
+            // Once per day (at 00:00 HKT), prune old pipeline runs
+            if (currentHHMM === "00:00") {
+                const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
+                prisma.pipelineRun.deleteMany({
+                    where: { startedAt: { lt: sevenDaysAgo } },
+                }).then(deleted => {
+                    if (deleted.count > 0) {
+                        console.log(`[Heartbeat] 🧹 Pruned ${deleted.count} old pipeline run records.`);
+                    }
+                }).catch(e => console.error("[Heartbeat] Pruning failed:", e));
+            }
+
         } catch (error) {
             console.error("[Heartbeat] Error:", error);
         } finally {
@@ -197,103 +210,112 @@ function toUTCDate(hhmmHKT: string, referenceDate: Date): Date {
 }
 
 async function runScrape(ws: any) {
-    const sources = ws.sources || [];
+    return trackPipelineRun(ws.id, "SCRAPE", async () => {
+        const sources = ws.sources || [];
 
-    if (sources.length === 0) return;
+        if (sources.length === 0) return { jobsEnqueued: 0 };
 
-    console.log(`[Scrape] Starting cycle for ${ws.name}...`);
+        console.log(`[Scrape] Starting cycle for ${ws.name}...`);
 
-    // Update tracking
-    await prisma.workspace.update({
-        where: { id: ws.id },
-        data: { lastScrapedAt: new Date() }
-    });
+        // Update tracking
+        await prisma.workspace.update({
+            where: { id: ws.id },
+            data: { lastScrapedAt: new Date() }
+        });
 
-    const postsToday = await getDailyPublishCount(ws.id);
-    const limitReached = postsToday >= ws.dailyPostLimit;
+        const postsToday = await getDailyPublishCount(ws.id);
+        const limitReached = postsToday >= ws.dailyPostLimit;
 
-    if (limitReached) {
-        console.log(`[Scrape] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
-    }
+        if (limitReached) {
+            console.log(`[Scrape] Daily limit reached (${postsToday}/${ws.dailyPostLimit}). Translation will be skipped.`);
+        }
 
-    const settings: WorkspaceSettings = {
-        translationPrompt: ws.translationPrompt,
-        hotScoreThreshold: ws.hotScoreThreshold,
-        topicFilter: ws.topicFilter,
-        maxPostAgeHours: ws.maxPostAgeHours,
-    };
-
-    let count = 0;
-
-    // 1. Process ScraperSource (New System)
-    for (const source of sources) {
-        if (!source.isActive) continue;
-
-        const jobData: ScrapeJobData = {
-            target: source.value,
-            type: source.type,
-            workspaceId: ws.id,
-            settings,
-            skipTranslation: limitReached,
-            sourceId: source.id,
+        const settings: WorkspaceSettings = {
+            translationPrompt: ws.translationPrompt,
+            hotScoreThreshold: ws.hotScoreThreshold,
+            topicFilter: ws.topicFilter,
+            maxPostAgeHours: ws.maxPostAgeHours,
         };
 
-        await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData, {
-            removeOnComplete: true,
-            removeOnFail: { count: 100 },
-        });
-        count++;
-    }
+        let count = 0;
 
-    console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
+        // 1. Process ScraperSource (New System)
+        for (const source of sources) {
+            if (!source.isActive) continue;
+
+            const jobData: ScrapeJobData = {
+                target: source.value,
+                type: source.type,
+                workspaceId: ws.id,
+                settings,
+                skipTranslation: limitReached,
+                sourceId: source.id,
+            };
+
+            await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData, {
+                removeOnComplete: true,
+                removeOnFail: { count: 100 },
+            });
+            count++;
+        }
+
+        console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
+        return { jobsEnqueued: count };
+    });
 }
 
 async function runSynthesis(ws: any, targetPublishTime: string) {
-    console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
-    await removePendingScrapes(ws.id);
+    return trackPipelineRun(ws.id, "SYNTHESIS", async () => {
+        console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
+        await removePendingScrapes(ws.id);
 
-    await prisma.workspace.update({
-        where: { id: ws.id },
-        data: { lastSynthesizedAt: new Date() }
-    });
+        await prisma.workspace.update({
+            where: { id: ws.id },
+            data: { lastSynthesizedAt: new Date() }
+        });
 
-    await runSynthesisEngine(ws.id, {
-        translationPrompt: ws.translationPrompt,
-        clusteringPrompt: ws.clusteringPrompt,
-        synthesisLanguage: ws.synthesisLanguage,
-        postLookbackHours: ws.postLookbackHours,
-        targetPublishTimeStr: targetPublishTime,
-        hotScoreThreshold: ws.hotScoreThreshold,
-        coherenceThreshold: (ws as any).coherenceThreshold,
-        aiProvider: (ws as any).aiProvider,
-        aiModel: (ws as any).aiModel,
-        aiApiKey: (ws as any).aiApiKey,
+        await runSynthesisEngine(ws.id, {
+            translationPrompt: ws.translationPrompt,
+            clusteringPrompt: ws.clusteringPrompt,
+            synthesisLanguage: ws.synthesisLanguage,
+            postLookbackHours: ws.postLookbackHours,
+            targetPublishTimeStr: targetPublishTime,
+            hotScoreThreshold: ws.hotScoreThreshold,
+            coherenceThreshold: (ws as any).coherenceThreshold,
+            aiProvider: (ws as any).aiProvider,
+            aiModel: (ws as any).aiModel,
+            aiApiKey: (ws as any).aiApiKey,
+        });
+        return {};
     });
 }
 
 async function runPublish(ws: any) {
-    if (!ws.threadsAppId || !ws.threadsToken) {
-        console.log(`[Publish] Skipping ${ws.name} (No credentials)`);
-        return;
-    }
+    return trackPipelineRun(ws.id, "PUBLISH", async () => {
+        if (!ws.threadsAppId || !ws.threadsToken) {
+            console.log(`[Publish] Skipping ${ws.name} (No credentials)`);
+            return { skipped: true, reason: "No credentials" };
+        }
 
-    await prisma.workspace.update({
-        where: { id: ws.id },
-        data: { lastPublishedAt: new Date() }
-    });
+        await prisma.workspace.update({
+            where: { id: ws.id },
+            data: { lastPublishedAt: new Date() }
+        });
 
-    await checkAndPublishApprovedPosts({
-        workspaceId: ws.id,
-        threadsUserId: ws.threadsAppId,
-        threadsAccessToken: ws.threadsToken,
-        instagramAccountId: ws.instagramAccountId,
-        instagramAccessToken: ws.instagramAccessToken,
-        twitterApiKey: ws.twitterApiKey,
-        twitterApiSecret: ws.twitterApiSecret,
-        twitterAccessToken: ws.twitterAccessToken,
-        twitterAccessSecret: ws.twitterAccessSecret,
-        translationPrompt: ws.translationPrompt,
-        dailyLimit: ws.dailyPostLimit,
+        await checkAndPublishApprovedPosts({
+            workspaceId: ws.id,
+            threadsUserId: ws.threadsAppId,
+            threadsAccessToken: ws.threadsToken,
+            instagramAccountId: ws.instagramAccountId,
+            instagramAccessToken: ws.instagramAccessToken,
+            twitterApiKey: ws.twitterApiKey,
+            twitterApiSecret: ws.twitterApiSecret,
+            twitterAccessToken: ws.twitterAccessToken,
+            twitterAccessSecret: ws.twitterAccessSecret,
+            translationPrompt: ws.translationPrompt,
+            dailyLimit: ws.dailyPostLimit,
+        });
+        return {};
     });
 }
 

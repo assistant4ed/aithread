@@ -49,6 +49,19 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
         take: 10,
     });
 
+    // Latest pipeline runs
+    const pipelineRuns = await (prisma as any).pipelineRun.findMany({
+        where: { workspaceId: id },
+        orderBy: { startedAt: "desc" },
+        take: 15, // Take enough to find the latest of each step
+    });
+
+    const latestRuns = {
+        SCRAPE: pipelineRuns.find((r: any) => r.step === "SCRAPE"),
+        SYNTHESIS: pipelineRuns.find((r: any) => r.step === "SYNTHESIS"),
+        PUBLISH: pipelineRuns.find((r: any) => r.step === "PUBLISH"),
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             <AutoRefresh />
@@ -81,6 +94,25 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                 <MiniStat label="Errors" value={errorCount} color="text-danger" />
             </div>
 
+            {/* Pipeline Status */}
+            <section className="bg-surface/50 border border-border rounded-xl p-5">
+                <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">Pipeline Status</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <PipelineStepDisplay
+                        label="Scraping"
+                        run={latestRuns.SCRAPE}
+                    />
+                    <PipelineStepDisplay
+                        label="Synthesis"
+                        run={latestRuns.SYNTHESIS}
+                    />
+                    <PipelineStepDisplay
+                        label="Publishing"
+                        run={latestRuns.PUBLISH}
+                    />
+                </div>
+            </section>
+
             {/* Configuration */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Scraper Sources */}
@@ -96,8 +128,8 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                                 <div
                                     key={source.id}
                                     className={`flex items-center gap-2 px-3 py-1 rounded-full bg-surface border text-sm font-medium transition-all ${source.isActive
-                                            ? "border-accent/40 text-foreground"
-                                            : "border-border text-muted opacity-50"
+                                        ? "border-accent/40 text-foreground"
+                                        : "border-border text-muted opacity-50"
                                         }`}
                                 >
                                     <span className={`text-[10px] font-bold p-0.5 rounded ${source.type === 'TOPIC' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
@@ -265,6 +297,69 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
             </section>
         </div>
     );
+}
+
+function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
+    if (!run) {
+        return (
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-muted" />
+                    <span className="text-sm font-medium">{label}</span>
+                </div>
+                <span className="text-xs text-muted ml-4">No runs recorded</span>
+            </div>
+        );
+    }
+
+    const statusColors: Record<string, string> = {
+        RUNNING: "bg-warning animate-pulse",
+        COMPLETED: "bg-success",
+        FAILED: "bg-danger",
+    };
+
+    const duration = run.completedAt
+        ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+        : null;
+
+    return (
+        <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${statusColors[run.status] || "bg-muted"}`} />
+                    <span className="text-sm font-medium">{label}</span>
+                </div>
+                <span className="text-[10px] font-mono text-muted">
+                    {formatRelativeTime(new Date(run.startedAt))}
+                </span>
+            </div>
+            <div className="ml-4 flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold ${run.status === 'FAILED' ? 'text-danger' : 'text-muted'}`}>
+                        {run.status}
+                    </span>
+                    {duration !== null && (
+                        <span className="text-[10px] text-muted/50">• {duration}s</span>
+                    )}
+                </div>
+                {run.error && (
+                    <p className="text-[10px] text-danger line-clamp-1 italic" title={run.error}>
+                        {run.error}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function formatRelativeTime(date: Date) {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return date.toLocaleDateString();
 }
 
 function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
