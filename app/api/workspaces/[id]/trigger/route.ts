@@ -8,14 +8,13 @@ import { trackPipelineRun } from "@/lib/pipeline_tracker";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id: workspaceId } = await params;
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const { id: workspaceId } = params;
 
     try {
         const workspace = await prisma.workspace.findUnique({
