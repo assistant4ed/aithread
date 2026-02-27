@@ -13,17 +13,21 @@ echo "🚀 Starting manual deployment to Azure..."
 echo "🔑 Logging into ACR..."
 docker login $REGISTRY_URL -u threadsmonitoracr -p NMH2V6nGVse4ngYzuVQJWC5ITzF0DMHynh2Z2orksvviNo0jE4nDJQQJ99CBAC3pKaREqg7NAAACAZCRpc8R
 
-# 2. Build Web Image
-echo "🏗️ Building Web Image..."
-docker build -t $REGISTRY_URL/threads-monitor-web:latest .
+# 2. Build Images with unique tags
+TAG=$(date +%Y%m%d%H%M%S)
+echo "🏗️ Building images with tag: $TAG..."
 
-# 3. Build Worker Image
+echo "🏗️ Building Web Image..."
+docker build -t $REGISTRY_URL/threads-monitor-web:$TAG -t $REGISTRY_URL/threads-monitor-web:latest .
+
 echo "🏗️ Building Worker Image..."
-docker build -f Dockerfile.worker -t $REGISTRY_URL/threads-monitor-worker:latest .
+docker build -f Dockerfile.worker -t $REGISTRY_URL/threads-monitor-worker:$TAG -t $REGISTRY_URL/threads-monitor-worker:latest .
 
 # 4. Push Images
 echo "📤 Pushing images to ACR..."
+docker push $REGISTRY_URL/threads-monitor-web:$TAG
 docker push $REGISTRY_URL/threads-monitor-web:latest
+docker push $REGISTRY_URL/threads-monitor-worker:$TAG
 docker push $REGISTRY_URL/threads-monitor-worker:latest
 
 # 5. Configure Registry Credentials & Update Container Apps
@@ -44,11 +48,11 @@ update_app() {
 }
 
 # Update Web
-update_app "web" "$REGISTRY_URL/threads-monitor-web:latest"
+update_app "web" "$REGISTRY_URL/threads-monitor-web:$TAG"
 
 # Update Workers
 for worker in scraper heartbeat youtube metrics; do
-    update_app "worker-$worker" "$REGISTRY_URL/threads-monitor-worker:latest"
+    update_app "worker-$worker" "$REGISTRY_URL/threads-monitor-worker:$TAG"
 done
 
 echo "✅ Deployment complete!"

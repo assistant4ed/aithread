@@ -122,22 +122,26 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
 
         const hasVideo = post.mediaUrls.some(m => m.type === 'video');
         if (hasVideo && post.postUrl) {
-            console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
-            const enriched = await scraper.enrichPost(post.postUrl);
-            if (enriched && enriched.videoUrl) {
-                console.log(`[ScrapeWorker]   -> Found HQ video: ${enriched.videoUrl.substring(0, 50)}...`);
-                post.mediaUrls = post.mediaUrls.map(m => {
-                    if (m.type === 'video') {
-                        return {
-                            ...m,
-                            url: enriched.videoUrl!,
-                            coverUrl: enriched.coverUrl
-                        };
-                    }
-                    return m;
-                });
-            } else {
-                console.log(`[ScrapeWorker]   -> No better video found.`);
+            try {
+                console.log(`[ScrapeWorker] Enriching video post: ${post.postUrl}`);
+                const enriched = await scraper.enrichPost(post.postUrl);
+                if (enriched && enriched.videoUrl) {
+                    console.log(`[ScrapeWorker]   -> Found HQ video: ${enriched.videoUrl.substring(0, 50)}...`);
+                    post.mediaUrls = post.mediaUrls.map(m => {
+                        if (m.type === 'video') {
+                            return {
+                                ...m,
+                                url: enriched.videoUrl!,
+                                coverUrl: enriched.coverUrl
+                            };
+                        }
+                        return m;
+                    });
+                } else {
+                    console.log(`[ScrapeWorker]   -> No better video found.`);
+                }
+            } catch (enrichErr: any) {
+                console.warn(`[ScrapeWorker]   ⚠ Enrichment failed for ${post.postUrl}: ${enrichErr.message}`);
             }
         }
 
