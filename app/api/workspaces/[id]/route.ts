@@ -144,12 +144,16 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
-        const workspace = await prisma.workspace.update({
-            where: { id },
-            data: { isActive: false },
-        });
+        // Manual cascade deletion since we can't easily update DB schema with Cascade
+        await prisma.$transaction([
+            prisma.scraperSource.deleteMany({ where: { workspaceId: id } }),
+            prisma.post.deleteMany({ where: { workspaceId: id } }),
+            prisma.synthesizedArticle.deleteMany({ where: { workspaceId: id } }),
+            prisma.pipelineRun.deleteMany({ where: { workspaceId: id } }),
+            prisma.workspace.delete({ where: { id } }),
+        ]);
 
-        return NextResponse.json({ message: "Workspace deactivated", workspace });
+        return NextResponse.json({ message: "Workspace permanently deleted" });
     } catch (error: any) {
         if (error.code === "P2025") {
             return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
