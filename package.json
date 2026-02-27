@@ -21,7 +21,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@auth/prisma-adapter": "^2.11.1",
-    "@google-cloud/storage": "^7.19.0",
+    "@azure/storage-blob": "^12.31.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "6.19.2",
     "axios": "^1.13.5",

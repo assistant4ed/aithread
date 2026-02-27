@@ -8,7 +8,7 @@ import { generateScript } from '../services/llm/index.js';
 import { extractMediaAssets } from '../services/mediaAssets.js';
 import { generatePDF } from '../services/pdfGenerator.js';
 import { updateSheetsRow } from '../services/sheets.js';
-import { uploadToGCS } from '../services/storage.js';
+import { uploadToStorage } from '../services/storage.js';
 import type { YouTubeJobPayload } from '../types/youtube.js';
 import { prisma } from '../../prisma.js';
 
@@ -75,8 +75,8 @@ export async function startWorker() {
 
                 // Upload to GCS
                 console.log(`[Job ${job.id}] Uploading to GCS...`);
-                const gcsDestination = `youtube/pdfs/${outPdfName}`;
-                await uploadToGCS(pdfPath, gcsDestination);
+                const storageDestination = `youtube/pdfs/${outPdfName}`;
+                await uploadToStorage(pdfPath, storageDestination);
 
                 // Clean up local files
                 try {
@@ -93,7 +93,7 @@ export async function startWorker() {
 
                 const result = {
                     videoId: metadata.id,
-                    pdfPath: gcsDestination, // Store GCS path now
+                    pdfPath: storageDestination,
                     oneLiner: script.oneLinerSummary,
                     success: true,
                     sheetsRowIndex
@@ -105,7 +105,7 @@ export async function startWorker() {
                         where: { id: dbJobId },
                         data: {
                             status: 'COMPLETED',
-                            pdfUrl: gcsDestination,
+                            pdfUrl: storageDestination,
                             oneLiner: script.oneLinerSummary,
                             videoId: metadata.id
                         }

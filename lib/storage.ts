@@ -1,27 +1,27 @@
 import axios from "axios";
-import { Storage } from "@google-cloud/storage";
+import { BlobServiceClient } from "@azure/storage-blob";
 
-const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const CONTAINER_NAME = "media";
 
 /**
- * Downloads media from a URL and uploads it directly to GCS.
- * Used during scraping to store media in GCS from the start.
+ * Downloads media from a URL and uploads it directly to Azure Blob Storage.
  * @param url The URL of the media to download.
- * @param filename The desired filename in GCS.
+ * @param filename The desired filename in Azure.
  * @returns The public URL of the uploaded file.
  */
-export async function uploadMediaToGCS(url: string, filename: string): Promise<string> {
-    if (!GCS_BUCKET_NAME) {
-        throw new Error("GCS_BUCKET_NAME is not defined in environment variables.");
+export async function uploadMediaToStorage(url: string, filename: string): Promise<string> {
+    if (!AZURE_STORAGE_CONNECTION_STRING) {
+        throw new Error("AZURE_STORAGE_CONNECTION_STRING is not defined in environment variables.");
     }
 
-    console.log(`[Storage] Downloading and uploading to GCS: ${filename}`);
-
-    const storage = new Storage({
-        projectId: process.env.GOOGLE_PROJECT_ID,
-    });
+    console.log(`[Storage] Downloading and uploading to Azure: ${filename}`);
 
     try {
+        const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+        const blockBlobClient = containerClient.getBlockBlobClient(filename);
+
         // 1. Download the file
         const response = await axios({
             url,
@@ -32,50 +32,51 @@ export async function uploadMediaToGCS(url: string, filename: string): Promise<s
         const mimeType = response.headers["content-type"] || "application/octet-stream";
         const buffer = Buffer.from(response.data);
 
-        // 2. Upload to GCS using SDK
-        const bucket = storage.bucket(GCS_BUCKET_NAME);
-        const file = bucket.file(filename);
-
-        await file.save(buffer, {
-            contentType: mimeType,
-            resumable: false,
-            predefinedAcl: "publicRead",
+        // 2. Upload to Azure
+        await blockBlobClient.uploadData(buffer, {
+            blobHTTPHeaders: { blobContentType: mimeType }
         });
 
-        const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${filename}`;
+        const publicUrl = blockBlobClient.url;
         console.log(`[Storage] Uploaded: ${publicUrl}`);
         return publicUrl;
     } catch (error: any) {
-        console.error("[Storage] Error uploading media to GCS:", error.message);
+        console.error("[Storage] Error uploading media to Azure:", error.message);
         throw error;
     }
 }
-export async function uploadBufferToGCS(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
-    if (!GCS_BUCKET_NAME) {
-        throw new Error("GCS_BUCKET_NAME is not defined in environment variables.");
+
+/**
+ * Compatibility alias for uploadMediaToStorage
+ */
+export const uploadMediaToGCS = uploadMediaToStorage;
+
+export async function uploadBufferToStorage(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+    if (!AZURE_STORAGE_CONNECTION_STRING) {
+        throw new Error("AZURE_STORAGE_CONNECTION_STRING is not defined in environment variables.");
     }
 
-    console.log(`[Storage] Uploading buffer to GCS: ${filename}`);
-
-    const storage = new Storage({
-        projectId: process.env.GOOGLE_PROJECT_ID,
-    });
+    console.log(`[Storage] Uploading buffer to Azure: ${filename}`);
 
     try {
-        const bucket = storage.bucket(GCS_BUCKET_NAME);
-        const file = bucket.file(filename);
+        const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+        const blockBlobClient = containerClient.getBlockBlobClient(filename);
 
-        await file.save(buffer, {
-            contentType: mimeType,
-            resumable: false,
-            predefinedAcl: "publicRead",
+        await blockBlobClient.uploadData(buffer, {
+            blobHTTPHeaders: { blobContentType: mimeType }
         });
 
-        const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${filename}`;
+        const publicUrl = blockBlobClient.url;
         console.log(`[Storage] Uploaded buffer: ${publicUrl}`);
         return publicUrl;
     } catch (error: any) {
-        console.error("[Storage] Error uploading buffer to GCS:", error.message);
+        console.error("[Storage] Error uploading buffer to Azure:", error.message);
         throw error;
     }
 }
+
+/**
+ * Compatibility alias for uploadBufferToStorage
+ */
+export const uploadBufferToGCS = uploadBufferToStorage;

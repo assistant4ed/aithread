@@ -1,46 +1,57 @@
-import { Storage } from '@google-cloud/storage';
+import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } from '@azure/storage-blob';
 import * as path from 'path';
 
-const BUCKET_NAME = process.env.GCS_BUCKET_NAME;
-const PROJECT_ID = process.env.GOOGLE_PROJECT_ID;
-const KEY_FILE = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const CONTAINER_NAME = 'media';
 
-if (!BUCKET_NAME || !PROJECT_ID || !KEY_FILE) {
-    console.warn('[Storage] Missing GCS configuration in environment variables.');
+if (!AZURE_STORAGE_CONNECTION_STRING) {
+    console.warn('[Storage] Missing AZURE_STORAGE_CONNECTION_STRING in environment variables.');
 }
 
-const storage = new Storage({
-    projectId: PROJECT_ID,
-    keyFilename: KEY_FILE,
-});
+export async function uploadToStorage(localFilePath: string, destinationName: string): Promise<string> {
+    if (!AZURE_STORAGE_CONNECTION_STRING) throw new Error('AZURE_STORAGE_CONNECTION_STRING not configured');
 
-export async function uploadToGCS(localFilePath: string, destinationName: string): Promise<string> {
-    if (!BUCKET_NAME) throw new Error('GCS_BUCKET_NAME not configured');
+    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+    const blockBlobClient = containerClient.getBlockBlobClient(destinationName);
 
-    const bucket = storage.bucket(BUCKET_NAME);
-
-    await bucket.upload(localFilePath, {
-        destination: destinationName,
-        metadata: {
-            cacheControl: 'public, max-age=31536000',
+    await blockBlobClient.uploadFile(localFilePath, {
+        blobHTTPHeaders: {
+            blobCacheControl: 'public, max-age=31536000',
         },
     });
 
-    console.log(`[Storage] Uploaded ${localFilePath} to gs://${BUCKET_NAME}/${destinationName}`);
+    console.log(`[Storage] Uploaded ${localFilePath} to Azure Blob: ${destinationName}`);
     return destinationName;
 }
 
+/**
+ * Compatibility alias
+ */
+export const uploadToGCS = uploadToStorage;
+
 export async function getSignedUrl(fileName: string): Promise<string> {
-    if (!BUCKET_NAME) throw new Error('GCS_BUCKET_NAME not configured');
+    if (!AZURE_STORAGE_CONNECTION_STRING) throw new Error('AZURE_STORAGE_CONNECTION_STRING not configured');
 
-    const [url] = await storage
-        .bucket(BUCKET_NAME)
-        .file(fileName)
-        .getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 1 * 60 * 60 * 1000, // 1 hour
-        });
+    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+    const blockBlobClient = containerClient.getBlockBlobClient(fileName);
 
-    return url;
+    const matches = AZURE_STORAGE_CONNECTION_STRING.match(/AccountName=([^;]+);AccountKey=([^;]+)/);
+    if (!matches) throw new Error('Invalid connection string');
+
+    const accountName = matches[1];
+    const accountKey = matches[2];
+
+    const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
+
+    const sasToken = generateBlobSASQueryParameters({
+        containerName: CONTAINER_NAME,
+        blobName: fileName,
+        permissions: BlobSASPermissions.parse("r"),
+        startsOn: new Date(),
+        expiresOn: new Date(new Date().valueOf() + 3600 * 1000), // 1 hour
+    }, sharedKeyCredential).toString();
+
+    return `${blockBlobClient.url}?${sasToken}`;
 }

@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { clusterPosts, Document } from "./clustering";
 import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
-import { uploadBufferToGCS } from "./storage";
+import { uploadBufferToStorage } from "./storage";
 
 export interface SynthesisSettings {
     translationPrompt: string;
@@ -655,7 +655,7 @@ Follow the Style Rules to create 4 unique iPhone 15 Pro prompts based on the con
                 if (part?.inlineData) {
                     const buffer = Buffer.from(part.inlineData.data, 'base64');
                     const filename = `generated/${Date.now()}_gemini.png`;
-                    return await uploadBufferToGCS(buffer, filename, 'image/png');
+                    return await uploadBufferToStorage(buffer, filename, 'image/png');
                 }
             } catch (geminiErr: any) {
                 console.warn(`[Synthesis] Gemini image generation failed: ${geminiErr.message}`);

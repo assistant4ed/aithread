@@ -3,7 +3,7 @@ import { Worker, Job } from "bullmq";
 import { SCRAPE_QUEUE_NAME, ScrapeJobData, redisConnection } from "../lib/queue";
 import { ThreadsScraper } from "../lib/scraper";
 import { processPost, resolveFollowerCounts } from "../lib/processor";
-import { uploadMediaToGCS } from "../lib/storage";
+import { uploadMediaToStorage } from "../lib/storage";
 import { prisma } from "../lib/prisma";
 
 const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "3", 10);
@@ -181,9 +181,9 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                         try {
                             const extension = item.type === "video" ? ".mp4" : ".jpg";
                             const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}${extension}`;
-                            const gcsUrl = await uploadMediaToGCS(item.url, filename);
-                            console.log(`[ScrapeWorker]   📎 Media uploaded: ${gcsUrl}`);
-                            newItem.url = gcsUrl;
+                            const storageUrl = await uploadMediaToStorage(item.url, filename);
+                            console.log(`[ScrapeWorker]   📎 Media uploaded: ${storageUrl}`);
+                            newItem.url = storageUrl;
                             mediaUpdated = true;
                         } catch (mediaErr: any) {
                             console.error(`[ScrapeWorker]   ⚠ Media upload failed:`, mediaErr.message);
@@ -194,9 +194,9 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     if (item.coverUrl && !item.coverUrl.includes('storage.googleapis.com')) {
                         try {
                             const filename = `scraped/${Date.now()}_${savedPost.id}_${idx}_cover.jpg`;
-                            const gcsUrl = await uploadMediaToGCS(item.coverUrl, filename);
-                            console.log(`[ScrapeWorker]   📎 Cover uploaded: ${gcsUrl}`);
-                            newItem.coverUrl = gcsUrl;
+                            const storageUrl = await uploadMediaToStorage(item.coverUrl, filename);
+                            console.log(`[ScrapeWorker]   📎 Cover uploaded: ${storageUrl}`);
+                            newItem.coverUrl = storageUrl;
                             mediaUpdated = true;
                         } catch (mediaErr: any) {
                             console.error(`[ScrapeWorker]   ⚠ Cover upload failed:`, mediaErr.message);

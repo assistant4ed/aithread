@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Storage } from "@google-cloud/storage";
+import { BlobServiceClient } from "@azure/storage-blob";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
-const storage = new Storage();
-const bucketName = process.env.GCS_BUCKET_NAME || "threads-monitor-uploads";
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const CONTAINER_NAME = "media";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await auth();
@@ -14,6 +14,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const userId = session.user.id;
 
     const { id } = await params;
+
+    if (!AZURE_STORAGE_CONNECTION_STRING) {
+        return NextResponse.json({ error: "Storage configuration missing" }, { status: 500 });
+    }
 
     try {
         // Verify ownership
@@ -39,18 +43,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         const buffer = Buffer.from(await file.arrayBuffer());
         const filename = `${id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-        const bucket = storage.bucket(bucketName);
-        const blob = bucket.file(filename);
 
-        await blob.save(buffer, {
-            contentType: file.type,
-            resumable: false,
+        const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+        const blockBlobClient = containerClient.getBlockBlobClient(filename);
+
+        await blockBlobClient.uploadData(buffer, {
+            blobHTTPHeaders: { blobContentType: file.type }
         });
 
-        // Make the file public
-        await blob.makePublic();
-
-        const publicUrl = `https://storage.googleapis.com/${bucketName}/${filename}`;
+        const publicUrl = blockBlobClient.url;
 
         console.log(`[Upload] Uploaded ${filename} to ${publicUrl}`);
 

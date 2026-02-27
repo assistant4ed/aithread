@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { prisma } from "../lib/prisma";
 import { publishArticle } from "../lib/publisher_service";
 import { ThreadsScraper } from "../lib/scraper";
-import { uploadMediaToGCS } from "../lib/storage";
+import { uploadMediaToStorage } from "../lib/storage";
 
 async function main() {
     const args = process.argv.slice(2);
@@ -103,17 +103,17 @@ async function enrichAndPublish(article: any, workspace: any) {
                     if (enriched && enriched.videoUrl) {
                         console.log(`[Enrichment]   -> Post ${post.id}: Found HQ Video + Cover`);
 
-                        // Upload to GCS
-                        const videoGcs = await uploadMediaToGCS(enriched.videoUrl, `enriched/${Date.now()}_${post.id}.mp4`);
-                        let coverGcs = undefined;
+                        // Upload to Azure
+                        const videoStorage = await uploadMediaToStorage(enriched.videoUrl, `enriched/${Date.now()}_${post.id}.mp4`);
+                        let coverStorage = undefined;
                         if (enriched.coverUrl) {
-                            coverGcs = await uploadMediaToGCS(enriched.coverUrl, `enriched/${Date.now()}_${post.id}_cover.jpg`);
+                            coverStorage = await uploadMediaToStorage(enriched.coverUrl, `enriched/${Date.now()}_${post.id}_cover.jpg`);
                         }
 
                         // Update DB
                         const updatedMedia = media.map(m => {
                             if (m.type === 'video') {
-                                return { ...m, url: videoGcs, coverUrl: coverGcs };
+                                return { ...m, url: videoStorage, coverUrl: coverStorage };
                             }
                             return m;
                         });
