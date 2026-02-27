@@ -21,23 +21,34 @@ export interface ProcessPostOptions {
  * Centrally resolve AI provider based on workspace settings with consistent defaults.
  */
 function getWorkspaceProvider(settings?: WorkspaceSettings, modelOverride?: string, providerOverride?: string) {
+    const primaryProviderName = (providerOverride || settings?.aiProvider || "GROQ").toUpperCase();
+    const primaryModel = modelOverride || settings?.aiModel || "llama-3.3-70b-versatile";
+
     const primary = getProvider({
-        provider: providerOverride || settings?.aiProvider || "GROQ",
-        model: modelOverride || settings?.aiModel || "llama-3.3-70b-versatile",
+        provider: primaryProviderName,
+        model: primaryModel,
         apiKey: settings?.aiApiKey || undefined,
     });
 
-    // Automatically fallback to GROQ (Llama 3.3 70B) if the primary isn't GROQ already
-    const primaryProviderName = (providerOverride || settings?.aiProvider || "GROQ").toUpperCase();
+    // Build fallback chain: Primary → GROQ (if not already) → Gemini (geo-safe)
+    const fallbacks: import("./ai/provider").AIProvider[] = [primary];
+
     if (primaryProviderName !== "GROQ") {
-        const fallback = getProvider({
+        fallbacks.push(getProvider({
             provider: "GROQ",
             model: "llama-3.3-70b-versatile",
-        });
-        return new FallbackProvider([primary, fallback]);
+        }));
     }
 
-    return primary;
+    // Always add Gemini as the last-resort fallback (works from all regions incl. HK)
+    if (primaryProviderName !== "GEMINI") {
+        fallbacks.push(getProvider({
+            provider: "GEMINI",
+            model: "gemini-2.5-flash",
+        }));
+    }
+
+    return fallbacks.length > 1 ? new FallbackProvider(fallbacks) : primary;
 }
 
 function safeDate(d: any): Date | undefined {
