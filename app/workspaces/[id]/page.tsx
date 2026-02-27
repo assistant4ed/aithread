@@ -322,6 +322,60 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
         ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
         : null;
 
+    const metadata = run.metadata ? (typeof run.metadata === 'string' ? JSON.parse(run.metadata) : run.metadata) : null;
+
+    const renderDetails = () => {
+        if (!metadata) return null;
+
+        if (run.step === 'SCRAPE') {
+            return (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                    <span className="text-[10px] text-muted">🎯 {metadata.sourcesTotal || 0} Sources</span>
+                    <span className="text-[10px] text-muted">📦 {metadata.jobsEnqueued || 0} Jobs</span>
+                    {metadata.recentPostsCaptured > 0 && (
+                        <span className="text-[10px] text-success">✨ {metadata.recentPostsCaptured} New Posts</span>
+                    )}
+                    {metadata.limitReached && (
+                        <span className="text-[10px] text-warning">⚠️ Limit Reached</span>
+                    )}
+                </div>
+            );
+        }
+
+        if (run.step === 'SYNTHESIS') {
+            return (
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2">
+                        <span className="text-[10px] text-muted">🔍 {metadata.postsInWindow || 0} Posts viewed</span>
+                        <span className="text-[10px] text-muted">🧩 {metadata.clustersFound || 0} Clusters</span>
+                        <span className="text-[10px] text-success font-medium">📰 {metadata.articlesGenerated || 0} Articles</span>
+                    </div>
+                    {metadata.reason && metadata.articlesGenerated === 0 && (
+                        <span className="text-[10px] text-muted italic line-clamp-1">ℹ️ {metadata.reason}</span>
+                    )}
+                </div>
+            );
+        }
+
+        if (run.step === 'PUBLISH') {
+            return (
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2">
+                        <span className="text-[10px] text-muted">📅 {metadata.publishedToday || 0}/{metadata.dailyLimit || 0} Today</span>
+                        <span className="text-[10px] text-muted">📫 {metadata.approvedReady || 0} Ready</span>
+                        <span className="text-[10px] text-success font-medium">✅ {metadata.published || 0} Sent</span>
+                        {metadata.failed > 0 && <span className="text-[10px] text-danger">❌ {metadata.failed} Failed</span>}
+                    </div>
+                    {metadata.reason && metadata.published === 0 && (
+                        <span className="text-[10px] text-muted italic line-clamp-1">ℹ️ {metadata.reason}</span>
+                    )}
+                </div>
+            );
+        }
+
+        return null;
+    };
+
     return (
         <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
@@ -342,8 +396,9 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
                         <span className="text-[10px] text-muted/50">• {duration}s</span>
                     )}
                 </div>
+                {renderDetails()}
                 {run.error && (
-                    <p className="text-[10px] text-danger line-clamp-1 italic" title={run.error}>
+                    <p className="text-[10px] text-danger line-clamp-1 italic mt-0.5" title={run.error}>
                         {run.error}
                     </p>
                 )}

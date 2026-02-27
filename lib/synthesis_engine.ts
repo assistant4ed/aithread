@@ -21,6 +21,15 @@ export interface SynthesisSettings {
     coherenceThreshold?: number; // Minimum authors for consensus
 }
 
+export interface SynthesisStats {
+    postsInWindow: number;
+    postsClusterable: number;
+    clustersFound: number;
+    clustersSkipped: number;
+    articlesGenerated: number;
+    reason?: string;
+}
+
 /**
  * Run synthesis engine for a specific workspace.
  * 1. Fetch posts from last X hours (configured via postLookbackHours)
@@ -28,9 +37,17 @@ export interface SynthesisSettings {
  * 3. Filter clusters by author threshold (min 2) OR viral score
  * 4. Synthesize articles using Groq
  */
-export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings) {
+export async function runSynthesisEngine(workspaceId: string, settings: SynthesisSettings): Promise<SynthesisStats> {
     console.log(`[Synthesis] Starting for workspace ${workspaceId}...`);
     console.log(`[Synthesis] Target Language: ${settings.synthesisLanguage}`);
+
+    const stats: SynthesisStats = {
+        postsInWindow: 0,
+        postsClusterable: 0,
+        clustersFound: 0,
+        clustersSkipped: 0,
+        articlesGenerated: 0
+    };
 
     // Compute scheduledPublishAt if target time is provided
     let scheduledAt: Date | undefined;
@@ -79,9 +96,12 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         } as any,
     });
 
+    stats.postsInWindow = posts.length;
+
     if (posts.length === 0) {
         console.log("[Synthesis] No posts in looked back window.");
-        return;
+        stats.reason = "No pending posts in the lookback window.";
+        return stats;
     }
 
     // 2. Cluster using LLM
@@ -94,8 +114,23 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             sourceId: (p as any).sourceId,
         }));
 
+    stats.postsClusterable = docs.length;
+
+    if (docs.length === 0) {
+        console.log("[Synthesis] No posts with enough content to cluster.");
+        stats.reason = "Posts found but none had enough text content for clustering.";
+        return stats;
+    }
+
     console.log(`[Synthesis] Clustering ${docs.length} posts via LLM...`);
     const rawClusters = await clusterPostsWithLLM(docs, settings.clusteringPrompt, settings);
+    stats.clustersFound = rawClusters.length;
+
+    if (rawClusters.length === 0) {
+        console.log("[Synthesis] No clusters formed by LLM.");
+        stats.reason = "LLM could not find groups of related posts.";
+        return stats;
+    }
 
     // 3. Threshold & Synthesis
     const allAuthors = new Set(posts.map(p => p.sourceAccount));
@@ -106,8 +141,6 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     const thresholdCount = Math.max(minAuthors, Math.ceil(totalTracked * 0.05));
 
     console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors.`);
-
-    let newArticles = 0;
 
     for (const cluster of rawClusters) {
         const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
@@ -122,6 +155,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         if (!isCoherent) {
             console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCountForCluster}).`);
+            stats.clustersSkipped++;
             continue;
         }
 
@@ -129,6 +163,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         const hasPending = clusterPosts.some(p => p.coherenceStatus === "PENDING" || p.coherenceStatus === "ISOLATED");
         if (!hasPending) {
             console.log(`  -> SKIPPED: Already processed / No pending news.`);
+            stats.clustersSkipped++;
             continue;
         }
 
@@ -147,6 +182,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         if (!synthesis) {
             console.log("  -> Synthesis failed / empty response.");
+            stats.clustersSkipped++;
             continue;
         }
 
@@ -224,6 +260,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         if (!translatedContent || !translatedTitle) {
             console.log("  -> Synthesis rejected by sanitizer.");
+            stats.clustersSkipped++;
             continue;
         }
 
@@ -281,10 +318,19 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         });
 
         console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id}) Status: ${finalStatus}`);
-        newArticles++;
+        stats.articlesGenerated++;
     }
 
-    console.log(`[Synthesis] Finished. Generated ${newArticles} new articles.`);
+    if (stats.articlesGenerated === 0 && !stats.reason) {
+        if (stats.clustersFound > 0) {
+            stats.reason = `Found ${stats.clustersFound} clusters, but none passed the coherence threshold or news filtering.`;
+        } else {
+            stats.reason = "Could not form any significant clusters from the current pool of posts.";
+        }
+    }
+
+    console.log(`[Synthesis] Finished. Generated ${stats.articlesGenerated} new articles.`);
+    return stats;
 }
 
 /**

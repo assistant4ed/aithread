@@ -263,7 +263,21 @@ async function runScrape(ws: any) {
         }
 
         console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
-        return { jobsEnqueued: count };
+
+        // Capture snapshot of recent active posts for diagnostic metadata
+        const recentPosts = await prisma.post.count({
+            where: {
+                workspaceId: ws.id,
+                createdAt: { gte: new Date(Date.now() - 600000) } // Last 10m (rough window for current cycle)
+            }
+        });
+
+        return {
+            jobsEnqueued: count,
+            sourcesTotal: sources.length,
+            recentPostsCaptured: recentPosts,
+            limitReached
+        };
     });
 }
 
@@ -277,7 +291,7 @@ async function runSynthesis(ws: any, targetPublishTime: string) {
             data: { lastSynthesizedAt: new Date() }
         });
 
-        await runSynthesisEngine(ws.id, {
+        return await runSynthesisEngine(ws.id, {
             translationPrompt: ws.translationPrompt,
             clusteringPrompt: ws.clusteringPrompt,
             synthesisLanguage: ws.synthesisLanguage,
@@ -289,7 +303,6 @@ async function runSynthesis(ws: any, targetPublishTime: string) {
             aiModel: (ws as any).aiModel,
             aiApiKey: (ws as any).aiApiKey,
         });
-        return {};
     });
 }
 
@@ -305,7 +318,7 @@ async function runPublish(ws: any) {
             data: { lastPublishedAt: new Date() }
         });
 
-        await checkAndPublishApprovedPosts({
+        return await checkAndPublishApprovedPosts({
             workspaceId: ws.id,
             threadsUserId: ws.threadsAppId,
             threadsAccessToken: ws.threadsToken,
@@ -318,7 +331,6 @@ async function runPublish(ws: any) {
             translationPrompt: ws.translationPrompt,
             dailyLimit: ws.dailyPostLimit,
         });
-        return {};
     });
 }
 

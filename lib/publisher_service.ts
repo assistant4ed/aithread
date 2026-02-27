@@ -94,16 +94,36 @@ export async function ensureValidThreadsToken(workspaceId: string): Promise<stri
 // Per-workspace in-flight guard to prevent concurrent publish runs
 const publishingInProgress = new Set<string>();
 
+export interface PublishStats {
+    publishedToday: number;
+    dailyLimit: number;
+    approvedReady: number;
+    published: number;
+    failed: number;
+    platformResults?: Record<string, string>;
+    reason?: string;
+}
+
 /**
  * Find and publish APPROVED synthesized articles for a workspace.
  */
-export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxPublish: number = 1) {
+export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxPublish: number = 1): Promise<PublishStats> {
     const { workspaceId, dailyLimit } = config;
+
+    const stats: PublishStats = {
+        publishedToday: 0,
+        dailyLimit,
+        approvedReady: 0,
+        published: 0,
+        failed: 0,
+        platformResults: {}
+    };
 
     // Prevent concurrent publish runs for the same workspace (race-condition guard)
     if (publishingInProgress.has(workspaceId)) {
         console.log(`[Publisher] Publish already in progress for workspace ${workspaceId}. Skipping.`);
-        return;
+        stats.reason = "Publish already in progress.";
+        return stats;
     }
     publishingInProgress.add(workspaceId);
 
@@ -117,17 +137,22 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
         console.log(`[Publisher] Checking workspace ${workspaceId} for APPROVED articles...`);
 
         const articlesToday = await getDailyPublishCount(workspaceId);
+        stats.publishedToday = articlesToday;
         console.log(`[Publisher] Articles published today: ${articlesToday}/${dailyLimit}`);
 
         if (articlesToday >= dailyLimit) {
             console.log(`[Publisher] Daily limit reached. Skipping.`);
-            return;
+            stats.reason = `Daily limit reached (${articlesToday}/${dailyLimit}).`;
+            return stats;
         }
 
         const remaining = dailyLimit - articlesToday;
         const toPublish = Math.min(remaining, maxPublish);
 
-        if (toPublish <= 0) return;
+        if (toPublish <= 0) {
+            stats.reason = "Daily limit check (remaining <= 0).";
+            return stats;
+        }
 
         const approvedArticles = await prisma.synthesizedArticle.findMany({
             where: {
@@ -142,9 +167,22 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
             take: toPublish,
         });
 
+        // Also count how many are ready in total (not just the 'take' batch)
+        stats.approvedReady = await prisma.synthesizedArticle.count({
+            where: {
+                workspaceId,
+                status: "APPROVED",
+                OR: [
+                    { scheduledPublishAt: null },
+                    { scheduledPublishAt: { lte: new Date() } }
+                ]
+            }
+        });
+
         if (approvedArticles.length === 0) {
             console.log(`[Publisher] No APPROVED articles ready to publish.`);
-            return;
+            stats.reason = "No articles with APPROVED status ready for scheduling.";
+            return stats;
         }
 
         console.log(`[Publisher] Found ${approvedArticles.length} articles to publish.`);
@@ -152,16 +190,14 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
         for (const article of approvedArticles) {
             try {
                 await publishArticle(article, config);
+                stats.published++;
 
                 // Wait between posts to avoid rate limits
                 console.log("[Publisher] Waiting 30 seconds before next post...");
                 await new Promise(resolve => setTimeout(resolve, 30000));
             } catch (err) {
                 console.error(`[Publisher] Failed to publish article ${article.id}:`, err);
-                // We might want to mark as ERROR or PARTIAL_ERROR depending on if any platform succeeded.
-                // For now, if it throws, it means critical failure or all failed (if we handle inside).
-                // Let's rely on publishArticle to mask partial failures if needed, 
-                // but if it propagates an error, mark as ERROR.
+                stats.failed++;
 
                 await prisma.synthesizedArticle.update({
                     where: { id: article.id },
@@ -169,6 +205,7 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
                 });
             }
         }
+        return stats;
     } finally {
         publishingInProgress.delete(workspaceId);
     }
