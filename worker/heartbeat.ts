@@ -38,7 +38,12 @@ setInterval(() => {
         }
         isHeartbeatRunning = true;
 
-        const currentHHMM = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        // Always use HKT (Asia/Hong_Kong) for logging current time to match user schedule
+        const currentHHMM = now.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Asia/Hong_Kong"
+        });
 
         console.log(`\n[Heartbeat] ${currentHHMM} - Checking workspaces...`);
 
@@ -88,17 +93,18 @@ setInterval(() => {
                 // Check each cycle for this workspace
                 let publishTriggered = false;
                 for (const timeStr of publishTimes) {
-                    const [pubH, pubM] = timeStr.split(":").map(Number);
+                    // Convert HKT publish time string to a UTC Date for reliable comparison
+                    const pubDateUTC = toUTCDate(timeStr, now);
 
                     // --- SCRAPE PHASE ---
                     // Window: (Publish - ReviewWindow - 2h) to (Publish - ReviewWindow)
-                    const synthDate = new Date(now);
-                    synthDate.setHours(pubH - reviewWindow, pubM, 0, 0);
+                    const synthDateUTC = new Date(pubDateUTC);
+                    synthDateUTC.setHours(synthDateUTC.getHours() - reviewWindow);
 
-                    const scrapeWindowStart = new Date(synthDate);
-                    scrapeWindowStart.setHours(scrapeWindowStart.getHours() - 2);
+                    const scrapeWindowStartUTC = new Date(synthDateUTC);
+                    scrapeWindowStartUTC.setHours(scrapeWindowStartUTC.getHours() - 2);
 
-                    const isWithinScrapeWindow = now >= scrapeWindowStart && now < synthDate;
+                    const isWithinScrapeWindow = now >= scrapeWindowStartUTC && now < synthDateUTC;
                     const minutesSinceLastScrape = ws.lastScrapedAt
                         ? (now.getTime() - ws.lastScrapedAt.getTime()) / 60_000
                         : 999;
@@ -106,20 +112,28 @@ setInterval(() => {
                     // ── Each phase is truly fire-and-forget via setImmediate ──────
                     // Trigger if in window and haven't scraped in last 28 mins (allow slight drift)
                     if (isWithinScrapeWindow && minutesSinceLastScrape >= 28) {
-                        console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr}, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
+                        console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr} HKT, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
                         setImmediate(() => runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e)));
                     }
 
                     // --- SYNTHESIS PHASE ---
-                    const synthHHMM = synthDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-                    if (currentHHMM === synthHHMM) {
-                        console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr})`);
+                    // Use UTC comparison for stability
+                    const isSynthTime =
+                        now.getUTCHours() === synthDateUTC.getUTCHours() &&
+                        now.getUTCMinutes() === synthDateUTC.getUTCMinutes();
+
+                    if (isSynthTime) {
+                        console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
                         setImmediate(() => runSynthesis(ws, timeStr).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e)));
                     }
 
                     // --- PUBLISH PHASE ---
-                    if (currentHHMM === timeStr) {
-                        console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr})`);
+                    const isPublishTime =
+                        now.getUTCHours() === pubDateUTC.getUTCHours() &&
+                        now.getUTCMinutes() === pubDateUTC.getUTCMinutes();
+
+                    if (isPublishTime) {
+                        console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr} HKT)`);
                         setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
                         publishTriggered = true;
                     }
@@ -157,6 +171,30 @@ setInterval(() => {
 }, 1000);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Converts an HKT time string (HH:MM) to a UTC Date object for the given day.
+ */
+function toUTCDate(hhmmHKT: string, referenceDate: Date): Date {
+    const [h, m] = hhmmHKT.split(":").map(Number);
+    const date = new Date(referenceDate);
+
+    // HKT is UTC+8. To get UTC, we subtract 8 hours from the HKT time.
+    // However, JS Date.setUTCHours() is more reliable than manual math.
+    // We set the UTC time such that it corresponds to the desired HKT time.
+    // If HKT is 18:41, then UTC is 10:41.
+
+    // Calculate the total minutes from midnight in HKT
+    const totalMinutesHKT = h * 60 + m;
+    // Subtract 480 minutes (8 hours) to get UTC
+    const totalMinutesUTC = totalMinutesHKT - 480;
+
+    // Set to start of UTC day and add the minutes
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCMinutes(totalMinutesUTC);
+
+    return date;
+}
 
 async function runScrape(ws: any) {
     const sources = ws.sources || [];
