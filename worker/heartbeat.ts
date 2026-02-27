@@ -5,6 +5,7 @@ import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
 import { runSynthesisEngine } from "../lib/synthesis_engine";
 import { trackPipelineRun } from "../lib/pipeline_tracker";
+import { deleteBlobFromStorage } from "../lib/storage";
 
 console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
@@ -163,7 +164,7 @@ setInterval(() => {
                 console.log(`[Heartbeat] ⚠️ Loop took ${elapsedLoop}ms!`);
             }
 
-            // Once per day (at 00:00 HKT), prune old pipeline runs
+            // Once per day (at 00:00 HKT), prune old records
             if (currentHHMM === "00:00") {
                 const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
                 prisma.pipelineRun.deleteMany({
@@ -172,7 +173,9 @@ setInterval(() => {
                     if (deleted.count > 0) {
                         console.log(`[Heartbeat] 🧹 Pruned ${deleted.count} old pipeline run records.`);
                     }
-                }).catch(e => console.error("[Heartbeat] Pruning failed:", e));
+                }).catch(e => console.error("[Heartbeat] Pipeline pruning failed:", e));
+
+                pruneOldPosts().catch(e => console.error("[Heartbeat] Post pruning failed:", e));
             }
 
         } catch (error) {
@@ -317,6 +320,54 @@ async function runPublish(ws: any) {
         });
         return {};
     });
+}
+
+async function pruneOldPosts() {
+    console.log("[Prune] Starting daily post and media cleanup...");
+
+    // Default: Prune everything older than 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+
+    try {
+        // 1. Find posts to prune
+        const posts = await prisma.post.findMany({
+            where: { createdAt: { lt: thirtyDaysAgo } },
+            select: { id: true, mediaUrls: true }
+        });
+
+        if (posts.length === 0) {
+            console.log("[Prune] No old posts found.");
+            return;
+        }
+
+        console.log(`[Prune] Found ${posts.length} posts to prune.`);
+
+        // 2. Identify and delete associated blobs
+        for (const post of posts) {
+            const media = post.mediaUrls as any[];
+            if (media && Array.isArray(media)) {
+                for (const item of media) {
+                    if (item.url && item.url.includes(".blob.core.windows.net")) {
+                        // Extract filename from URL
+                        // e.g. https://account.blob.core.windows.net/media/some-file.jpg
+                        const filename = item.url.split("/").pop();
+                        if (filename) {
+                            await deleteBlobFromStorage(filename);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Delete DB records
+        const deleted = await prisma.post.deleteMany({
+            where: { id: { in: posts.map(p => p.id) } }
+        });
+
+        console.log(`[Prune] Successfully deleted ${deleted.count} post records.`);
+    } catch (error) {
+        console.error("[Prune] Error during cleanup:", error);
+    }
 }
 
 console.log("Worker started. Waiting for next minute tick...");

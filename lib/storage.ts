@@ -80,3 +80,21 @@ export async function uploadBufferToStorage(buffer: Buffer, filename: string, mi
  * Compatibility alias for uploadBufferToStorage
  */
 export const uploadBufferToGCS = uploadBufferToStorage;
+/**
+ * Deletes a blob from Azure Storage.
+ * @param filename The name/path of the blob to delete.
+ */
+export async function deleteBlobFromStorage(filename: string): Promise<void> {
+    if (!AZURE_STORAGE_CONNECTION_STRING) return;
+
+    try {
+        const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+        const blockBlobClient = containerClient.getBlockBlobClient(filename);
+
+        await blockBlobClient.deleteIfExists();
+        console.log(`[Storage] Deleted: ${filename}`);
+    } catch (error: any) {
+        console.error(`[Storage] Error deleting blob ${filename}:`, error.message);
+    }
+}
