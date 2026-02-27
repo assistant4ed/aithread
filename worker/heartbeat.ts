@@ -191,25 +191,19 @@ setInterval(() => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Converts an HKT time string (HH:MM) to a UTC Date object for the given day.
+ * Converts an HKT time string (HH:MM) to a UTC Date object for the current day in HKT.
  */
 function toUTCDate(hhmmHKT: string, referenceDate: Date): Date {
     const [h, m] = hhmmHKT.split(":").map(Number);
-    const date = new Date(referenceDate);
 
-    // HKT is UTC+8. To get UTC, we subtract 8 hours from the HKT time.
-    // However, JS Date.setUTCHours() is more reliable than manual math.
-    // We set the UTC time such that it corresponds to the desired HKT time.
-    // If HKT is 18:41, then UTC is 10:41.
+    // Get the current date in HKT as YYYY-MM-DD
+    const hktDateString = referenceDate.toLocaleDateString("en-CA", {
+        timeZone: "Asia/Hong_Kong"
+    });
 
-    // Calculate the total minutes from midnight in HKT
-    const totalMinutesHKT = h * 60 + m;
-    // Subtract 480 minutes (8 hours) to get UTC
-    const totalMinutesUTC = totalMinutesHKT - 480;
-
-    // Set to start of UTC day and add the minutes
-    date.setUTCHours(0, 0, 0, 0);
-    date.setUTCMinutes(totalMinutesUTC);
+    // Create a new date at 00:00:00 in HKT for that day, then add hours/minutes
+    // Format: YYYY-MM-DDTHH:mm:ss+08:00
+    const date = new Date(`${hktDateString}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00+08:00`);
 
     return date;
 }
