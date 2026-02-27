@@ -5,7 +5,7 @@
     <title>{{cleanTitle}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #2563eb;
@@ -14,8 +14,19 @@
             --bg-gray: #f9fafb;
             --border: #e5e7eb;
         }
+        /* CJK fallback: system fonts that may exist on various OS */
+        @font-face {
+            font-family: 'CJK Fallback';
+            src: local('Noto Sans CJK SC'), local('Noto Sans SC'), local('Source Han Sans SC'),
+                 local('Noto Sans CJK TC'), local('Noto Sans TC'), local('Source Han Sans TC'),
+                 local('Microsoft YaHei'), local('PingFang SC'), local('Heiti SC'),
+                 local('WenQuanYi Micro Hei'), local('WenQuanYi Zen Hei'),
+                 local('Droid Sans Fallback');
+            unicode-range: U+4E00-9FFF, U+3400-4DBF, U+F900-FAFF, U+2F800-2FA1F,
+                           U+3000-303F, U+FF00-FFEF, U+2E80-2EFF;
+        }
         body {
-            font-family: 'Inter', 'Noto Sans TC', "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif;
+            font-family: 'Inter', 'Noto Sans SC', 'Noto Sans TC', 'CJK Fallback', "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif;
             line-height: 1.6;
             color: var(--text-dark);
             max-width: 800px;

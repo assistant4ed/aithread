@@ -56,10 +56,19 @@ export async function generatePDF(
 
     try {
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
 
         // 2.5 Wait for web fonts to load (CRITICAL for Chinese characters on Linux)
-        await page.evaluateHandle('document.fonts.ready');
+        // Use a timeout so we don't hang forever if Google Fonts is unreachable
+        try {
+            await Promise.race([
+                page.evaluateHandle('document.fonts.ready'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Font loading timeout')), 10000))
+            ]);
+            console.log('[PDF] Web fonts loaded successfully');
+        } catch (fontErr: any) {
+            console.warn(`[PDF] Font loading warning: ${fontErr.message}. Falling back to system fonts.`);
+        }
 
         // 3. Generate PDF
         await page.pdf({
