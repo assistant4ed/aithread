@@ -168,14 +168,10 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     }
 
     // 3. Threshold & Synthesis
-    const allAuthors = new Set(posts.map(p => p.sourceAccount));
-    const totalTracked = allAuthors.size || 1;
+    const thresholdCount = settings.coherenceThreshold ?? 2;
+    const uniqueAuthors = new Set(posts.map(p => p.sourceAccount)).size;
 
-    // Use configurable threshold (default 2)
-    const minAuthors = settings.coherenceThreshold ?? 2;
-    const thresholdCount = Math.max(minAuthors, Math.ceil(totalTracked * 0.05));
-
-    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors.`);
+    console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors (${uniqueAuthors} unique authors in pool).`);
 
     for (const cluster of rawClusters) {
         const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
@@ -429,11 +425,11 @@ async function clusterPostsWithLLM(posts: Document[], promptInstruction: string,
         return `[${idx}] ${truncatedText}`;
     });
 
-    // Build payload, respecting a ~20k char budget
+    // Build payload, respecting a ~80k char budget (~20-25k tokens)
     let payload = "";
     let includedCount = 0;
     for (const entry of postsForLLM) {
-        if (payload.length + entry.length + 2 > 20000) break;
+        if (payload.length + entry.length + 2 > 80000) break;
         payload += entry + "\n\n";
         includedCount++;
     }
