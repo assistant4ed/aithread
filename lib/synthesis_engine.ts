@@ -112,6 +112,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         where: {
             workspaceId,
             status: "PENDING_REVIEW",
+            coherenceStatus: "PENDING",
             postedAt: { gte: limitDate },
             hotScore: { gte: minHotScore },
         },
