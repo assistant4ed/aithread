@@ -38,8 +38,9 @@ vi.mock("@/lib/storage", () => ({
     uploadMediaToStorage: vi.fn(),
 }));
 
-import { synthesizeCluster, translateText, clusterPostsWithLLM } from "./synthesis_engine";
+import { synthesizeCluster, translateText, clusterPostsWithLLM, checkAutoApproval, runSynthesisEngine } from "./synthesis_engine";
 import { stripPlatformReferences } from "./sanitizer";
+import { prisma } from "@/lib/prisma";
 
 // ─── synthesizeCluster ────────────────────────────────────────────────────────
 
@@ -300,5 +301,169 @@ describe("clusterPostsWithLLM", () => {
 
         const result = await clusterPostsWithLLM(posts, "Group posts");
         expect(Array.isArray(result)).toBe(true);
+    });
+});
+
+// ─── checkAutoApproval ───────────────────────────────────────────────────────
+
+describe("checkAutoApproval", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    const instruction = "Approve if the news is relevant to tech/AI and logically coherent. Reject spam.";
+
+    it("returns true when LLM approves", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "Relevant tech news" })
+        );
+
+        const result = await checkAutoApproval("GPT-5 Released", "OpenAI released GPT-5 today.", instruction);
+        expect(result).toBe(true);
+    });
+
+    it("returns false when LLM rejects", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: false, reason: "Promotional spam" })
+        );
+
+        const result = await checkAutoApproval("Buy Now!", "Amazing deal click here.", instruction);
+        expect(result).toBe(false);
+    });
+
+    it("includes instruction in prompt", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("Title", "Content", "Only approve AI news");
+        const userContent = mockCreateChatCompletion.mock.calls[0][0][1].content;
+        expect(userContent).toContain("Only approve AI news");
+    });
+
+    it("includes title and content in prompt", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("My Title", "My article content here", instruction);
+        const userContent = mockCreateChatCompletion.mock.calls[0][0][1].content;
+        expect(userContent).toContain("My Title");
+        expect(userContent).toContain("My article content here");
+    });
+
+    it("returns false when provider returns null", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(null);
+
+        const result = await checkAutoApproval("Title", "Content", instruction);
+        expect(result).toBe(false);
+    });
+
+    it("returns false on JSON parse error", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce("not json {{{");
+
+        const result = await checkAutoApproval("Title", "Content", instruction);
+        expect(result).toBe(false);
+    });
+
+    it("returns false on provider exception", async () => {
+        mockCreateChatCompletion.mockRejectedValueOnce(new Error("API Error"));
+
+        const result = await checkAutoApproval("Title", "Content", instruction);
+        expect(result).toBe(false);
+    });
+
+    it("uses response_format json_object", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("Title", "Content", instruction);
+        const options = mockCreateChatCompletion.mock.calls[0][1];
+        expect(options.response_format).toEqual({ type: "json_object" });
+    });
+
+    it("uses low temperature for deterministic moderation", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("Title", "Content", instruction);
+        const options = mockCreateChatCompletion.mock.calls[0][1];
+        expect(options.temperature).toBe(0.1);
+    });
+
+    it("system prompt contains 'lenient'", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("Title", "Content", instruction);
+        const systemContent = mockCreateChatCompletion.mock.calls[0][0][0].content;
+        expect(systemContent).toContain("lenient");
+    });
+
+    it("user prompt contains 'APPROVE unless'", async () => {
+        mockCreateChatCompletion.mockResolvedValueOnce(
+            JSON.stringify({ approved: true, reason: "ok" })
+        );
+
+        await checkAutoApproval("Title", "Content", instruction);
+        const userContent = mockCreateChatCompletion.mock.calls[0][0][1].content;
+        expect(userContent).toContain("APPROVE unless");
+    });
+});
+
+// ─── maxArticles cap ──────────────────────────────────────────────────────────
+
+describe("maxArticles cap", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("only creates N articles when maxArticles is set", async () => {
+        // Setup: 3 posts that form 3 separate clusters, but maxArticles=1
+        const posts = [
+            { id: "p1", contentOriginal: "AI news about GPT-5 release and capabilities", sourceAccount: "author1", coherenceStatus: "PENDING", threadId: "t1", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+            { id: "p2", contentOriginal: "AI news about GPT-5 release confirmed today", sourceAccount: "author2", coherenceStatus: "PENDING", threadId: "t2", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+            { id: "p3", contentOriginal: "SpaceX launched another rocket to Mars orbit", sourceAccount: "author3", coherenceStatus: "PENDING", threadId: "t3", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+            { id: "p4", contentOriginal: "SpaceX Mars mission rocket launched successfully", sourceAccount: "author4", coherenceStatus: "PENDING", threadId: "t4", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+            { id: "p5", contentOriginal: "Apple Vision Pro headset sales are declining fast", sourceAccount: "author5", coherenceStatus: "PENDING", threadId: "t5", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+            { id: "p6", contentOriginal: "Apple Vision Pro sales numbers dropping significantly", sourceAccount: "author6", coherenceStatus: "PENDING", threadId: "t6", externalUrls: [], hotScore: 10, sourceUrl: null, sourceType: "ACCOUNT", sourceId: "s1", mediaUrls: [] },
+        ];
+
+        (prisma.post.findMany as any).mockResolvedValue(posts);
+        (prisma.workspace.findUnique as any).mockResolvedValue({ autoApproveDrafts: false });
+        (prisma.synthesizedArticle.create as any).mockResolvedValue({ id: "article-1" });
+        (prisma.post.updateMany as any).mockResolvedValue({ count: 2 });
+
+        // Mock LLM: clustering returns 3 clusters
+        mockCreateChatCompletion
+            .mockResolvedValueOnce(JSON.stringify({
+                clusters: [
+                    { topic: "GPT-5", postIds: ["1", "2"] },
+                    { topic: "SpaceX", postIds: ["3", "4"] },
+                    { topic: "Apple", postIds: ["5", "6"] },
+                ]
+            }))
+            // classify cluster
+            .mockResolvedValueOnce(JSON.stringify({ format: "NEWS_FLASH", reason: "breaking" }))
+            // synthesize cluster
+            .mockResolvedValueOnce(JSON.stringify({ headline: "GPT-5 News", content: "Article about GPT-5" }))
+            // translate content
+            .mockResolvedValueOnce("翻譯內容")
+            // translate title
+            .mockResolvedValueOnce("翻譯標題");
+
+        const stats = await runSynthesisEngine("ws-1", {
+            translationPrompt: "",
+            clusteringPrompt: "Group posts",
+            synthesisLanguage: "Traditional Chinese",
+            maxArticles: 1,
+        });
+
+        expect(stats.articlesGenerated).toBe(1);
+        // Only 1 article created despite 3 valid clusters
+        expect(prisma.synthesizedArticle.create).toHaveBeenCalledTimes(1);
     });
 });

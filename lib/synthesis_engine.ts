@@ -6,6 +6,7 @@ import { clusterPosts, Document } from "./clustering";
 import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
 import { uploadBufferToStorage } from "./storage";
+import { toUTCDate } from "./time";
 
 export interface SynthesisSettings {
     translationPrompt: string;
@@ -19,6 +20,7 @@ export interface SynthesisSettings {
     aiModel?: string;
     aiApiKey?: string | null;
     coherenceThreshold?: number; // Minimum authors for consensus
+    maxArticles?: number;        // Cap articles per synthesis run to preserve posts for later windows
 }
 
 export interface SynthesisStats {
@@ -86,21 +88,15 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     // Compute scheduledPublishAt if target time is provided
     let scheduledAt: Date | undefined;
     if (settings.targetPublishTimeStr) {
-        // Parse HH:MM
-        const [h, m] = settings.targetPublishTimeStr.split(":").map(Number);
         const now = new Date();
-        const candidate = new Date();
-        candidate.setHours(h, m, 0, 0);
+        const candidate = toUTCDate(settings.targetPublishTimeStr, now);
 
-        // If candidate is in the past (e.g. slight drift), schedule for tomorrow? 
-        // Or assume it's for today. The pipeline triggers synthesis BEFORE publish, so it should be future.
-        // If it's close, it's fine.
+        // If candidate is in the past (e.g. slight drift), schedule for tomorrow
         if (candidate.getTime() < now.getTime() - 1000 * 60 * 60) {
-            // If it's more than 1 hour in the past, assume it's tomorrow (edge case)
             candidate.setDate(candidate.getDate() + 1);
         }
         scheduledAt = candidate;
-        console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toLocaleString()}`);
+        console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toISOString()}`);
     }
 
     // 1. Lookback: Configured hours or default 48h
@@ -351,6 +347,11 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id}) Status: ${finalStatus}`);
         stats.articlesGenerated++;
+
+        if (settings.maxArticles && stats.articlesGenerated >= settings.maxArticles) {
+            console.log(`[Synthesis] Reached maxArticles cap (${settings.maxArticles}).`);
+            break;
+        }
     }
 
     if (stats.articlesGenerated === 0 && !stats.reason) {
@@ -372,21 +373,25 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 /**
  * Check if an article should be auto-approved using LLM.
  */
-async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<boolean> {
+export async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<boolean> {
     const provider = getWorkspaceProvider(settings);
 
 
     const prompt = `
     You are an AI Content Moderator.
     Task: Judge if the following news article should be approved for publication.
-    
+
     Instructions:
     ${instruction}
-    
+
+    Moderation Bias: APPROVE unless there is a clear, specific reason to reject.
+    Only reject for: spam, completely off-topic content, incoherent text, or explicit policy violations.
+    Do NOT reject simply because the topic is niche or the writing could be improved.
+
     Article Title: ${title}
     Article Content:
     ${content}
-    
+
     Output Format:
     Return a JSON object: { "approved": true/false, "reason": "short explanation" }
     JSON ONLY.
@@ -394,7 +399,7 @@ async function checkAutoApproval(title: string, content: string, instruction: st
 
     try {
         const raw = await provider.createChatCompletion([
-            { role: "system", content: "You are a precise content judge." },
+            { role: "system", content: "You are a lenient content moderator. When in doubt, approve the article for publication." },
             { role: "user", content: prompt },
         ], {
             model: settings?.aiModel || "llama-3.3-70b-versatile",

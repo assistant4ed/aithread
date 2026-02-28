@@ -8,6 +8,7 @@ import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publi
 import { runSynthesisEngine } from "../lib/synthesis_engine";
 import { trackPipelineRun } from "../lib/pipeline_tracker";
 import { deleteBlobFromStorage } from "../lib/storage";
+import { toUTCDate } from "../lib/time";
 
 console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
@@ -190,24 +191,6 @@ setInterval(() => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Converts an HKT time string (HH:MM) to a UTC Date object for the current day in HKT.
- */
-function toUTCDate(hhmmHKT: string, referenceDate: Date): Date {
-    const [h, m] = hhmmHKT.split(":").map(Number);
-
-    // Get the current date in HKT as YYYY-MM-DD
-    const hktDateString = referenceDate.toLocaleDateString("en-CA", {
-        timeZone: "Asia/Hong_Kong"
-    });
-
-    // Create a new date at 00:00:00 in HKT for that day, then add hours/minutes
-    // Format: YYYY-MM-DDTHH:mm:ss+08:00
-    const date = new Date(`${hktDateString}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00+08:00`);
-
-    return date;
-}
-
 async function runScrape(ws: WorkspaceWithSources) {
     return trackPipelineRun(ws.id, "SCRAPE", async () => {
         const sources = ws.sources || [];
@@ -323,7 +306,10 @@ async function runSynthesis(ws: Workspace, targetPublishTime: string) {
             data: { lastSynthesizedAt: new Date() }
         });
 
-        return await runSynthesisEngine(ws.id, {
+        const publishTimes = ws.publishTimes?.length ? ws.publishTimes : ["12:00", "18:00", "22:00"];
+        const maxArticles = Math.ceil(ws.dailyPostLimit / publishTimes.length);
+
+        const result = await runSynthesisEngine(ws.id, {
             translationPrompt: ws.translationPrompt || "",
             clusteringPrompt: ws.clusteringPrompt || "",
             synthesisLanguage: ws.synthesisLanguage || "Traditional Chinese (HK/TW)",
@@ -334,8 +320,78 @@ async function runSynthesis(ws: Workspace, targetPublishTime: string) {
             aiProvider: ws.aiProvider || "GROQ",
             aiModel: ws.aiModel || "llama-3.3-70b-versatile",
             aiApiKey: ws.aiApiKey || undefined,
+            maxArticles,
         });
+
+        // ── Stagger articles across remaining publish windows ──
+        // Prevents all articles from the same synthesis run publishing simultaneously.
+        if (result.articlesGenerated > 1) {
+            await staggerArticleSchedules(ws, targetPublishTime);
+        }
+
+        return result;
     });
+}
+
+/**
+ * After synthesis creates multiple articles for the same publish time,
+ * redistribute them across the remaining publish windows for the day
+ * so they don't all fire at once.
+ *
+ * Example: 3 articles all at 12:00 → article1@12:00, article2@18:00, article3@22:00
+ */
+export async function staggerArticleSchedules(ws: Workspace, targetPublishTime: string) {
+    const publishTimes = ws.publishTimes && ws.publishTimes.length > 0
+        ? ws.publishTimes
+        : ["12:00", "18:00", "22:00"];
+
+    const now = new Date();
+    const targetUTC = toUTCDate(targetPublishTime, now);
+
+    // Build a list of publish slots from now onwards (today + tomorrow)
+    const slots: Date[] = [];
+    for (const timeStr of publishTimes) {
+        const slotUTC = toUTCDate(timeStr, now);
+        if (slotUTC > targetUTC) {
+            slots.push(slotUTC); // Remaining today
+        }
+    }
+    // Also add tomorrow's slots as overflow
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    for (const timeStr of publishTimes) {
+        slots.push(toUTCDate(timeStr, tomorrow));
+    }
+
+    // Find articles just created for this publish time (APPROVED or PENDING_REVIEW + same scheduledPublishAt)
+    const articles = await prisma.synthesizedArticle.findMany({
+        where: {
+            workspaceId: ws.id,
+            status: { in: ["APPROVED", "PENDING_REVIEW"] },
+            scheduledPublishAt: targetUTC,
+        },
+        orderBy: { createdAt: "asc" },
+    });
+
+    if (articles.length <= 1) return; // Nothing to stagger
+
+    // First article keeps the original time; reassign the rest
+    for (let i = 1; i < articles.length; i++) {
+        const newSlot = slots[i - 1]; // slots[0] = next window after target
+        if (!newSlot) break; // No more slots available
+
+        await prisma.synthesizedArticle.update({
+            where: { id: articles[i].id },
+            data: { scheduledPublishAt: newSlot },
+        });
+
+        const slotHKT = newSlot.toLocaleTimeString("en-GB", {
+            hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong"
+        });
+        console.log(`[Stagger] Article ${articles[i].id} rescheduled: ${targetPublishTime} → ${slotHKT} HKT`);
+    }
+
+    console.log(`[Stagger] Distributed ${articles.length} articles across ${Math.min(articles.length, slots.length + 1)} time slots.`);
 }
 
 async function runPublish(ws: Workspace) {

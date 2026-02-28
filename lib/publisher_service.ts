@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { createContainer, publishContainer, waitForContainer, refreshLongLivedToken } from "./threads_client";
 import { stripPlatformReferences } from "./sanitizer";
+import { todayStartHKT } from "./time";
 
 
 export interface PublisherConfig {
@@ -39,8 +40,7 @@ import { uploadTwitterMedia, postTweet } from "./twitter_client";
  * Returns the number of ARTICLES published today for a given workspace.
  */
 export async function getDailyPublishCount(workspaceId: string): Promise<number> {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = todayStartHKT();
 
     return prisma.synthesizedArticle.count({
         where: {
@@ -148,6 +148,20 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
             console.log(`[Publisher] Daily limit reached. Skipping.`);
             stats.reason = `Daily limit reached (${articlesToday}/${dailyLimit}).`;
             return stats;
+        }
+
+        // Cooldown: ensure at least 30 minutes between publishes
+        const lastPublished = await prisma.synthesizedArticle.findFirst({
+            where: { workspaceId, status: "PUBLISHED" },
+            orderBy: { publishedAt: "desc" },
+            select: { publishedAt: true },
+        });
+        if (lastPublished?.publishedAt) {
+            const minutesSince = (Date.now() - lastPublished.publishedAt.getTime()) / 60_000;
+            if (minutesSince < 30) {
+                stats.reason = `Cooldown: last published ${Math.round(minutesSince)}min ago (min 30min gap).`;
+                return stats;
+            }
         }
 
         const remaining = dailyLimit - articlesToday;
