@@ -64,18 +64,17 @@ export function calculateTopicScore(input: TopicScoreInput): TopicScoreResult {
  * Replace hard freshness gate with score-weighted freshness.
  * Applies a sliding penalty instead of a hard cutoff for topic sources.
  */
+/**
+ * Apply sliding freshness penalty for topic posts.
+ *
+ * Note: ACCOUNT posts never reach this function — they are hard-rejected
+ * upstream in processPost() at settings.maxPostAgeHours. Only TOPIC posts
+ * use the sliding penalty here.
+ */
 export function applyFreshnessAdjustment(
     baseScore: number,
     ageHours: number,
-    sourceType: 'ACCOUNT' | 'TOPIC'
 ): number {
-    if (sourceType === 'ACCOUNT') {
-        // Account sources: keep hard gate unchanged (72h hard cutoff mentioned in previous code was used in calculateHotScore)
-        // Actually the processor uses settings.maxPostAgeHours.
-        // The user's snippet said: "Account sources: keep hard gate unchanged" and "return ageHours > 72 ? 0 : baseScore;"
-        return ageHours > 72 ? 0 : baseScore;
-    }
-
     // Topic sources: sliding penalty instead of hard cutoff
     if (ageHours <= 6) return baseScore * 1.0;  // prime window, no penalty
     if (ageHours <= 24) return baseScore * 0.75; // still fresh, small penalty

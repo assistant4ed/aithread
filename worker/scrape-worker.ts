@@ -2,7 +2,7 @@ import "dotenv/config";
 import { Worker, Job } from "bullmq";
 import { SCRAPE_QUEUE_NAME, ScrapeJobData, redisConnection } from "../lib/queue";
 import { ThreadsScraper } from "../lib/scraper";
-import { processPost, resolveFollowerCounts } from "../lib/processor";
+import { processPost, resolveFollowerCounts, RejectionReason } from "../lib/processor";
 import { uploadMediaToStorage } from "../lib/storage";
 import { prisma } from "../lib/prisma";
 
@@ -165,7 +165,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                 }
             }
 
-            const savedPost = await processPost(
+            const result = await processPost(
                 {
                     ...post,
                     postedAt: post.postedAt ? new Date(post.postedAt) : undefined,
@@ -178,11 +178,19 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                 sourceDetails
             );
 
+            // processPost returns { rejected: reason } for filtered posts, or a saved post object
+            if (result && 'rejected' in result) {
+                const reason = (result as { rejected: RejectionReason }).rejected;
+                if (reason === 'freshness' || reason === 'no_date') failedFreshness++;
+                else if (reason === 'engagement' || reason === 'spam') failedEngagement++;
+                // 'duplicate' — not counted in either bucket (expected on re-scrapes)
+                continue;
+            }
+
+            const savedPost = result;
             if (!savedPost) {
-                const ageMs = post.postedAt ? Date.now() - new Date(post.postedAt).getTime() : 0;
-                const ageHours = ageMs / (1000 * 60 * 60);
-                if (ageHours > 72) failedFreshness++;
-                else failedEngagement++;
+                // Shouldn't happen after the refactor, but defensive fallback
+                failedEngagement++;
                 continue;
             }
 

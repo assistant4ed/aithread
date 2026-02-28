@@ -57,7 +57,7 @@ function safeDate(d: any): Date | undefined {
     return isNaN(date.getTime()) ? undefined : date;
 }
 
-function isLikelySpam(input: { content: string | null; followerCount: number | null }): boolean {
+export function isLikelySpam(input: { content: string | null; followerCount: number | null }): boolean {
     if (!input.content) return true;
     const content = input.content.toLowerCase();
 
@@ -131,9 +131,11 @@ export async function resolveFollowerCounts(
     return followerMap;
 }
 
+export type RejectionReason = 'freshness' | 'engagement' | 'duplicate' | 'spam' | 'no_date';
+
 /**
  * Process a scraped post: check for duplicates, score, translate if hot, and save.
- * Returns the saved post if new, undefined if it already existed (stats updated).
+ * Returns the saved post if new, or a { rejected: reason } object explaining why it was skipped.
  */
 export async function processPost(
     postData: {
@@ -162,26 +164,32 @@ export async function processPost(
     }
 ) {
     const validPostedAt = safeDate(postData.postedAt);
-    const ageHours = validPostedAt ? (Date.now() - validPostedAt.getTime()) / (1000 * 60 * 60) : 0;
 
-    // 1. Freshness gate
+    // 1. Freshness gate — reject posts with no date (prevents ageHours=0 bypass)
+    if (!validPostedAt) {
+        console.log(`[Processor] Skipping post ${postData.threadId} with no valid date`);
+        return { rejected: 'no_date' as RejectionReason };
+    }
+
+    const ageHours = (Date.now() - validPostedAt.getTime()) / (1000 * 60 * 60);
+
     if (source?.type === 'ACCOUNT') {
         // Accounts keep hard gate
         if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
             console.log(`[Processor] Skipping outdated account post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
-            return undefined;
+            return { rejected: 'freshness' as RejectionReason };
         }
     } else if (source?.type === 'TOPIC') {
         // Topics use sliding penalty (implemented in scoring step below)
         // We only apply a hard cutoff at 72h as a safety measure
         if (ageHours > 72) {
             console.log(`[Processor] Skipping very old topic post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
-            return undefined;
+            return { rejected: 'freshness' as RejectionReason };
         }
     } else if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
         // Fallback for unknown source types
         console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
-        return undefined;
+        return { rejected: 'freshness' as RejectionReason };
     }
 
     // 2. Check if post exists
@@ -201,7 +209,7 @@ export async function processPost(
                 hotScore: isNaN(newScore) ? 0 : newScore,
             },
         });
-        return undefined; // Not new
+        return { rejected: 'duplicate' as RejectionReason }; // Not new
     }
 
     // 3. Topic Filter Check (Legacy settings filter)
@@ -209,7 +217,7 @@ export async function processPost(
         const isRelevant = await checkTopicRelevance(postData.content, settings.topicFilter, settings);
         if (!isRelevant) {
             console.log(`[Processor] Post rejected by topic filter: "${settings.topicFilter}"`);
-            return undefined;
+            return { rejected: 'engagement' as RejectionReason };
         }
     }
 
@@ -221,7 +229,7 @@ export async function processPost(
         // Topic-specific spam filter (heuristic)
         if (isLikelySpam({ content: postData.content, followerCount })) {
             console.log(`[Processor] Topic post ${postData.threadId} rejected by spam filter heuristics.`);
-            return undefined;
+            return { rejected: 'spam' as RejectionReason };
         }
 
         const scoreResult = calculateTopicScore({
@@ -234,7 +242,7 @@ export async function processPost(
         });
 
         // Apply sliding freshness penalty
-        finalScore = applyFreshnessAdjustment(scoreResult.score, ageHours, 'TOPIC');
+        finalScore = applyFreshnessAdjustment(scoreResult.score, ageHours);
 
         // Use the tier-based gate result, but we also respect the freshness adjustment (if it returned 0)
         passesGate = scoreResult.passesGate && finalScore > 0;
@@ -246,7 +254,7 @@ export async function processPost(
 
         if (!passesGate) {
             console.log(`[Processor] Topic post ${postData.threadId} rejected: score ${finalScore.toFixed(1)} (${scoreResult.tier} tier)`);
-            return undefined;
+            return { rejected: 'engagement' as RejectionReason };
         }
 
         console.log(`[Processor] Topic post ${postData.threadId} accepted: score ${finalScore.toFixed(1)} (${scoreResult.tier} tier)`);
@@ -259,7 +267,7 @@ export async function processPost(
         const ingestThreshold = settings.hotScoreThreshold || 10;
         if (finalScore < ingestThreshold) {
             console.log(`[Processor] Skipping low-score post ${postData.threadId} (score: ${finalScore.toFixed(1)}, threshold: ${ingestThreshold})`);
-            return undefined;
+            return { rejected: 'engagement' as RejectionReason };
         }
     }
 
