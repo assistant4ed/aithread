@@ -414,7 +414,7 @@ async function checkAutoApproval(title: string, content: string, instruction: st
 import { RawCluster } from "./clustering";
 
 // New LLM Clustering with TF-IDF fallback
-async function clusterPostsWithLLM(posts: Document[], promptInstruction: string, settings?: SynthesisSettings): Promise<RawCluster[]> {
+export async function clusterPostsWithLLM(posts: Document[], promptInstruction: string, settings?: SynthesisSettings): Promise<RawCluster[]> {
     if (posts.length === 0) return [];
 
     const provider = getWorkspaceProvider(settings);

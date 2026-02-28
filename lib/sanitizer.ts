@@ -16,11 +16,11 @@ export function sanitizeText(text: string | null | undefined, options: SanitizeO
     const patterns = [
         /（注：.*?）/g,                // (Note: ...) in Chinese
         /\(Note:.*?\)/gi,              // (Note: ...) in English
-        /（or.*?）/gi,                 // (or ...) 
+        /（or.*?）/gi,                 // (or ...)
         /\(or.*?\)/gi,                 // (or ...)
-        /Note:.*?$/gim,                // Trailing "Note: ..." line
-        /Translation note:.*?$/gim,    // Trailing "Translation note: ..."
+        /Translation note:.*?$/gim,    // Trailing "Translation note: ..." (must be before generic "Note:")
         /Translated by:.*?$/gim,       // Trailing "Translated by: ..."
+        /Note:.*?$/gim,                // Trailing "Note: ..." line
         /Here is the translated.*?$/gim, // "Here is the translated..." preamble
         /^Here is the translation:?/gim, // Preamble (colon optional for this verbose one)
         /^Title:\s*/gim,                 // "Title:" prefix (require colon)
