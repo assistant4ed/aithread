@@ -265,7 +265,8 @@ async function runScrape(ws: WorkspaceWithSources) {
         console.log(`[Scrape] Enqueued ${count} jobs for ${ws.name}.`);
 
         // Capture useful diagnostic metadata
-        const [recentPosts, totalPending] = await Promise.all([
+        const twoHoursAgo = new Date(Date.now() - 2 * 3600000);
+        const [recentPosts, totalPending, scrapeStats] = await Promise.all([
             prisma.post.count({
                 where: {
                     workspaceId: ws.id,
@@ -278,6 +279,19 @@ async function runScrape(ws: WorkspaceWithSources) {
                     status: "PENDING_REVIEW",
                 }
             }),
+            prisma.scrapeLog.aggregate({
+                where: {
+                    sourceId: { in: sources.map(s => s.id) },
+                    createdAt: { gte: twoHoursAgo }
+                },
+                _sum: {
+                    rawCollected: true,
+                    qualified: true,
+                    failedFreshness: true,
+                    failedEngagement: true,
+                    unknownFollowers: true
+                }
+            })
         ]);
 
         return {
@@ -285,7 +299,14 @@ async function runScrape(ws: WorkspaceWithSources) {
             sourcesTotal: sources.length,
             postsLast24h: recentPosts,
             totalPending,
-            limitReached
+            limitReached,
+            // Add aggregated stats from the last 2 hours
+            stats2h: {
+                rawCollected: scrapeStats._sum.rawCollected || 0,
+                qualified: scrapeStats._sum.qualified || 0,
+                failedFreshness: scrapeStats._sum.failedFreshness || 0,
+                failedEngagement: scrapeStats._sum.failedEngagement || 0,
+            }
         };
     });
 }

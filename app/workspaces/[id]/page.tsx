@@ -332,20 +332,29 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
 
         if (run.step === 'SCRAPE') {
             return (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                    <span className="text-[10px] text-muted">🎯 {metadata.sourcesTotal || 0} Sources</span>
-                    {metadata.postsLast24h > 0 && (
-                        <span className="text-[10px] text-success">✨ {metadata.postsLast24h} Posts (24h)</span>
-                    )}
-                    {metadata.totalPending > 0 && (
-                        <span className="text-[10px] text-muted">📋 {metadata.totalPending} Pending</span>
-                    )}
-                    {/* Legacy field support */}
-                    {metadata.recentPostsCaptured > 0 && !metadata.postsLast24h && (
-                        <span className="text-[10px] text-success">✨ {metadata.recentPostsCaptured} New Posts</span>
-                    )}
-                    {metadata.limitReached && (
-                        <span className="text-[10px] text-warning">⚠️ Limit Reached</span>
+                <div className="flex flex-col gap-0.5 mt-0.5 text-[10px] text-muted">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span>🎯 {metadata.sourcesTotal || 0} Sources</span>
+                        {metadata.postsLast24h > 0 && (
+                            <span className="text-success font-medium">✨ {metadata.postsLast24h} Posts (24h)</span>
+                        )}
+                        {metadata.totalPending > 0 && (
+                            <span>📋 {metadata.totalPending} Pending</span>
+                        )}
+                        {metadata.limitReached && (
+                            <span className="text-warning">⚠️ Limit Reached</span>
+                        )}
+                    </div>
+                    {metadata.stats2h && (
+                        <div className="flex flex-wrap items-center gap-x-2 border-t border-border/30 pt-1 mt-1 opacity-80">
+                            <span>🔍 {metadata.stats2h.rawCollected || 0} found (2h)</span>
+                            {metadata.stats2h.failedEngagement > 0 && (
+                                <span title="Below hot score threshold">📉 {metadata.stats2h.failedEngagement} low score</span>
+                            )}
+                            {metadata.stats2h.failedFreshness > 0 && (
+                                <span title="Older than max post age">⌛ {metadata.stats2h.failedFreshness} too old</span>
+                            )}
+                        </div>
                     )}
                 </div>
             );
@@ -360,7 +369,7 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
                         <span className="text-[10px] text-success font-medium">📰 {metadata.articlesGenerated || 0} Articles</span>
                     </div>
                     {metadata.reason && metadata.articlesGenerated === 0 && (
-                        <span className="text-[10px] text-muted italic line-clamp-1">ℹ️ {metadata.reason}</span>
+                        <span className="text-[10px] text-muted italic mt-1 leading-relaxed">ℹ️ {metadata.reason}</span>
                     )}
                 </div>
             );

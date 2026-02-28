@@ -355,9 +355,13 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
     if (stats.articlesGenerated === 0 && !stats.reason) {
         if (stats.clustersFound > 0) {
-            stats.reason = `Found ${stats.clustersFound} clusters, but none passed the coherence threshold or news filtering.`;
+            stats.reason = `Found ${stats.clustersFound} clusters, but none had enough active authors (${settings.coherenceThreshold || 2}) to form a consensus.`;
+        } else if (stats.postsClusterable > 0) {
+            stats.reason = `Found ${stats.postsClusterable} clusterable posts, but the AI couldn't find meaningful common topics among them.`;
+        } else if (stats.postsInWindow > 0) {
+            stats.reason = `Found ${stats.postsInWindow} posts, but they were all too short or lacked enough content for clustering.`;
         } else {
-            stats.reason = "Could not form any significant clusters from the current pool of posts.";
+            stats.reason = "No qualified posts found in the lookback window after applying engagement and freshness filters.";
         }
     }
 
