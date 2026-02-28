@@ -265,6 +265,25 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
                     qualified: newCount,
                 }
             });
+
+            // Auto-deactivate sources that consistently return 0 posts
+            const DEAD_THRESHOLD = 5;
+            if (posts.length === 0) {
+                const recentLogs = await prisma.scrapeLog.findMany({
+                    where: { sourceId },
+                    orderBy: { createdAt: 'desc' },
+                    take: DEAD_THRESHOLD,
+                    select: { rawCollected: true },
+                });
+
+                if (recentLogs.length >= DEAD_THRESHOLD && recentLogs.every(l => l.rawCollected === 0)) {
+                    await prisma.scraperSource.update({
+                        where: { id: sourceId },
+                        data: { isActive: false },
+                    });
+                    console.log(`[ScrapeWorker] Auto-deactivated ${type}:${target} — ${DEAD_THRESHOLD} consecutive empty scrapes`);
+                }
+            }
         }
 
         console.log(`[ScrapeWorker] Done ${target}: ${newCount} new posts`);

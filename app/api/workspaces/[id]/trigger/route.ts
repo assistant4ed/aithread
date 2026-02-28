@@ -85,6 +85,8 @@ export async function POST(
                     jobId: `scrape:${workspaceId}:${source.id}`, // Deduplication
                     removeOnComplete: true,
                     removeOnFail: { count: 100 },
+                    attempts: 2,
+                    backoff: { type: 'fixed', delay: 5000 },
                 });
                 count++;
             }

@@ -68,6 +68,8 @@ async function main() {
             await scrapeQueue.add(`manual-scrape-${source.id}-${Date.now()}`, jobData, {
                 removeOnComplete: true,
                 removeOnFail: { count: 100 },
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 },
             });
             console.log(`  + Enqueued Source: [${source.type}] ${source.value}`);
             count++;

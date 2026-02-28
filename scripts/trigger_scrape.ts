@@ -43,7 +43,12 @@ async function main() {
                 sourceId: source.id,
             };
 
-            await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData);
+            await scrapeQueue.add(`scrape-${source.id}-${Date.now()}`, jobData, {
+                removeOnComplete: true,
+                removeOnFail: { count: 100 },
+                attempts: 2,
+                backoff: { type: 'fixed', delay: 5000 },
+            });
             console.log(`  -> Enqueued ${source.type}: ${source.value}`);
         }
     }

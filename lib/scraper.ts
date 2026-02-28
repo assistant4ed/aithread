@@ -83,8 +83,9 @@ export class ThreadsScraper {
 
         try {
             console.log(`Navigating to https://www.threads.net/@${username}`);
-            await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
-            await page.waitForSelector('body', { timeout: 10000 });
+            await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+            // Wait for React to render post content (don't wait for networkidle — never settles on SPAs)
+            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => {});
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             let scrollCount = 0;
@@ -209,40 +210,53 @@ export class ThreadsScraper {
                             }
                         }
 
+                        // Views text fallback — views are often plain text ("56M views"), not in a button
+                        if (views === 0) {
+                            const viewTextMatch = innerText.match(/(\d[\d,\.]*[KkMm]?)\s*(?:views?|次查看|播放|浏览)/i);
+                            if (viewTextMatch) {
+                                let n = parseFloat(viewTextMatch[1].replace(/,/g, ''));
+                                if (viewTextMatch[1].toUpperCase().includes('K')) n *= 1000;
+                                if (viewTextMatch[1].toUpperCase().includes('M')) n *= 1000000;
+                                views = isNaN(n) ? 0 : n;
+                            }
+                        }
+
                         // Robust text-based fallback
                         if (likes === 0 && replies === 0 && reposts === 0) {
-                            // Look for lines that contain a number, possibly followed by K/M and some text
-                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 4);
-                            if (metrics.length >= 1) {
-                                const s = metrics[0];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    likes = n;
-                                }
+                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 5);
+                            const parseMetric = (s: string): number => {
+                                const m = s.match(/(\d+(\.\d+)?)/);
+                                if (!m) return 0;
+                                let n = parseFloat(m[1]);
+                                if (s.toUpperCase().includes('K')) n *= 1000;
+                                if (s.toUpperCase().includes('M')) n *= 1000000;
+                                return n;
+                            };
+
+                            if (views > 0) {
+                                // Views already captured — filter out the matching metric line
+                                const engMetrics = metrics.filter((s: string) => Math.abs(parseMetric(s) - views) > 1);
+                                if (engMetrics.length >= 1) likes = parseMetric(engMetrics[0]);
+                                if (engMetrics.length >= 2) replies = parseMetric(engMetrics[1]);
+                                if (engMetrics.length >= 3) reposts = parseMetric(engMetrics[2]);
+                            } else if (metrics.length >= 4) {
+                                // 4+ metrics: first is typically views on Threads
+                                views = parseMetric(metrics[0]);
+                                likes = parseMetric(metrics[1]);
+                                replies = parseMetric(metrics[2]);
+                                reposts = parseMetric(metrics[3]);
+                            } else {
+                                // 3 or fewer: assume likes, replies, reposts
+                                if (metrics.length >= 1) likes = parseMetric(metrics[0]);
+                                if (metrics.length >= 2) replies = parseMetric(metrics[1]);
+                                if (metrics.length >= 3) reposts = parseMetric(metrics[2]);
                             }
-                            if (metrics.length >= 2) {
-                                const s = metrics[1];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    replies = n;
-                                }
-                            }
-                            if (metrics.length >= 3) {
-                                const s = metrics[2];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    reposts = n;
-                                }
-                            }
+                        }
+
+                        // Sanity: if likes is implausibly high and views is 0, they were swapped
+                        if (likes > 5000000 && views === 0) {
+                            views = likes;
+                            likes = 0;
                         }
 
                         let postedAt: string | null = null;
@@ -332,8 +346,8 @@ export class ThreadsScraper {
             const cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
             const searchUrl = `https://www.threads.net/search?q=${encodeURIComponent(cleanHashtag)}&serp_type=default`;
             console.log(`[Scraper] Navigating to ${searchUrl}`);
-            await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-            await page.waitForSelector('body', { timeout: 10000 });
+            await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => {});
             await new Promise(resolve => setTimeout(resolve, 3000));
 
             let scrollCount = 0;
@@ -439,41 +453,53 @@ export class ThreadsScraper {
                             }
                         }
 
-                        // Robust text-based fallback (missing in scrapeTopic original version)
+                        // Views text fallback — views are often plain text ("56M views"), not in a button
+                        if (views === 0) {
+                            const fullText = el.innerText || "";
+                            const viewTextMatch = fullText.match(/(\d[\d,\.]*[KkMm]?)\s*(?:views?|次查看|播放|浏览)/i);
+                            if (viewTextMatch) {
+                                let n = parseFloat(viewTextMatch[1].replace(/,/g, ''));
+                                if (viewTextMatch[1].toUpperCase().includes('K')) n *= 1000;
+                                if (viewTextMatch[1].toUpperCase().includes('M')) n *= 1000000;
+                                views = isNaN(n) ? 0 : n;
+                            }
+                        }
+
+                        // Robust text-based fallback
                         if (likes === 0 && replies === 0 && reposts === 0) {
                             const innerText = el.innerText || "";
                             const lines = innerText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 4);
-                            if (metrics.length >= 1) {
-                                const s = metrics[0];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    likes = n;
-                                }
+                            const metrics = lines.filter((l: string) => l.match(/^\d+(\.\d+)?[KM]?(\s|$)/i)).slice(0, 5);
+                            const parseMetric = (s: string): number => {
+                                const m = s.match(/(\d+(\.\d+)?)/);
+                                if (!m) return 0;
+                                let n = parseFloat(m[1]);
+                                if (s.toUpperCase().includes('K')) n *= 1000;
+                                if (s.toUpperCase().includes('M')) n *= 1000000;
+                                return n;
+                            };
+
+                            if (views > 0) {
+                                const engMetrics = metrics.filter((s: string) => Math.abs(parseMetric(s) - views) > 1);
+                                if (engMetrics.length >= 1) likes = parseMetric(engMetrics[0]);
+                                if (engMetrics.length >= 2) replies = parseMetric(engMetrics[1]);
+                                if (engMetrics.length >= 3) reposts = parseMetric(engMetrics[2]);
+                            } else if (metrics.length >= 4) {
+                                views = parseMetric(metrics[0]);
+                                likes = parseMetric(metrics[1]);
+                                replies = parseMetric(metrics[2]);
+                                reposts = parseMetric(metrics[3]);
+                            } else {
+                                if (metrics.length >= 1) likes = parseMetric(metrics[0]);
+                                if (metrics.length >= 2) replies = parseMetric(metrics[1]);
+                                if (metrics.length >= 3) reposts = parseMetric(metrics[2]);
                             }
-                            if (metrics.length >= 2) {
-                                const s = metrics[1];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    replies = n;
-                                }
-                            }
-                            if (metrics.length >= 3) {
-                                const s = metrics[2];
-                                const match = s.match(/(\d+(\.\d+)?)/);
-                                if (match) {
-                                    let n = parseFloat(match[1]);
-                                    if (s.toUpperCase().includes('K')) n = n * 1000;
-                                    if (s.toUpperCase().includes('M')) n = n * 1000000;
-                                    reposts = n;
-                                }
-                            }
+                        }
+
+                        // Sanity: if likes is implausibly high and views is 0, they were swapped
+                        if (likes > 5000000 && views === 0) {
+                            views = likes;
+                            likes = 0;
                         }
 
                         let postedAt: string | null = null;
@@ -562,7 +588,8 @@ export class ThreadsScraper {
         await this.configurePage(page);
         try {
             console.log(`[Scraper] Fetching follower count for @${username}`);
-            await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'networkidle2', timeout: 60000 });
+            await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+            await page.waitForSelector('[aria-label*="followers"], [aria-label*="follower"]', { timeout: 15000 }).catch(() => {});
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             const followerCount = await page.evaluate(() => {
@@ -615,7 +642,9 @@ export class ThreadsScraper {
 
         try {
             console.log(`[Enricher] Visiting ${postUrl}`);
-            await page.goto(postUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+            await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+            // Wait briefly for JS to inject video_versions data into the page source
+            await new Promise(resolve => setTimeout(resolve, 3000));
             const html = await page.content();
 
             const videoRegex = /"video_versions":\s*(\[[^\]]+\])/g;
