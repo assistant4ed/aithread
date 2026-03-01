@@ -84,8 +84,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                 where: { workspaceId: id }
             });
 
+            const uniqueSourcesMap = new Map();
+            for (const s of body.sources) {
+                const key = `${s.platform || 'THREADS'}-${s.type}-${s.value}`;
+                if (!uniqueSourcesMap.has(key)) {
+                    uniqueSourcesMap.set(key, s);
+                }
+            }
+            const uniqueSources = Array.from(uniqueSourcesMap.values());
+
             data.sources = {
-                create: body.sources.map((s: any) => ({
+                create: uniqueSources.map((s: any) => ({
                     type: s.type,
                     value: s.value,
                     platform: s.platform || 'THREADS',
@@ -114,7 +123,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
         }
         if (error.code === "P2002") {
-            return NextResponse.json({ error: "A workspace with this name already exists" }, { status: 409 });
+            const target = String(error.meta?.target || "");
+            if (target.includes("name")) {
+                return NextResponse.json({ error: "A workspace with this name already exists" }, { status: 409 });
+            }
+            return NextResponse.json({ error: "Duplicate value provided (e.g. duplicate sources)" }, { status: 409 });
         }
         console.error("Error updating workspace:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

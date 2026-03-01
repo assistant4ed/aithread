@@ -91,18 +91,33 @@ export async function POST(request: NextRequest) {
                 postLookbackHours: postLookbackHours ?? 24,
                 publishTimes: publishTimes || ["12:00", "18:00", "22:00"],
                 reviewWindowHours: reviewWindowHours ?? 1,
-                sources: sources ? {
-                    create: sources.map((s: any) => ({
-                        type: s.type,
-                        value: s.value,
-                        platform: s.platform || 'THREADS',
-                        isActive: s.isActive ?? true,
-                        minLikes: s.minLikes,
-                        minReplies: s.minReplies,
-                        maxAgeHours: s.maxAgeHours,
-                        trustWeight: s.trustWeight || 1.0,
-                    }))
-                } : undefined,
+                sources: (() => {
+                    if (!sources || !Array.isArray(sources)) return undefined;
+
+                    const uniqueSourcesMap = new Map();
+                    for (const s of sources) {
+                        const key = `${s.platform || 'THREADS'}-${s.type}-${s.value}`;
+                        if (!uniqueSourcesMap.has(key)) {
+                            uniqueSourcesMap.set(key, s);
+                        }
+                    }
+                    const uniqueSources = Array.from(uniqueSourcesMap.values());
+
+                    if (uniqueSources.length === 0) return undefined;
+
+                    return {
+                        create: uniqueSources.map((s: any) => ({
+                            type: s.type,
+                            value: s.value,
+                            platform: s.platform || 'THREADS',
+                            isActive: s.isActive ?? true,
+                            minLikes: s.minLikes,
+                            minReplies: s.minReplies,
+                            maxAgeHours: s.maxAgeHours,
+                            trustWeight: s.trustWeight || 1.0,
+                        }))
+                    };
+                })(),
                 aiProvider: aiProvider || "GROQ",
                 aiModel: aiModel || "llama-3.3-70b-versatile",
                 aiApiKey: aiApiKey || null,
@@ -116,8 +131,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(workspace, { status: 201 });
     } catch (error: any) {
         if (error.code === "P2002") {
+            const target = String(error.meta?.target || "");
+            if (target.includes("name")) {
+                return NextResponse.json(
+                    { error: "A workspace with this name already exists" },
+                    { status: 409 }
+                );
+            }
             return NextResponse.json(
-                { error: "A workspace with this name already exists" },
+                { error: "Duplicate value provided (e.g. duplicate sources)" },
                 { status: 409 }
             );
         }
