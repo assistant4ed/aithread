@@ -7,6 +7,7 @@ import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
 import { uploadBufferToStorage } from "./storage";
 import { toUTCDate } from "./time";
+import axios from "axios";
 
 export interface SynthesisSettings {
     translationPrompt: string;
@@ -763,7 +764,14 @@ Follow the Style Rules to create 4 unique iPhone 15 Pro prompts based on the con
                     n: 1,
                     size: "1024x1024"
                 });
-                return response?.data?.[0]?.url || null;
+                const dalleUrl = response?.data?.[0]?.url;
+                if (dalleUrl) {
+                    // Download and upload to our storage
+                    const imgRes = await axios.get(dalleUrl, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(imgRes.data);
+                    const filename = `generated/${Date.now()}_dalle.png`;
+                    return await uploadBufferToStorage(buffer, filename, 'image/png');
+                }
             } catch (dalleErr: any) {
                 console.error("[Synthesis] DALL-E 3 fallback failed:", dalleErr.message);
             }
