@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Worker, Job } from "bullmq";
 import { SCRAPE_QUEUE_NAME, ScrapeJobData, redisConnection } from "../lib/queue";
 import { ThreadsScraper } from "../lib/scraper";
+import { FacebookScraper } from "../lib/facebook_scraper";
 import { processPost, resolveFollowerCounts, RejectionReason } from "../lib/processor";
 import { uploadMediaToStorage } from "../lib/storage";
 import { prisma } from "../lib/prisma";
@@ -9,12 +10,22 @@ import { prisma } from "../lib/prisma";
 const CONCURRENCY = parseInt(process.env.SCRAPER_CONCURRENCY || "1", 10);
 
 const scraperPool: Map<number, ThreadsScraper> = new Map();
+const fbScraperPool: Map<number, FacebookScraper> = new Map();
 
 async function getScraperForSlot(slotId: number): Promise<ThreadsScraper> {
     let scraper = scraperPool.get(slotId);
     if (!scraper) {
         scraper = new ThreadsScraper();
         scraperPool.set(slotId, scraper);
+    }
+    return scraper;
+}
+
+async function getFbScraperForSlot(slotId: number): Promise<FacebookScraper> {
+    let scraper = fbScraperPool.get(slotId);
+    if (!scraper) {
+        scraper = new FacebookScraper();
+        fbScraperPool.set(slotId, scraper);
     }
     return scraper;
 }
@@ -100,8 +111,33 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
         let followerCount = 0;
         let followerMap = new Map<string, number>();
 
-        // We wrap the scraper calls to check for abort signal
-        if (type === 'TOPIC') {
+        const platform = sourceDetails?.platform || 'THREADS';
+
+        if (platform === 'FACEBOOK') {
+            const workspace = await prisma.workspace.findUnique({
+                where: { id: workspaceId },
+                select: { facebookCookiesJson: true }
+            }) as any;
+            const fbScraper = await getFbScraperForSlot(slotId);
+            console.log(`[ScrapeWorker] Scraping Facebook Group ${target}...`);
+            const fbPosts = await fbScraper.scrapeGroup(target, workspace?.facebookCookiesJson || undefined, since);
+
+            // Map FB posts to a common format
+            posts = fbPosts.map(p => ({
+                threadId: p.id,
+                content: p.content,
+                mediaUrls: p.mediaUrls,
+                views: 0,
+                likes: p.likes,
+                replies: p.comments,
+                reposts: p.shares,
+                postedAt: p.postedAt,
+                postUrl: p.postUrl,
+                externalUrls: [],
+                authorId: p.authorId,
+                authorUsername: p.authorName
+            }));
+        } else if (type === 'TOPIC') {
             console.log(`[ScrapeWorker] Scraping topic #${target} since ${since.toISOString()}...`);
             posts = await scraper.scrapeTopic(target, since);
 
@@ -298,11 +334,16 @@ async function processScrapeJob(job: Job<ScrapeJobData>) {
 
         // Anti-memory leak: periodically restart scraper for this slot
         if (jobCounter % 10 === 0) {
-            console.log(`[ScrapeWorker] Slot ${slotId} reached 10 jobs. Recycling browser...`);
-            const scraper = scraperPool.get(slotId);
-            if (scraper) {
-                await scraper.close();
+            console.log(`[ScrapeWorker] Slot ${slotId} reached 10 jobs. Recycling browsers...`);
+            const threadsScraper = scraperPool.get(slotId);
+            if (threadsScraper) {
+                await threadsScraper.close();
                 scraperPool.delete(slotId);
+            }
+            const fbScraper = fbScraperPool.get(slotId);
+            if (fbScraper) {
+                await fbScraper.close();
+                fbScraperPool.delete(slotId);
             }
         }
 

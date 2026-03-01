@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
             aiApiKey,
             synthesisPrompt,
             coherenceThreshold,
+            facebookCookiesJson,
         } = body;
 
         if (!name) {
@@ -96,7 +97,14 @@ export async function POST(request: NextRequest) {
 
                     const uniqueSourcesMap = new Map();
                     for (const s of sources) {
-                        const key = `${s.platform || 'THREADS'}-${s.type}-${s.value}`;
+                        const platform = s.platform || 'THREADS';
+                        let key;
+                        if (platform === 'FACEBOOK') {
+                            // For Facebook, deduplicate by type and value (e.g., page ID)
+                            key = `${platform}-${s.type}-${s.value}`;
+                        } else {
+                            key = `${platform}-${s.type}-${s.value}`;
+                        }
                         if (!uniqueSourcesMap.has(key)) {
                             uniqueSourcesMap.set(key, s);
                         }
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
                         create: uniqueSources.map((s: any) => ({
                             type: s.type,
                             value: s.value,
-                            platform: s.platform || 'THREADS',
+                            platform: s.platform || 'THREADS', // Ensure platform is a valid enum value
                             isActive: s.isActive ?? true,
                             minLikes: s.minLikes,
                             minReplies: s.minReplies,
@@ -123,6 +131,7 @@ export async function POST(request: NextRequest) {
                 aiApiKey: aiApiKey || null,
                 synthesisPrompt: synthesisPrompt || undefined,
                 coherenceThreshold: coherenceThreshold ? Number(coherenceThreshold) : undefined,
+                facebookCookiesJson: facebookCookiesJson || null,
                 ownerId: session.user.id,
             },
             include: { sources: true }

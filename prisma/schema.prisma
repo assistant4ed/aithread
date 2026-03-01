@@ -43,6 +43,7 @@ model Workspace {
   twitterRefreshToken   String?
   threadsExpiresAt      Int?
   threadsRefreshToken   String?
+  facebookCookiesJson   String?              @db.Text
   posts                 Post[]
   articles              SynthesizedArticle[]
   autoApproveDrafts     Boolean              @default(false)
@@ -234,6 +235,7 @@ enum Platform {
   THREADS
   INSTAGRAM
   TWITTER
+  FACEBOOK
 }
 
 model AccountCache {

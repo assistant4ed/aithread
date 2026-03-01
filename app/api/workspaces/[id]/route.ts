@@ -70,6 +70,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "autoApproveDrafts", "autoApprovePrompt",
             "aiProvider", "aiModel", "aiApiKey",
             "synthesisPrompt", "coherenceThreshold",
+            "facebookCookiesJson",
         ];
 
         const data: Record<string, any> = {};

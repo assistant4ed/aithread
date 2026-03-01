@@ -100,6 +100,7 @@ export default function EditWorkspacePage() {
         aiApiKey: "",
         synthesisPrompt: "",
         coherenceThreshold: 2,
+        facebookCookiesJson: "",
     });
 
     useEffect(() => {
@@ -138,6 +139,7 @@ export default function EditWorkspacePage() {
                     aiApiKey: data.aiApiKey || "",
                     synthesisPrompt: data.synthesisPrompt || "",
                     coherenceThreshold: data.coherenceThreshold || 2,
+                    facebookCookiesJson: data.facebookCookiesJson || "",
                 });
             } catch (err: any) {
                 setError(err.message);
@@ -188,6 +190,7 @@ export default function EditWorkspacePage() {
                     aiApiKey: form.aiApiKey || null,
                     synthesisPrompt: form.synthesisPrompt,
                     coherenceThreshold: Number(form.coherenceThreshold),
+                    facebookCookiesJson: form.facebookCookiesJson || null,
                 }),
             });
 
@@ -300,7 +303,7 @@ export default function EditWorkspacePage() {
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/20 text-purple-400">
-                                                TOPIC
+                                                {source.platform === 'FACEBOOK' ? 'FB GROUP' : 'TOPIC'}
                                             </span>
                                             <span className="text-sm font-medium">{source.value}</span>
                                         </div>
@@ -368,11 +371,11 @@ export default function EditWorkspacePage() {
                         <div className="p-4 border border-dashed border-border/50 rounded-lg bg-surface/30">
                             <div className="flex gap-2 items-end">
                                 <div className="flex-1">
-                                    <label className="text-[10px] text-muted block mb-1">New Source (@user or #topic)</label>
+                                    <label className="text-[10px] text-muted block mb-1">New Source (@user, #topic, or fb:group_id)</label>
                                     <input
                                         type="text"
                                         id="new-source-value"
-                                        placeholder="@username, #topic with space"
+                                        placeholder="@user, #topic, or fb:12345"
                                         className="input text-sm"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
@@ -392,16 +395,20 @@ export default function EditWorkspacePage() {
 
                                         const values = val.split(',').map(v => v.trim()).filter(Boolean);
                                         const newSources = values.map(v => {
-                                            const type = v.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
-                                            if (type === 'ACCOUNT' && !v.startsWith('@')) v = '@' + v;
+                                            const isFB = v.startsWith('fb:');
+                                            const cleanVal = isFB ? v.substring(3) : v;
+                                            const type = cleanVal.startsWith('#') ? 'TOPIC' : 'ACCOUNT';
+                                            let finalVal = cleanVal;
+                                            if (type === 'ACCOUNT' && !isFB && !finalVal.startsWith('@')) finalVal = '@' + finalVal;
+
                                             return {
                                                 type,
-                                                value: v,
-                                                platform: 'THREADS',
+                                                value: finalVal,
+                                                platform: isFB ? 'FACEBOOK' : 'THREADS',
                                                 isActive: true,
                                                 minLikes: type === 'TOPIC' ? 100 : null,
                                                 minReplies: type === 'TOPIC' ? 5 : null,
-                                                maxAgeHours: type === 'TOPIC' ? 3 : null,
+                                                maxAgeHours: type === 'TOPIC' || isFB ? 24 : null,
                                                 trustWeight: type === 'ACCOUNT' ? 1.0 : 0.7,
                                             };
                                         });
@@ -687,7 +694,25 @@ export default function EditWorkspacePage() {
                     )}
                 </div>
 
-                {/* AI Configuration */}
+                {/* Facebook Integration */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Facebook Authentication
+                    </h3>
+                    <p className="text-xs text-muted">
+                        Enter your Facebook session cookies in JSON format to enable group scraping.
+                    </p>
+                    <Field label="Facebook Session Cookies (JSON)" hint="Paste your JSON cookies here. Get these from a browser extension like 'EditThisCookie'.">
+                        <textarea
+                            value={form.facebookCookiesJson}
+                            onChange={(e) => setForm({ ...form, facebookCookiesJson: e.target.value })}
+                            rows={4}
+                            placeholder='[{"name": "c_user", "value": "...", ...}]'
+                            className="input font-mono text-xs w-full"
+                        />
+                    </Field>
+                </div>
+
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
                         AI Provider Configuration
@@ -979,8 +1004,8 @@ export default function EditWorkspacePage() {
                         Cancel
                     </Link>
                 </div>
-            </form>
-        </div>
+            </form >
+        </div >
     );
 }
 
