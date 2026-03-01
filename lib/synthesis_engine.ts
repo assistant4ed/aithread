@@ -99,7 +99,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toISOString()}`);
     }
 
-    // 1. Lookback: Configured hours or default 48h
+    // 1. Lookback: Configured hours or default 24h
     const limitDate = new Date(Date.now() - (settings.postLookbackHours || 24) * 3600000);
     const minHotScore = settings.hotScoreThreshold || 0;
     console.log(`[Synthesis] Looking back ${settings.postLookbackHours || 24} hours (since ${limitDate.toISOString()}) for posts with hotScore >= ${minHotScore}...`);
@@ -109,7 +109,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
             workspaceId,
             status: "PENDING_REVIEW",
             coherenceStatus: "PENDING",
-            postedAt: { gte: limitDate },
+            createdAt: { gte: limitDate },
             hotScore: { gte: minHotScore },
         },
         select: {

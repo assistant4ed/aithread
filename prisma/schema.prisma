@@ -189,6 +189,7 @@ model SynthesizedArticle {
   status                PostStatus @default(PENDING_REVIEW)
   publishedUrl          String?
   createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
   publishedAt           DateTime?
   mediaUrls             Json[]     @default([])
   externalUrls          String[]   @default([])
@@ -207,6 +208,9 @@ model SynthesizedArticle {
   replies               Int        @default(0)
   reposts               Int        @default(0)
   lastMetricsUpdate     DateTime?
+
+  publishError          String?
+  publishRetryCount     Int        @default(0)
 
   workspace             Workspace  @relation(fields: [workspaceId], references: [id])
 }

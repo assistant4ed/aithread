@@ -384,7 +384,7 @@ function PipelineStepDisplay({ label, run }: { label: string; run: any }) {
                         <span className="text-[10px] text-success font-medium">✅ {metadata.published || 0} Sent</span>
                         {metadata.failed > 0 && <span className="text-[10px] text-danger">❌ {metadata.failed} Failed</span>}
                     </div>
-                    {metadata.reason && metadata.published === 0 && (
+                    {metadata.reason && !metadata.published && (
                         <span className="text-[10px] text-muted italic line-clamp-1">ℹ️ {metadata.reason}</span>
                     )}
                 </div>

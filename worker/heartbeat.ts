@@ -4,7 +4,7 @@ import { Prisma, Workspace } from "@prisma/client";
 type WorkspaceWithSources = Prisma.WorkspaceGetPayload<{ include: { sources: true } }>;
 import { scrapeQueue, ScrapeJobData, removePendingScrapes } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
-import { checkAndPublishApprovedPosts, getDailyPublishCount } from "../lib/publisher_service";
+import { checkAndPublishApprovedPosts, getDailyPublishCount, PublishStats } from "../lib/publisher_service";
 import { runSynthesisEngine } from "../lib/synthesis_engine";
 import { trackPipelineRun } from "../lib/pipeline_tracker";
 import { deleteBlobFromStorage } from "../lib/storage";
@@ -152,13 +152,35 @@ setInterval(() => {
                         where: {
                             workspaceId: ws.id,
                             status: "APPROVED",
-                            scheduledPublishAt: { lte: now },
+                            OR: [
+                                { scheduledPublishAt: { lte: now } },
+                                { scheduledPublishAt: null },
+                            ],
                         },
                     });
                     if (overdueCount > 0) {
                         console.log(`[Heartbeat] ⏰ ${overdueCount} overdue scheduled article(s) for ${ws.name}. Triggering publish...`);
                         setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
                     }
+                }
+
+                // --- AUTO-RETRY ERROR ARTICLES ---
+                const retryableErrors = await prisma.synthesizedArticle.findMany({
+                    where: {
+                        workspaceId: ws.id,
+                        status: "ERROR",
+                        publishRetryCount: { lt: 3 },
+                        updatedAt: { lte: new Date(Date.now() - 30 * 60_000) }, // 30min cooldown
+                    },
+                    select: { id: true, publishRetryCount: true },
+                });
+
+                if (retryableErrors.length > 0) {
+                    console.log(`[Heartbeat] 🔄 ${retryableErrors.length} ERROR article(s) eligible for retry in ${ws.name}`);
+                    await prisma.synthesizedArticle.updateMany({
+                        where: { id: { in: retryableErrors.map(a => a.id) } },
+                        data: { status: "APPROVED", publishError: null },
+                    });
                 }
             }));
 
@@ -396,9 +418,14 @@ export async function staggerArticleSchedules(ws: Workspace, targetPublishTime: 
 
 async function runPublish(ws: Workspace) {
     return trackPipelineRun(ws.id, "PUBLISH", async () => {
-        if (!ws.threadsAppId || !ws.threadsToken) {
+        const hasAny = (ws.threadsAppId && ws.threadsToken)
+            || (ws.instagramAccountId && ws.instagramAccessToken)
+            || (ws.twitterApiKey && ws.twitterAccessToken);
+
+        if (!hasAny) {
             console.log(`[Publish] Skipping ${ws.name} (No credentials)`);
-            return { skipped: true, reason: "No credentials" };
+            const noCredStats: PublishStats = { publishedToday: 0, dailyLimit: ws.dailyPostLimit, approvedReady: 0, published: 0, failed: 0, reason: "No platform credentials configured" };
+            return noCredStats;
         }
 
         await prisma.workspace.update({

@@ -219,7 +219,11 @@ export async function checkAndPublishApprovedPosts(config: PublisherConfig, maxP
 
                 await prisma.synthesizedArticle.update({
                     where: { id: article.id },
-                    data: { status: "ERROR" },
+                    data: {
+                        status: "ERROR",
+                        publishError: err instanceof Error ? err.message : String(err),
+                        publishRetryCount: { increment: 1 },
+                    },
                 });
             }
         }

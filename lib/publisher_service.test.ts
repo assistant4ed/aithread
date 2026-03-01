@@ -272,7 +272,11 @@ describe("checkAndPublishApprovedPosts", () => {
         expect(prisma.synthesizedArticle.update).toHaveBeenCalledWith(
             expect.objectContaining({
                 where: { id: "article-fail" },
-                data: { status: "ERROR" },
+                data: expect.objectContaining({
+                    status: "ERROR",
+                    publishError: "Failed to publish to any configured platform.",
+                    publishRetryCount: { increment: 1 },
+                }),
             })
         );
     });

@@ -488,12 +488,22 @@ export default function ArticlesPage() {
                                         </span>
                                     )}
                                     {article.status === "ERROR" && (
-                                        <button
-                                            onClick={() => updateStatus(article.id, "APPROVED")}
-                                            className="px-4 py-1.5 rounded-lg bg-warning text-white hover:bg-warning/80 transition-colors text-sm font-medium"
-                                        >
-                                            Retry
-                                        </button>
+                                        <div className="flex items-center gap-3">
+                                            {(article as any).publishError && (
+                                                <span className="text-xs text-danger max-w-[300px] truncate" title={(article as any).publishError}>
+                                                    {(article as any).publishError}
+                                                </span>
+                                            )}
+                                            <span className="text-xs text-muted">
+                                                Retry {(article as any).publishRetryCount || 0}/3
+                                            </span>
+                                            <button
+                                                onClick={() => updateStatus(article.id, "APPROVED")}
+                                                className="px-4 py-1.5 rounded-lg bg-warning text-white hover:bg-warning/80 transition-colors text-sm font-medium"
+                                            >
+                                                Retry
+                                            </button>
+                                        </div>
                                     )}
                                     <button
                                         onClick={() => deleteArticle(article.id)}
