@@ -435,7 +435,7 @@ async function runPublish(ws: Workspace) {
 
         return await checkAndPublishApprovedPosts({
             workspaceId: ws.id,
-            threadsUserId: ws.threadsAppId,
+            threadsUserId: ws.threadsAppId || undefined,
             threadsAccessToken: ws.threadsToken || undefined,
             instagramAccountId: ws.instagramAccountId || undefined,
             instagramAccessToken: ws.instagramAccessToken || undefined,

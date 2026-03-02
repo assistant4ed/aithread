@@ -20,6 +20,7 @@ async function triggerTestScrape(workspaceName: string, targetAccount: string) {
         settings: {
             hotScoreThreshold: ws.hotScoreThreshold,
             maxPostAgeHours: ws.maxPostAgeHours,
+            translationPrompt: ws.translationPrompt,
         },
         skipTranslation: false,
     });
