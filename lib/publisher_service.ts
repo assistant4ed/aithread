@@ -269,6 +269,9 @@ export async function publishArticle(
 
 
         // Find first valid media
+        let firstImageUrl = "";
+        let firstImageCover = "";
+
         for (const post of sourcePosts) {
             if (post.mediaUrls && Array.isArray(post.mediaUrls)) {
                 for (const item of post.mediaUrls) {
@@ -284,13 +287,25 @@ export async function publishArticle(
                         mediaUrl = url;
                         coverUrl = itemCover || "";
                         mediaType = "VIDEO";
-                        break; // Prefer video
+                        break; // Prefer video immediately
+                    } else if (type === "image" && !firstImageUrl) {
+                        // Store the first image we see as a fallback, but keep looking for a video
+                        firstImageUrl = url;
+                        firstImageCover = itemCover || "";
                     }
                 }
             }
-            if (mediaType === "VIDEO") break; // Found video, stop looking
+            if (mediaType === "VIDEO") break; // Found video, stop looking across posts
         }
-        console.log(`[Publisher] Auto-selected media: ${mediaType} - ${mediaUrl}`);
+
+        // If no video was found, fallback to the first image
+        if (mediaType !== "VIDEO" && firstImageUrl) {
+            mediaUrl = firstImageUrl;
+            coverUrl = firstImageCover;
+            mediaType = "IMAGE";
+        }
+
+        console.log(`[Publisher] Auto-selected media: ${mediaType} - ${mediaUrl || "none"}`);
     }
 
     if (!mediaUrl && !text) {
