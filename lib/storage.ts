@@ -98,3 +98,52 @@ export async function deleteBlobFromStorage(filename: string): Promise<void> {
         console.error(`[Storage] Error deleting blob ${filename}:`, error.message);
     }
 }
+
+const OWN_BLOB_HOST = "threadsmonitorblobs.blob.core.windows.net";
+
+/**
+ * Ensures a media URL is permanent (no expiring SAS tokens).
+ * - If the URL is from our own blob storage and has query params (SAS), strips them.
+ * - If the URL is from an external source with SAS tokens, downloads and re-uploads.
+ * - Otherwise, returns the URL unchanged.
+ */
+export async function ensurePermanentUrl(url: string): Promise<string> {
+    if (!url) return url;
+
+    try {
+        const parsed = new URL(url);
+
+        // Our own blob: just strip query params (SAS tokens)
+        if (parsed.hostname === OWN_BLOB_HOST && parsed.search) {
+            const permanent = `${parsed.origin}${parsed.pathname}`;
+            console.log(`[Storage] Stripped SAS params from own blob URL: ${permanent}`);
+            return permanent;
+        }
+
+        // External Azure blob: has SAS-like params (sig=, skoid=, skt=)
+        if (parsed.search && (parsed.searchParams.has("sig") || parsed.searchParams.has("skoid"))) {
+            console.log(`[Storage] External SAS URL detected, re-uploading to own storage...`);
+            const ext = parsed.pathname.split(".").pop() || "png";
+            const filename = `reupload/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            return await uploadMediaToStorage(url, filename);
+        }
+    } catch {
+        // URL parsing failed — return as-is
+    }
+
+    return url;
+}
+
+/**
+ * Checks if a URL is reachable via HTTP HEAD request.
+ * Returns true if the server responds with 2xx, false otherwise.
+ */
+export async function isUrlReachable(url: string): Promise<boolean> {
+    if (!url) return false;
+    try {
+        const resp = await axios.head(url, { timeout: 10_000 });
+        return resp.status >= 200 && resp.status < 300;
+    } catch {
+        return false;
+    }
+}

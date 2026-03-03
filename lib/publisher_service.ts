@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { createContainer, publishContainer, waitForContainer, refreshLongLivedToken } from "./threads_client";
 import { stripPlatformReferences } from "./sanitizer";
 import { todayStartHKT } from "./time";
+import { ensurePermanentUrl, isUrlReachable } from "./storage";
 
 
 export interface PublisherConfig {
@@ -311,6 +312,29 @@ export async function publishArticle(
     if (!mediaUrl && !text) {
         console.log(`[Publisher] Article ${article.id}: No text or media, skipping.`);
         return;
+    }
+
+    // --- MEDIA URL VALIDATION ---
+    // Ensure the URL is permanent (no expired SAS tokens) and reachable
+    if (mediaUrl) {
+        try {
+            mediaUrl = await ensurePermanentUrl(mediaUrl);
+        } catch (e: any) {
+            console.warn(`[Publisher] ensurePermanentUrl failed for ${mediaUrl}: ${e.message}`);
+        }
+
+        const reachable = await isUrlReachable(mediaUrl);
+        if (!reachable) {
+            console.warn(`[Publisher] Media URL is not reachable, falling back to text-only: ${mediaUrl}`);
+            mediaUrl = "";
+            coverUrl = "";
+            mediaType = "TEXT";
+
+            if (!text) {
+                console.log(`[Publisher] Article ${article.id}: Media unreachable and no text, skipping.`);
+                return;
+            }
+        }
     }
 
     const errors: string[] = [];
