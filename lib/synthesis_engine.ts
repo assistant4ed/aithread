@@ -271,7 +271,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
         // 5. Translate & Persist & Sanitize
         // Safety net: strip any trailing editorial sections before translation
-        let cleanContent = synthesis.content;
+        let cleanContent = synthesis.content || "";
         cleanContent = cleanContent
             .replace(/\n{2,}(?:📌|🎥|🖼️|💡|🔑|📝)\s*(?:What it signals|Video idea|Image idea|Visuals to use|Content idea)[^\n]*(?:\n[\s\S]*)?$/gu, '')
             .replace(/\n{2,}(?:What it signals|Visuals to use|Video idea|Image idea|Content idea)[:\s][\s\S]*/i, '')

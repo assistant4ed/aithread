@@ -15,6 +15,10 @@
     "synthesis": "tsx lib/synthesis_engine.ts",
     "worker:youtube": "tsx worker/youtube-worker.ts",
     "worker:metrics": "tsx worker/metrics-worker.ts",
+    "test": "vitest",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.e2e.test.ts'",
+    "test:integration": "vitest run '**/*.integration.test.ts'",
+    "test:e2e": "RUN_E2E=1 vitest run '**/*.e2e.test.ts'",
     "test:youtube": "tsx scripts/test-youtube.ts",
     "lint": "eslint"
   },

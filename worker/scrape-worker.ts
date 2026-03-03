@@ -55,7 +55,7 @@ async function getOrFetchFollowerCount(username: string, scraper: ThreadsScraper
 
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
-async function processScrapeJob(job: Job<ScrapeJobData>) {
+export async function processScrapeJob(job: Job<ScrapeJobData>) {
     const JOB_TIMEOUT_MS = 600_000; // 10 minutes
 
     // Create an abort controller for manual timeout

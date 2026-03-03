@@ -705,12 +705,16 @@ export class ThreadsScraper {
         await page.setViewport({ width: 800, height: 600 });
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            const type = req.resourceType();
-            // Block heavy binary data but allow document/scripts/XHR/stylesheets
-            if (['image', 'media', 'font'].includes(type)) {
-                req.abort();
-            } else {
-                req.continue();
+            try {
+                if (req.isInterceptResolutionHandled()) return;
+                const type = req.resourceType();
+                if (['image', 'media', 'font'].includes(type)) {
+                    req.abort();
+                } else {
+                    req.continue();
+                }
+            } catch (e) {
+                // Ignore "Request is already handled" errors
             }
         });
     }

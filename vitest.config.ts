@@ -7,6 +7,8 @@ export default defineConfig({
         alias: {
             '@': path.resolve(__dirname, './')
         },
-        setupFiles: ['./vitest.setup.ts']
+        setupFiles: ['./vitest.setup.ts'],
+        fileParallelism: false,
+        maxWorkers: 1,
     }
 })

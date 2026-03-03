@@ -1,23 +1,84 @@
-import { vi } from 'vitest';
+import { vi, beforeAll, expect } from 'vitest';
+
+const isIntegrationOrE2E = expect.getState().testPath?.includes('.integration.test.ts') ||
+    expect.getState().testPath?.includes('.e2e.test.ts');
+
+if (isIntegrationOrE2E) {
+    const testUrl = "postgresql://postgres:password@127.0.0.1:5432/postgres?sslmode=disable";
+    process.env.DATABASE_URL = testUrl;
+    process.env.DIRECT_URL = testUrl;
+}
+
+import { setupTestDB } from './test/setup/db.setup';
 
 vi.mock('@/auth', () => ({
     auth: vi.fn(),
 }));
 
-vi.mock('@/lib/prisma', () => ({
-    prisma: {
-        synthesizedArticle: {
-            findUnique: vi.fn(),
-            update: vi.fn(),
-            delete: vi.fn(),
+
+vi.mock('@/lib/prisma', async (importOriginal) => {
+    const isIntegrationOrE2E = expect.getState().testPath?.includes('.integration.test.ts') ||
+        expect.getState().testPath?.includes('.e2e.test.ts');
+
+    if (isIntegrationOrE2E) {
+        return (await importOriginal()) as any;
+    }
+
+    return {
+        prisma: {
+            synthesizedArticle: {
+                findUnique: vi.fn(),
+                update: vi.fn(),
+                delete: vi.fn(),
+                create: vi.fn(),
+                upsert: vi.fn(),
+                findFirst: vi.fn(),
+                findMany: vi.fn(),
+            },
+            post: {
+                findUnique: vi.fn(),
+                update: vi.fn(),
+                delete: vi.fn(),
+                create: vi.fn(),
+                upsert: vi.fn(),
+                findFirst: vi.fn(),
+                findMany: vi.fn(),
+                count: vi.fn(),
+            },
+            workspace: {
+                findUnique: vi.fn(),
+                update: vi.fn(),
+                delete: vi.fn(),
+                create: vi.fn(),
+                upsert: vi.fn(),
+                findFirst: vi.fn(),
+                findMany: vi.fn(),
+            },
+            scraperSource: {
+                findUnique: vi.fn(),
+                update: vi.fn(),
+                delete: vi.fn(),
+                create: vi.fn(),
+                upsert: vi.fn(),
+                findFirst: vi.fn(),
+                findMany: vi.fn(),
+            },
+            scrapeLog: {
+                create: vi.fn(),
+            },
+            trackedAccount: {
+                findUnique: vi.fn(),
+                upsert: vi.fn(),
+            },
         },
-        post: {
-            findUnique: vi.fn(),
-            update: vi.fn(),
-            delete: vi.fn(),
-        },
-    },
-}));
+    };
+});
+
+beforeAll(async () => {
+    if (isIntegrationOrE2E) {
+        await setupTestDB();
+    }
+}, 60000);
 
 vi.mock('next/server', () => ({
     NextResponse: {

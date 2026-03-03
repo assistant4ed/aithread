@@ -52,9 +52,9 @@ services:
 
 # Note: We assume an external PostgreSQL database (e.g. Supabase or Azure Postgres)
 # If you want a local Postgres for testing, uncomment below:
-#  db:
-#    image: postgres:15-alpine
-#    environment:
-#      - POSTGRES_PASSWORD=password
-#    ports:
-#      - "5432:5432"
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
