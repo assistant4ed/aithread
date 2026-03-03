@@ -128,7 +128,7 @@ setInterval(() => {
 
                     if (isSynthTime) {
                         console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
-                        setImmediate(() => runSynthesis(ws, timeStr).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e)));
+                        setImmediate(() => runSynthesis(ws).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e)));
                     }
 
                     // --- PUBLISH PHASE ---
@@ -136,30 +136,28 @@ setInterval(() => {
                     const isPublishTime = diffMsPub < 30_000; // ±30 seconds window
 
                     if (isPublishTime) {
-                        console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr} HKT)`);
+                        const maxPerWindow = Math.ceil(ws.dailyPostLimit / publishTimes.length);
+                        console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr} HKT, max: ${maxPerWindow})`);
                         // Await runPublish to ensure we don't start multiple concurrent publishes within one tick
-                        await runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e));
+                        await runPublish(ws, maxPerWindow).catch(e => console.error(`[Publish Error - ${ws.name}]`, e));
                         publishTriggered = true;
                     }
                 }
 
                 // --- SCHEDULED ARTICLE CHECK (independent of publishTimes) ---
-                // Catch any approved articles whose scheduledPublishAt has passed
-                // Skip if we already triggered publish via publishTimes this tick to avoid duplicate posts
+                // Only catch articles with an explicit (non-null) scheduledPublishAt that has passed.
+                // Articles with null scheduledPublishAt are published during regular publish windows.
                 if (!publishTriggered) {
                     const overdueCount = await prisma.synthesizedArticle.count({
                         where: {
                             workspaceId: ws.id,
                             status: "APPROVED",
-                            OR: [
-                                { scheduledPublishAt: { lte: now } },
-                                { scheduledPublishAt: null },
-                            ],
+                            scheduledPublishAt: { not: null, lte: now },
                         },
                     });
                     if (overdueCount > 0) {
                         console.log(`[Heartbeat] ⏰ ${overdueCount} overdue scheduled article(s) for ${ws.name}. Triggering publish...`);
-                        setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                        setImmediate(() => runPublish(ws, overdueCount).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
                     }
                 }
 
@@ -317,7 +315,7 @@ async function runScrape(ws: WorkspaceWithSources) {
     });
 }
 
-async function runSynthesis(ws: Workspace, targetPublishTime: string) {
+async function runSynthesis(ws: Workspace) {
     return trackPipelineRun(ws.id, "SYNTHESIS", async () => {
         console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
         await removePendingScrapes(ws.id);
@@ -335,7 +333,6 @@ async function runSynthesis(ws: Workspace, targetPublishTime: string) {
             clusteringPrompt: ws.clusteringPrompt || "",
             synthesisLanguage: ws.synthesisLanguage || "Traditional Chinese (HK/TW)",
             postLookbackHours: ws.postLookbackHours,
-            targetPublishTimeStr: targetPublishTime,
             hotScoreThreshold: ws.hotScoreThreshold,
             coherenceThreshold: ws.coherenceThreshold,
             aiProvider: ws.aiProvider || "GROQ",
@@ -343,12 +340,6 @@ async function runSynthesis(ws: Workspace, targetPublishTime: string) {
             aiApiKey: ws.aiApiKey || undefined,
             maxArticles,
         });
-
-        // ── Stagger articles across remaining publish windows ──
-        // Prevents all articles from the same synthesis run publishing simultaneously.
-        if (result.articlesGenerated > 1) {
-            await staggerArticleSchedules(ws, targetPublishTime);
-        }
 
         return result;
     });
@@ -415,7 +406,7 @@ export async function staggerArticleSchedules(ws: Workspace, targetPublishTime: 
     console.log(`[Stagger] Distributed ${articles.length} articles across ${Math.min(articles.length, slots.length + 1)} time slots.`);
 }
 
-async function runPublish(ws: Workspace) {
+async function runPublish(ws: Workspace, maxPublish: number = 1) {
     return trackPipelineRun(ws.id, "PUBLISH", async () => {
         const hasAny = (ws.threadsAppId && ws.threadsToken)
             || (ws.instagramAccountId && ws.instagramAccessToken)
@@ -447,7 +438,7 @@ async function runPublish(ws: Workspace) {
             aiProvider: ws.aiProvider,
             aiModel: ws.aiModel,
             aiApiKey: ws.aiApiKey,
-        });
+        }, maxPublish);
     });
 }
 

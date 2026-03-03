@@ -6,7 +6,7 @@ import { clusterPosts, Document } from "./clustering";
 import { sanitizeText, stripPlatformReferences } from "./sanitizer";
 import { POST_FORMATS } from "./postFormats";
 import { uploadBufferToStorage } from "./storage";
-import { toUTCDate } from "./time";
+
 import axios from "axios";
 
 /**
@@ -33,7 +33,6 @@ export interface SynthesisSettings {
     clusteringPrompt: string;
     synthesisLanguage: string;
     postLookbackHours?: number;
-    targetPublishTimeStr?: string; // "HH:MM" e.g. "18:00" passed from worker
     hotScoreThreshold?: number;    // "Viral" threshold
     synthesisPrompt?: string;      // User-defined personality
     aiProvider?: string;
@@ -104,20 +103,6 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
         clustersSkipped: 0,
         articlesGenerated: 0
     };
-
-    // Compute scheduledPublishAt if target time is provided
-    let scheduledAt: Date | undefined;
-    if (settings.targetPublishTimeStr) {
-        const now = new Date();
-        const candidate = toUTCDate(settings.targetPublishTimeStr, now);
-
-        // If candidate is in the past (e.g. slight drift), schedule for tomorrow
-        if (candidate.getTime() < now.getTime() - 1000 * 60 * 60) {
-            candidate.setDate(candidate.getDate() + 1);
-        }
-        scheduledAt = candidate;
-        console.log(`[Synthesis] Articles will be scheduled for: ${scheduledAt.toISOString()}`);
-    }
 
     // 1. Lookback: Configured hours or default 24h
     const limitDate = new Date(Date.now() - (settings.postLookbackHours || 24) * 3600000);
@@ -348,7 +333,6 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                     authorCount: authors.size,
                     postCount: clusterPosts.length,
                     status: finalStatus,
-                    scheduledPublishAt: scheduledAt,
                     externalUrls: uniqueUrls,
                     formatUsed: formatId,
                     selectedMediaUrl: selectedMediaUrl,

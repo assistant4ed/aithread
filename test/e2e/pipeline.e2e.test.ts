@@ -178,7 +178,6 @@ describe('Full Pipeline E2E', () => {
             clusteringPrompt: 'Cluster',
             synthesisLanguage: 'English',
             postLookbackHours: 24,
-            targetPublishTimeStr: '12:00',
             hotScoreThreshold: 10,
             coherenceThreshold: 1,
             aiProvider: 'GROQ',
