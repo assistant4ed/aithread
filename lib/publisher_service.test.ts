@@ -274,7 +274,7 @@ describe("checkAndPublishApprovedPosts", () => {
                 where: { id: "article-fail" },
                 data: expect.objectContaining({
                     status: "ERROR",
-                    publishError: "Failed to publish to any configured platform.",
+                    publishError: "Publish failed: Threads: API error",
                     publishRetryCount: { increment: 1 },
                 }),
             })

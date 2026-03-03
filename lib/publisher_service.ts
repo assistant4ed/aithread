@@ -298,6 +298,8 @@ export async function publishArticle(
         return;
     }
 
+    const errors: string[] = [];
+
     const results: Record<string, string | null> = {
         threads: null,
         instagram: null,
@@ -353,6 +355,7 @@ export async function publishArticle(
             console.log(`[Publisher] Threads success: ${threadsUrl}`);
         } catch (e: any) {
             console.error(`[Publisher] Threads failed:`, e.message);
+            errors.push(`Threads: ${e.message}`);
         }
     }
 
@@ -394,6 +397,7 @@ export async function publishArticle(
 
         } catch (e: any) {
             console.error(`[Publisher] Instagram failed:`, e.message);
+            errors.push(`Instagram: ${e.message}`);
         }
     }
 
@@ -447,6 +451,7 @@ export async function publishArticle(
 
         } catch (e: any) {
             console.error(`[Publisher] Twitter failed:`, e.message);
+            errors.push(`Twitter: ${e.message}`);
         }
     }
 
@@ -469,6 +474,9 @@ export async function publishArticle(
             },
         });
     } else {
-        throw new Error("Failed to publish to any configured platform.");
+        const detail = errors.length > 0
+            ? errors.join("; ")
+            : "No platform credentials configured";
+        throw new Error(`Publish failed: ${detail}`);
     }
 }
