@@ -56,8 +56,8 @@ export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
             type: "exponential",
             delay: 15_000, // 15s start
         },
-        removeOnComplete: { count: 300 },
-        removeOnFail: { count: 100 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 50, age: 3600 }, // Prune failed jobs older than 1 hour
     },
 });
 

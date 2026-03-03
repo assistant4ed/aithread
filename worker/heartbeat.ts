@@ -259,7 +259,7 @@ async function runScrape(ws: WorkspaceWithSources) {
             };
 
             await scrapeQueue.add(`scrape:${ws.id}:${source.id}`, jobData, {
-                jobId: `scrape:${ws.id}:${source.id}`, // Deduplication
+                jobId: `scrape:${ws.id}:${source.id}:${Date.now()}`, // Deduplication bypass per-cycle
                 removeOnComplete: true,
                 removeOnFail: { count: 100 },
                 attempts: 2,
