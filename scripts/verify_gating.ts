@@ -92,14 +92,21 @@ async function main() {
     const maxPostAgeHours = settings.maxPostAgeHours || 48;
     info(`maxPostAgeHours setting: ${maxPostAgeHours}h`);
 
-    const staleAccountPosts = await prisma.post.count({
+    const recentAccountPosts = await prisma.post.findMany({
         where: {
             workspaceId: workspace.id,
             sourceType: 'ACCOUNT',
-            postedAt: { lt: new Date(Date.now() - maxPostAgeHours * 3600_000) },
             createdAt: { gte: new Date(Date.now() - 48 * 3600_000) },
         },
+        select: { postedAt: true, createdAt: true }
     });
+
+    const staleAccountPosts = recentAccountPosts.filter(p => {
+        if (!p.postedAt) return true;
+        const ageAtIngestion = (p.createdAt.getTime() - p.postedAt.getTime()) / 3600_000;
+        // give a small 1-hour grace period for processing delays
+        return ageAtIngestion > (maxPostAgeHours + 1);
+    }).length;
 
     check(
         staleAccountPosts === 0,
@@ -107,14 +114,20 @@ async function main() {
         `${staleAccountPosts} stale ACCOUNT posts found (older than ${maxPostAgeHours}h)`
     );
 
-    const staleTopicPosts = await prisma.post.count({
+    const recentTopicPosts = await prisma.post.findMany({
         where: {
             workspaceId: workspace.id,
             sourceType: 'TOPIC',
-            postedAt: { lt: new Date(Date.now() - 72 * 3600_000) },
             createdAt: { gte: new Date(Date.now() - 48 * 3600_000) },
         },
+        select: { postedAt: true, createdAt: true }
     });
+
+    const staleTopicPosts = recentTopicPosts.filter(p => {
+        if (!p.postedAt) return true;
+        const ageAtIngestion = (p.createdAt.getTime() - p.postedAt.getTime()) / 3600_000;
+        return ageAtIngestion > (72 + 1); // 72h + 1h grace
+    }).length;
 
     check(
         staleTopicPosts === 0,

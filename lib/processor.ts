@@ -175,8 +175,9 @@ export async function processPost(
 
     if (source?.type === 'ACCOUNT') {
         // Accounts keep hard gate
-        if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
-            console.log(`[Processor] Skipping outdated account post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${settings.maxPostAgeHours}h)`);
+        const limit = settings.maxPostAgeHours || 48;
+        if (ageHours > limit) {
+            console.log(`[Processor] Skipping outdated account post ${postData.threadId} (${ageHours.toFixed(0)}h old, limit: ${limit}h)`);
             return { rejected: 'freshness' as RejectionReason };
         }
     } else if (source?.type === 'TOPIC') {
@@ -186,10 +187,13 @@ export async function processPost(
             console.log(`[Processor] Skipping very old topic post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
             return { rejected: 'freshness' as RejectionReason };
         }
-    } else if (settings.maxPostAgeHours && ageHours > settings.maxPostAgeHours) {
-        // Fallback for unknown source types
-        console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
-        return { rejected: 'freshness' as RejectionReason };
+    } else {
+        const limit = settings.maxPostAgeHours || 48;
+        if (ageHours > limit) {
+            // Fallback for unknown source types
+            console.log(`[Processor] Skipping outdated post ${postData.threadId} (${ageHours.toFixed(0)}h old)`);
+            return { rejected: 'freshness' as RejectionReason };
+        }
     }
 
     // 2. Check if post exists
@@ -198,15 +202,45 @@ export async function processPost(
     });
 
     if (existing) {
-        // Update engagement stats
-        const newScore = calculateHotScore({ ...postData, postedAt: validPostedAt, followerCount });
+        // Update engagement stats (only increase)
+        const mergedLikes = Math.max(existing.likes || 0, postData.likes || 0);
+        const mergedReplies = Math.max(existing.replies || 0, postData.replies || 0);
+        const mergedReposts = Math.max(existing.reposts || 0, postData.reposts || 0);
+        const mergedViews = Math.max(existing.views || 0, postData.views || 0);
+
+        let finalNewScore: number;
+        if (source?.type === 'TOPIC' || existing.sourceType === 'TOPIC') {
+            const scoreResult = calculateTopicScore({
+                likeCount: mergedLikes,
+                replyCount: mergedReplies,
+                repostCount: mergedReposts,
+                quoteCount: 0,
+                followerCount: followerCount || null,
+                ageHours
+            });
+            finalNewScore = applyFreshnessAdjustment(scoreResult.score, ageHours);
+            if (isNaN(finalNewScore)) finalNewScore = 0;
+        } else {
+            const tempScore = calculateHotScore({
+                ...postData,
+                likes: mergedLikes,
+                replies: mergedReplies,
+                reposts: mergedReposts,
+                views: mergedViews,
+                postedAt: validPostedAt,
+                followerCount
+            });
+            finalNewScore = isNaN(tempScore) ? 0 : (tempScore * (source?.trustWeight || 1.0));
+        }
+
         await prisma.post.update({
             where: { id: existing.id },
             data: {
-                likes: postData.likes,
-                replies: postData.replies,
-                reposts: postData.reposts,
-                hotScore: isNaN(newScore) ? 0 : newScore,
+                likes: mergedLikes,
+                replies: mergedReplies,
+                reposts: mergedReposts,
+                views: mergedViews,
+                hotScore: finalNewScore,
             },
         });
         return { rejected: 'duplicate' as RejectionReason }; // Not new
