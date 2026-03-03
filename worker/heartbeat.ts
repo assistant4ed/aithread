@@ -122,9 +122,9 @@ setInterval(() => {
                     }
 
                     // --- SYNTHESIS PHASE ---
-                    // Use UTC comparison for stability with a ±45 second window (matches 1min tick)
+                    // Use UTC comparison for stability with a ±30 second window (matches 1min tick)
                     const diffMsSynth = Math.abs(now.getTime() - synthDateUTC.getTime());
-                    const isSynthTime = diffMsSynth < 90_000; // ±90 seconds window
+                    const isSynthTime = diffMsSynth < 30_000; // ±30 seconds window
 
                     if (isSynthTime) {
                         console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
@@ -133,7 +133,7 @@ setInterval(() => {
 
                     // --- PUBLISH PHASE ---
                     const diffMsPub = Math.abs(now.getTime() - pubDateUTC.getTime());
-                    const isPublishTime = diffMsPub < 90_000; // ±90 seconds window
+                    const isPublishTime = diffMsPub < 30_000; // ±30 seconds window
 
                     if (isPublishTime) {
                         console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr} HKT)`);

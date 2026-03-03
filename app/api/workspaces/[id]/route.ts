@@ -117,6 +117,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             include: { sources: true }
         });
 
+        // When publishTimes changes, clear scheduledPublishAt on non-published articles
+        // so they become eligible at the next publish window
+        if (body.publishTimes !== undefined) {
+            await prisma.synthesizedArticle.updateMany({
+                where: {
+                    workspaceId: id,
+                    status: { in: ["APPROVED", "PENDING_REVIEW"] },
+                },
+                data: { scheduledPublishAt: null },
+            });
+        }
+
         return NextResponse.json(workspace);
     } catch (error: any) {
         if (error.code === "P2025") {
