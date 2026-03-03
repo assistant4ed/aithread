@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         const body = await request.json();
 
         const allowedFields = [
-            "status", "contentTranslated", "contentOriginal", "mediaUrls", "coherenceStatus", "topicClusterId",
+            "status", "contentOriginal", "mediaUrls", "coherenceStatus", "topicClusterId",
         ];
 
         const data: Record<string, any> = {};

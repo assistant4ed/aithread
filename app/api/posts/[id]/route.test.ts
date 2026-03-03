@@ -87,7 +87,6 @@ describe('Post API /api/posts/[id]', () => {
 
             const body = {
                 contentOriginal: "Original Text",
-                contentTranslated: "Translated Text",
                 status: "APPROVED",
                 randomUnallowedField: "should-be-ignored"
             };
@@ -100,7 +99,6 @@ describe('Post API /api/posts/[id]', () => {
                 data: {
                     status: 'APPROVED',
                     contentOriginal: 'Original Text',
-                    contentTranslated: 'Translated Text'
                 } // The random field is ignored by the logic in route.ts
             });
         });

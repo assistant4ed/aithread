@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 async function triggerSynthesis() {
     const ws = await prisma.workspace.findUnique({
-        where: { id: "cmlwhxgd0000ds0ljg878h6ed" }
+        where: { id: "cmlxeuog40030s0fr0antoubk" }
     });
 
     if (!ws) return console.log("Workspace not found");

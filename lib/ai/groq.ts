@@ -21,8 +21,12 @@ export class GroqProvider implements AIProvider {
             });
 
             return completion.choices[0]?.message?.content || null;
-        } catch (e) {
-            console.error("[GroqProvider] Error:", e);
+        } catch (e: any) {
+            if (e?.status === 429 || e?.message?.includes("Rate limit")) {
+                console.warn(`[GroqProvider] Rate limit reached for ${options?.model || this.defaultModel}. Falling back...`);
+            } else {
+                console.error("[GroqProvider] Error:", e.message || e);
+            }
             return null;
         }
     }

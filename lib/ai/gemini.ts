@@ -12,19 +12,24 @@ export class GeminiProvider implements AIProvider {
 
     async createChatCompletion(messages: AIChatMessage[], options?: AIChatOptions): Promise<string | null> {
         try {
+            const systemMessage = messages.find(m => m.role === 'system');
+            const chatMessages = messages.filter(m => m.role !== 'system');
+
             const modelName = options?.model || this.defaultModel;
-            const model = this.genAI.getGenerativeModel({
+            const modelConfig: any = {
                 model: modelName,
                 generationConfig: {
                     temperature: options?.temperature ?? 0.1,
                     maxOutputTokens: options?.max_tokens,
                     responseMimeType: options?.response_format?.type === 'json_object' ? 'application/json' : 'text/plain',
                 }
-            });
+            };
 
-            // Extract system message if present
-            const systemMessage = messages.find(m => m.role === 'system');
-            const chatMessages = messages.filter(m => m.role !== 'system');
+            if (systemMessage?.content) {
+                modelConfig.systemInstruction = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+            }
+
+            const model = this.genAI.getGenerativeModel(modelConfig);
 
             // Format history for Gemini (excluding the last message which we'll send as the prompt)
             const history = chatMessages.slice(0, -1).map(m => ({
@@ -34,20 +39,18 @@ export class GeminiProvider implements AIProvider {
 
             const lastMessage = chatMessages[chatMessages.length - 1];
 
-            // If there's a system message, we either use it in model configuration (newer SDKs)
-            // or prepended to the first message. For simplicity and broad compatibility:
+            // For Gemini, prompt must be the last user message
             let promptContent = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
 
             const chat = model.startChat({
-                history,
-                systemInstruction: typeof systemMessage?.content === 'string' ? systemMessage?.content : (systemMessage?.content ? JSON.stringify(systemMessage.content) : undefined),
+                history
             });
 
             const result = await chat.sendMessage(promptContent);
             const response = await result.response;
             return response.text() || null;
-        } catch (e) {
-            console.error("[GeminiProvider] Error:", e);
+        } catch (e: any) {
+            console.warn(`[GeminiProvider] Error: ${e.message || e}`);
             return null;
         }
     }

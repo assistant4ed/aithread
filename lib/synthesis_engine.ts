@@ -9,6 +9,25 @@ import { uploadBufferToStorage } from "./storage";
 import { toUTCDate } from "./time";
 import axios from "axios";
 
+/**
+ * Simple retry helper for transient errors (e.g. Prisma P1001 database connection)
+ */
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+    try {
+        return await fn();
+    } catch (e: any) {
+        if (retries <= 0) throw e;
+        // P1001 is common for transient Azure DB issues
+        const isTransient = e.code === 'P1001' || e.message?.toLowerCase().includes("can't reach database");
+        if (isTransient) {
+            console.warn(`[Resilience] Database transient error. Retrying... (${retries} left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return withRetry(fn, retries - 1, delay * 2);
+        }
+        throw e;
+    }
+}
+
 export interface SynthesisSettings {
     translationPrompt: string;
     clusteringPrompt: string;
@@ -171,188 +190,193 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
     console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors (${uniqueAuthors} unique authors in pool).`);
 
     for (const cluster of rawClusters) {
-        const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
-        const authors = new Set(clusterPosts.map(p => p.sourceAccount));
-
-
-        // 3a. Check Threshold (Strict Coherence for accounts, lenient for topics)
-        const hasTopicPost = clusterPosts.some(p => (p as any).sourceType === "TOPIC");
-        const thresholdCountForCluster = hasTopicPost ? 1 : thresholdCount;
-
-        const isCoherent = authors.size >= thresholdCountForCluster;
-
-        if (!isCoherent) {
-            console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCountForCluster}).`);
-            stats.clustersSkipped++;
-            continue;
-        }
-
-        // 3b. Check if this cluster has any "new" news
-        const hasPending = clusterPosts.some(p => p.coherenceStatus === "PENDING" || p.coherenceStatus === "ISOLATED");
-        if (!hasPending) {
-            console.log(`  -> SKIPPED: Already processed / No pending news.`);
-            stats.clustersSkipped++;
-            continue;
-        }
-
-        console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
-
-        // 3c. Classify Format
-        const classifyResult = await classifyCluster(clusterPosts, settings);
-        const formatId = classifyResult?.format || "LISTICLE";
-
-        // 4. Synthesize
-        const synthesis = await synthesizeCluster(clusterPosts.map(p => ({
-            content: p.contentOriginal || "",
-            account: p.sourceAccount,
-            url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
-        })), formatId, settings.synthesisPrompt, settings);
-
-        if (!synthesis) {
-            console.log("  -> Synthesis failed / empty response.");
-            stats.clustersSkipped++;
-            continue;
-        }
-
-        // 4b. Media Selection & Generation (Isolated to prevent crashes)
-        let selectedMediaUrl: string | null = null;
-        let selectedMediaType: string | null = null;
-
         try {
-            let allMedia: { url: string, type: string }[] = [];
-            for (const p of clusterPosts) {
-                if (p.mediaUrls && Array.isArray(p.mediaUrls)) {
-                    const mediaArray = p.mediaUrls as any[];
-                    for (const m of mediaArray) {
-                        if (m) {
-                            const mObj = m as any;
-                            if (typeof mObj === 'string') {
-                                allMedia.push({ url: mObj, type: 'image' });
-                            } else if (mObj.url) {
-                                allMedia.push({ url: mObj.url, type: mObj.type || 'image' });
+            const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
+            const authors = new Set(clusterPosts.map(p => p.sourceAccount));
+
+
+            // 3a. Check Threshold (Strict Coherence for accounts, lenient for topics)
+            const hasTopicPost = clusterPosts.some(p => (p as any).sourceType === "TOPIC");
+            const thresholdCountForCluster = hasTopicPost ? 1 : thresholdCount;
+
+            const isCoherent = authors.size >= thresholdCountForCluster;
+
+            if (!isCoherent) {
+                console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCountForCluster}).`);
+                stats.clustersSkipped++;
+                continue;
+            }
+
+            // 3b. Check if this cluster has any "new" news
+            const hasPending = clusterPosts.some(p => p.coherenceStatus === "PENDING" || p.coherenceStatus === "ISOLATED");
+            if (!hasPending) {
+                console.log(`  -> SKIPPED: Already processed / No pending news.`);
+                stats.clustersSkipped++;
+                continue;
+            }
+
+            console.log(`[Synthesis] Processing valid cluster with ${authors.size} authors, ${clusterPosts.length} posts.`);
+
+            // 3c. Classify Format
+            const classifyResult = await classifyCluster(clusterPosts, settings);
+            const formatId = classifyResult?.format || "LISTICLE";
+
+            // 4. Synthesize
+            const synthesis = await synthesizeCluster(clusterPosts.map(p => ({
+                content: p.contentOriginal || "",
+                account: p.sourceAccount,
+                url: p.sourceUrl || `https://www.threads.net/@${p.sourceAccount}/post/${p.threadId}`
+            })), formatId, settings.synthesisPrompt, settings);
+
+            if (!synthesis) {
+                console.log("  -> Synthesis failed / empty response.");
+                stats.clustersSkipped++;
+                continue;
+            }
+
+            // 4b. Media Selection & Generation (Isolated to prevent crashes)
+            let selectedMediaUrl: string | null = null;
+            let selectedMediaType: string | null = null;
+
+            try {
+                let allMedia: { url: string, type: string }[] = [];
+                for (const p of clusterPosts) {
+                    if (p.mediaUrls && Array.isArray(p.mediaUrls)) {
+                        const mediaArray = p.mediaUrls as any[];
+                        for (const m of mediaArray) {
+                            if (m) {
+                                const mObj = m as any;
+                                if (typeof mObj === 'string') {
+                                    allMedia.push({ url: mObj, type: 'image' });
+                                } else if (mObj.url) {
+                                    allMedia.push({ url: mObj.url, type: mObj.type || 'image' });
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Priority 1: If there's a video, just use it
-            const videoMedia = allMedia.find(m => m.type === 'video' || m.url.toLowerCase().includes('.mp4'));
-            if (videoMedia) {
-                selectedMediaUrl = videoMedia.url;
-                selectedMediaType = 'video';
-                console.log(`  -> Auto-selected video: ${selectedMediaUrl}`);
-            } else {
-                // Candidates are images
-                const imageCandidates = allMedia.filter(m => m.type === 'image' || !m.url.toLowerCase().includes('.mp4')).map(m => m.url);
-                if (imageCandidates.length > 0) {
-                    selectedMediaUrl = await filterRelevantMedia(synthesis.content, imageCandidates, settings);
-                    if (selectedMediaUrl) {
-                        selectedMediaType = 'image';
-                        console.log(`  -> Vision selected image: ${selectedMediaUrl}`);
+                // Priority 1: If there's a video, just use it
+                const videoMedia = allMedia.find(m => m.type === 'video' || m.url.toLowerCase().includes('.mp4'));
+                if (videoMedia) {
+                    selectedMediaUrl = videoMedia.url;
+                    selectedMediaType = 'video';
+                    console.log(`  -> Auto-selected video: ${selectedMediaUrl}`);
+                } else {
+                    // Candidates are images
+                    const imageCandidates = allMedia.filter(m => m.type === 'image' || !m.url.toLowerCase().includes('.mp4')).map(m => m.url);
+                    if (imageCandidates.length > 0) {
+                        selectedMediaUrl = await filterRelevantMedia(synthesis.content, imageCandidates, settings);
+                        if (selectedMediaUrl) {
+                            selectedMediaType = 'image';
+                            console.log(`  -> Vision selected image: ${selectedMediaUrl}`);
+                        }
                     }
                 }
-            }
 
-            // Fallback to Image Generation if no media selected/found
-            if (!selectedMediaUrl) {
-                console.log(`  -> No media selected. Attempting image generation...`);
-                const generatedUrl = await generateFallbackImage(synthesis.content, settings);
-                if (generatedUrl) {
-                    selectedMediaUrl = generatedUrl;
-                    selectedMediaType = 'image';
-                    console.log(`  -> Generated fallback image: ${selectedMediaUrl}`);
+                // Fallback to Image Generation if no media selected/found
+                if (!selectedMediaUrl) {
+                    console.log(`  -> No media selected. Attempting image generation...`);
+                    const generatedUrl = await generateFallbackImage(synthesis.content, settings);
+                    if (generatedUrl) {
+                        selectedMediaUrl = generatedUrl;
+                        selectedMediaType = 'image';
+                        console.log(`  -> Generated fallback image: ${selectedMediaUrl}`);
+                    }
                 }
+            } catch (mediaErr: any) {
+                console.error(`[Synthesis] Media selection/generation failed for cluster: ${mediaErr.message}`);
+                // Non-fatal, proceed with text-only
             }
-        } catch (mediaErr: any) {
-            console.error(`[Synthesis] Media selection/generation failed for cluster: ${mediaErr.message}`);
-            // Non-fatal, proceed with text-only
-        }
 
-        // 5. Translate & Persist & Sanitize
-        // Safety net: strip any trailing editorial sections before translation
-        let cleanContent = synthesis.content || "";
-        cleanContent = cleanContent
-            .replace(/\n{2,}(?:📌|🎥|🖼️|💡|🔑|📝)\s*(?:What it signals|Video idea|Image idea|Visuals to use|Content idea)[^\n]*(?:\n[\s\S]*)?$/gu, '')
-            .replace(/\n{2,}(?:What it signals|Visuals to use|Video idea|Image idea|Content idea)[:\s][\s\S]*/i, '')
-            .trim();
+            // 5. Translate & Persist & Sanitize
+            // Safety net: strip any trailing editorial sections before translation
+            let cleanContent = synthesis.content || "";
+            cleanContent = cleanContent
+                .replace(/\n{2,}(?:📌|🎥|🖼️|💡|🔑|📝)\s*(?:What it signals|Video idea|Image idea|Visuals to use|Content idea)[^\n]*(?:\n[\s\S]*)?$/gu, '')
+                .replace(/\n{2,}(?:What it signals|Visuals to use|Video idea|Image idea|Content idea)[:\s][\s\S]*/i, '')
+                .trim();
 
-        const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
-        const rawContent = await translateText(cleanContent, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
+            const styleInstructions = settings.translationPrompt ? ` Style guide: "${settings.translationPrompt}"` : "";
+            const rawContent = await translateText(cleanContent, `Translate this text to ${settings.synthesisLanguage}.${styleInstructions} Maintain a high-energy, viral tone. 
         CRITICAL: Do NOT include any @usernames, author handles, or URLs.
         If the original text uses a listicle format like "\uD83D\uDD25 [Title] - [Generic Attribution]:", maintain those exact formatting delimiters and emojis.
         Output ONLY the translated text.`, settings);
-        const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`, settings);
+            const rawTitle = await translateText(synthesis.headline, `Translate this headline to ${settings.synthesisLanguage}.${styleInstructions} Make it extremely viral and clickable. Output ONLY the translated text.`, settings);
 
-        const translatedContent = sanitizeText(rawContent);
-        const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
+            const translatedContent = sanitizeText(rawContent);
+            const translatedTitle = sanitizeText(rawTitle, { isHeadline: true });
 
-        if (!translatedContent || !translatedTitle) {
-            console.log("  -> Synthesis rejected by sanitizer.");
+            if (!translatedContent || !translatedTitle) {
+                console.log("  -> Synthesis rejected by sanitizer.");
+                stats.clustersSkipped++;
+                continue;
+            }
+
+            // Aggregate external URLs
+            const allUrls = clusterPosts.flatMap(p => p.externalUrls || []);
+            const uniqueUrls = Array.from(new Set(allUrls));
+
+            // 6. Auto-Approval (Optional)
+            let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
+            const workspace = await withRetry(() => prisma.workspace.findUnique({
+                where: { id: workspaceId },
+                select: { autoApproveDrafts: true, autoApprovePrompt: true }
+            }));
+
+            if (workspace?.autoApproveDrafts) {
+                console.log(`  -> Auto-approving article...`);
+                const approved = await checkAutoApproval(
+                    translatedTitle,
+                    translatedContent,
+                    workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler.",
+                    settings
+                );
+                finalStatus = approved ? "APPROVED" : "REJECTED";
+                console.log(`  -> Auto-approval result: ${finalStatus}`);
+            }
+
+            // Create the article
+            const article = await withRetry(() => prisma.synthesizedArticle.create({
+                data: {
+                    topicName: translatedTitle,
+                    articleContent: translatedContent,
+                    articleOriginal: synthesis.content,
+                    workspaceId,
+                    sourcePostIds: cluster.postIds,
+                    sourceAccounts: Array.from(authors),
+                    authorCount: authors.size,
+                    postCount: clusterPosts.length,
+                    status: finalStatus,
+                    scheduledPublishAt: scheduledAt,
+                    externalUrls: uniqueUrls,
+                    formatUsed: formatId,
+                    selectedMediaUrl: selectedMediaUrl,
+                    selectedMediaType: selectedMediaType,
+                    updatedAt: new Date(),
+                },
+            }));
+
+            // Mark posts as COHERENT
+            await prisma.post.updateMany({
+                where: { id: { in: cluster.postIds } },
+                data: {
+                    coherenceStatus: "COHERENT",
+                    topicClusterId: article.id,
+                    lastCoherenceCheck: new Date(),
+                },
+            });
+
+            console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id}) Status: ${finalStatus}`);
+            stats.articlesGenerated++;
+
+            if (settings.maxArticles && stats.articlesGenerated >= settings.maxArticles) {
+                console.log(`[Synthesis] Reached maxArticles cap (${settings.maxArticles}).`);
+                break;
+            }
+        } catch (e: any) {
+            console.error(`[Synthesis] CRITICAL: Failed to process cluster. Skipping to next. Error: ${e.message || e}`);
             stats.clustersSkipped++;
-            continue;
-        }
-
-        // Aggregate external URLs
-        const allUrls = clusterPosts.flatMap(p => p.externalUrls || []);
-        const uniqueUrls = Array.from(new Set(allUrls));
-
-        // 6. Auto-Approval (Optional)
-        let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
-        const workspace = await prisma.workspace.findUnique({
-            where: { id: workspaceId },
-            select: { autoApproveDrafts: true, autoApprovePrompt: true }
-        });
-
-        if (workspace?.autoApproveDrafts) {
-            console.log(`  -> Auto-approving article...`);
-            const approved = await checkAutoApproval(
-                translatedTitle,
-                translatedContent,
-                workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler.",
-                settings
-            );
-            finalStatus = approved ? "APPROVED" : "REJECTED";
-            console.log(`  -> Auto-approval result: ${finalStatus}`);
-        }
-
-        // Create the article
-        const article = await prisma.synthesizedArticle.create({
-            data: {
-                topicName: translatedTitle,
-                articleContent: translatedContent,
-                articleOriginal: synthesis.content,
-                workspaceId,
-                sourcePostIds: cluster.postIds,
-                sourceAccounts: Array.from(authors),
-                authorCount: authors.size,
-                postCount: clusterPosts.length,
-                status: finalStatus,
-                scheduledPublishAt: scheduledAt,
-                externalUrls: uniqueUrls,
-                formatUsed: formatId,
-                selectedMediaUrl: selectedMediaUrl,
-                selectedMediaType: selectedMediaType,
-                updatedAt: new Date(),
-            },
-        });
-
-        // Mark posts as COHERENT
-        await prisma.post.updateMany({
-            where: { id: { in: cluster.postIds } },
-            data: {
-                coherenceStatus: "COHERENT",
-                topicClusterId: article.id,
-                lastCoherenceCheck: new Date(),
-            },
-        });
-
-        console.log(`  -> Created article: "${translatedTitle}" (ID: ${article.id}) Status: ${finalStatus}`);
-        stats.articlesGenerated++;
-
-        if (settings.maxArticles && stats.articlesGenerated >= settings.maxArticles) {
-            console.log(`[Synthesis] Reached maxArticles cap (${settings.maxArticles}).`);
-            break;
         }
     }
 
@@ -404,7 +428,6 @@ export async function checkAutoApproval(title: string, content: string, instruct
             { role: "system", content: "You are a lenient content moderator. When in doubt, approve the article for publication." },
             { role: "user", content: prompt },
         ], {
-            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
@@ -471,7 +494,6 @@ JSON ONLY. No markdown, no explanation.`;
             { role: "system", content: systemPrompt },
             { role: "user", content: `Posts to cluster:\n\n${payload}` },
         ], {
-            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
@@ -511,7 +533,7 @@ interface SynthesisResult {
 async function classifyCluster(posts: any[], settings?: SynthesisSettings) {
     const postSummaries = posts.map(p => `- ${p.contentOriginal?.slice(0, 200)}`).join('\n');
 
-    const provider = getWorkspaceProvider(settings, "llama-3.1-8b-instant");
+    const provider = getWorkspaceProvider(settings);
 
     const prompt = `You are a social media editor. Read these posts about the same story and decide which format best fits the content.
 
@@ -533,7 +555,6 @@ ${Object.values(POST_FORMATS).map(f =>
         const raw = await provider.createChatCompletion([
             { role: 'user', content: prompt }
         ], {
-            model: settings?.aiModel || 'llama-3.1-8b-instant',
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
@@ -587,7 +608,6 @@ export async function synthesizeCluster(posts: { content: string; account: strin
                     } `
             }, // Limit context
         ], {
-            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });
@@ -619,7 +639,6 @@ export async function translateText(text: string, prompt: string, settings?: Syn
             { role: "system", content: prompt },
             { role: "user", content: text },
         ], {
-            model: settings?.aiModel || "llama-3.3-70b-versatile",
             temperature: 0.1,
         });
 
@@ -662,7 +681,6 @@ ${articleContent.slice(0, 1500)}`;
         const raw = await provider.createChatCompletion([
             { role: "user", content: contentArray },
         ], {
-            model: "gpt-4o",
             temperature: 0.1,
             response_format: { type: "json_object" },
         });

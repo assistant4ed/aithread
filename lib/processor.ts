@@ -312,7 +312,6 @@ export async function processPost(
                 threadId: postData.threadId,
                 sourceAccount,
                 contentOriginal: postData.content,
-                contentTranslated: null,
                 mediaUrls: postData.mediaUrls,
                 views: postData.views,
                 likes: postData.likes,

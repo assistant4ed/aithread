@@ -8,7 +8,6 @@ interface Post {
     threadId: string;
     sourceAccount: string;
     contentOriginal: string | null;
-    contentTranslated: string | null;
     mediaUrls: any;
     likes: number;
     replies: number;
@@ -85,7 +84,6 @@ export default function PostsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 contentOriginal: editingPost.contentOriginal,
-                contentTranslated: editingPost.contentTranslated,
             }),
         });
         setEditingPost(null);
@@ -168,24 +166,12 @@ export default function PostsPage() {
                                     <div className="flex items-center justify-between">
                                         <label className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-2">
                                             <div className="w-1 h-1 rounded-full bg-muted"></div>
-                                            Original Content
+                                            Post Content
                                         </label>
                                         <span className="text-[10px] text-muted-foreground font-mono">#{post.threadId.slice(-6)}</span>
                                     </div>
-                                    <div className="text-sm text-foreground/80 bg-surface/30 border border-border/50 rounded-lg p-3 italic line-clamp-3">
-                                        {post.contentOriginal}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2">
-                                            <div className="w-1 h-1 rounded-full bg-blue-500"></div>
-                                            Refined / Translated
-                                        </label>
-                                    </div>
-                                    <div className="text-sm text-foreground leading-relaxed bg-background border border-border rounded-xl p-4 shadow-inner min-h-[80px]">
-                                        {post.contentTranslated || "No translation generated yet."}
+                                    <div className="text-sm text-foreground leading-relaxed bg-background border border-border rounded-xl p-4 shadow-inner min-h-[80px] whitespace-pre-wrap">
+                                        {post.contentOriginal || "No content."}
                                     </div>
                                 </div>
                             </div>
@@ -262,7 +248,7 @@ export default function PostsPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-xl">Edit Post Content</h3>
-                                    <p className="text-xs text-muted">Modify the original or translated version of this post.</p>
+                                    <p className="text-xs text-muted">Modify the original version of this post.</p>
                                 </div>
                             </div>
                             <button
@@ -288,23 +274,6 @@ export default function PostsPage() {
                                     className="w-full h-40 bg-background border border-border rounded-xl p-4 text-sm focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none font-mono transition-all resize-none"
                                 />
                                 <p className="text-[10px] text-muted italic">This is the raw content scraped from the source account.</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-xs font-bold text-blue-500 uppercase tracking-wider flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                                        Translated / Refined Content
-                                    </label>
-                                    <span className="text-[10px] text-muted font-mono">{editingPost.contentTranslated?.length || 0} chars</span>
-                                </div>
-                                <textarea
-                                    value={editingPost.contentTranslated || ""}
-                                    onChange={(e) => setEditingPost({ ...editingPost, contentTranslated: e.target.value })}
-                                    placeholder="Enter translated or refined content..."
-                                    className="w-full h-40 bg-background border border-border rounded-xl p-4 text-sm focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none font-sans transition-all resize-none leading-relaxed"
-                                />
-                                <p className="text-[10px] text-muted italic">This version will be used for publishing if approved.</p>
                             </div>
                         </div>
                         <div className="p-5 border-t border-border flex justify-end gap-3 bg-surface/50 backdrop-blur-sm">
