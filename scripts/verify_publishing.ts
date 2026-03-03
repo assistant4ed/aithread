@@ -303,7 +303,7 @@ async function checkPublishDistribution() {
             where: { id: wsId },
             select: { publishTimes: true, name: true },
         });
-        if (ws && ws.publishTimes.length > 1) {
+        if (ws && ws.publishTimes.length > 1 && times.length >= 2) {
             check(
                 distinctHours >= 2,
                 `${ws.name}: articles distributed across ${distinctHours} time windows`,

@@ -122,10 +122,9 @@ setInterval(() => {
                     }
 
                     // --- SYNTHESIS PHASE ---
-                    // Use UTC comparison for stability
-                    const isSynthTime =
-                        now.getUTCHours() === synthDateUTC.getUTCHours() &&
-                        now.getUTCMinutes() === synthDateUTC.getUTCMinutes();
+                    // Use UTC comparison for stability with a ±45 second window (matches 1min tick)
+                    const diffMsSynth = Math.abs(now.getTime() - synthDateUTC.getTime());
+                    const isSynthTime = diffMsSynth < 90_000; // ±90 seconds window
 
                     if (isSynthTime) {
                         console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
@@ -133,13 +132,13 @@ setInterval(() => {
                     }
 
                     // --- PUBLISH PHASE ---
-                    const isPublishTime =
-                        now.getUTCHours() === pubDateUTC.getUTCHours() &&
-                        now.getUTCMinutes() === pubDateUTC.getUTCMinutes();
+                    const diffMsPub = Math.abs(now.getTime() - pubDateUTC.getTime());
+                    const isPublishTime = diffMsPub < 90_000; // ±90 seconds window
 
                     if (isPublishTime) {
                         console.log(`[Heartbeat] 🚀 Triggering PUBLISH for ${ws.name} (Time: ${timeStr} HKT)`);
-                        setImmediate(() => runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e)));
+                        // Await runPublish to ensure we don't start multiple concurrent publishes within one tick
+                        await runPublish(ws).catch(e => console.error(`[Publish Error - ${ws.name}]`, e));
                         publishTriggered = true;
                     }
                 }
