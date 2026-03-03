@@ -258,8 +258,8 @@ async function runScrape(ws: WorkspaceWithSources) {
                 sourceId: source.id,
             };
 
-            await scrapeQueue.add(`scrape:${ws.id}:${source.id}`, jobData, {
-                jobId: `scrape:${ws.id}:${source.id}:${Date.now()}`, // Deduplication bypass per-cycle
+            await scrapeQueue.add(`scrape-${ws.id}-${source.id}`, jobData, {
+                jobId: `scrape-${ws.id}-${source.id}-${Date.now()}`, // Unique per-cycle, no colons (BullMQ restriction)
                 removeOnComplete: true,
                 removeOnFail: { count: 100 },
                 attempts: 2,

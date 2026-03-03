@@ -80,9 +80,9 @@ export async function POST(
                 // Use consistent Job ID format and priority: 1 (High)
                 // In BullMQ, lower priority number = higher priority? 
                 // Wait, default is high priority? Actually, in BullMQ 4+, priority: 1 is higher than default.
-                await scrapeQueue.add(`scrape:${workspaceId}:${source.id}`, jobData, {
+                await scrapeQueue.add(`scrape-${workspaceId}-${source.id}`, jobData, {
                     priority: 1, // High Priority
-                    jobId: `scrape:${workspaceId}:${source.id}`, // Deduplication
+                    jobId: `scrape-${workspaceId}-${source.id}-${Date.now()}`, // Unique per trigger, no colons (BullMQ restriction)
                     removeOnComplete: true,
                     removeOnFail: { count: 100 },
                     attempts: 2,
