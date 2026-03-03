@@ -48,12 +48,12 @@ update_app() {
 }
 
 # Update Web
-update_app "web" "$REGISTRY_URL/threads-monitor-web:$TAG"
+update_app "web-sg" "$REGISTRY_URL/threads-monitor-web:$TAG"
 
 # Update Workers
 for worker in scraper heartbeat youtube metrics; do
-    update_app "worker-$worker" "$REGISTRY_URL/threads-monitor-worker:$TAG"
+    update_app "worker-$worker-sg" "$REGISTRY_URL/threads-monitor-worker:$TAG"
 done
 
 echo "✅ Deployment complete!"
-echo "Check your app at: https://web.lemonsand-ca3925c7.eastasia.azurecontainerapps.io"
+echo "Check your app at: https://web-sg.livelystone-27859f5b.southeastasia.azurecontainerapps.io"

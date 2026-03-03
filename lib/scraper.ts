@@ -85,7 +85,7 @@ export class ThreadsScraper {
             console.log(`Navigating to https://www.threads.net/@${username}`);
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
             // Wait for React to render post content (don't wait for networkidle — never settles on SPAs)
-            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => {});
+            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => { });
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             let scrollCount = 0;
@@ -93,6 +93,8 @@ export class ThreadsScraper {
 
             while (scrollCount < MAX_SCROLLS && !finished) {
                 const rawPosts = await page.evaluate(() => {
+                    // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+                    const __name = (fn: any, _name: string) => fn;
                     const potentialSelectors = [
                         'div[data-pressable="true"]',
                         'div[data-pressable-container="true"]',
@@ -312,6 +314,8 @@ export class ThreadsScraper {
                 } else {
                     console.log(`[Scraper] Scroll ${scrollCount + 1}/${MAX_SCROLLS}: Found ${rawPosts.length} posts (Total unique: ${allPosts.size}).`);
                     await page.evaluate(async () => {
+                        // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+                        const __name = (fn: any, _name: string) => fn;
                         window.scrollBy(0, 3000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
@@ -347,7 +351,7 @@ export class ThreadsScraper {
             const searchUrl = `https://www.threads.net/search?q=${encodeURIComponent(cleanHashtag)}&serp_type=default`;
             console.log(`[Scraper] Navigating to ${searchUrl}`);
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => {});
+            await page.waitForSelector('div[data-pressable="true"], div[data-pressable-container="true"], div[role="article"]', { timeout: 30000 }).catch(() => { });
             await new Promise(resolve => setTimeout(resolve, 3000));
 
             let scrollCount = 0;
@@ -355,6 +359,8 @@ export class ThreadsScraper {
 
             while (scrollCount < MAX_SCROLLS && !finished) {
                 const rawPosts = await page.evaluate(() => {
+                    // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+                    const __name = (fn: any, _name: string) => fn;
                     const potentialSelectors = [
                         'div[data-pressable="true"]',
                         'div[data-pressable-container="true"]',
@@ -563,6 +569,8 @@ export class ThreadsScraper {
                 } else {
                     console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique fresh: ${allPosts.size} (Consecutive old: ${consecutiveOldCount})`);
                     await page.evaluate(async () => {
+                        // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+                        const __name = (fn: any, _name: string) => fn;
                         window.scrollBy(0, 4000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
@@ -589,10 +597,12 @@ export class ThreadsScraper {
         try {
             console.log(`[Scraper] Fetching follower count for @${username}`);
             await page.goto(`https://www.threads.net/@${username}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-            await page.waitForSelector('[aria-label*="followers"], [aria-label*="follower"]', { timeout: 15000 }).catch(() => {});
+            await page.waitForSelector('[aria-label*="followers"], [aria-label*="follower"]', { timeout: 15000 }).catch(() => { });
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             const followerCount = await page.evaluate(() => {
+                // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+                const __name = (fn: any, _name: string) => fn;
                 const followerEl = document.querySelector('[aria-label*="followers"]');
                 if (followerEl) {
                     const str = followerEl.getAttribute('aria-label') || followerEl.textContent || '';
