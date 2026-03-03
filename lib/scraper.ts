@@ -93,8 +93,6 @@ export class ThreadsScraper {
 
             while (scrollCount < MAX_SCROLLS && !finished) {
                 const rawPosts = await page.evaluate(() => {
-                    // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
-                    const __name = (fn: any, _name: string) => fn;
                     const potentialSelectors = [
                         'div[data-pressable="true"]',
                         'div[data-pressable-container="true"]',
@@ -314,8 +312,6 @@ export class ThreadsScraper {
                 } else {
                     console.log(`[Scraper] Scroll ${scrollCount + 1}/${MAX_SCROLLS}: Found ${rawPosts.length} posts (Total unique: ${allPosts.size}).`);
                     await page.evaluate(async () => {
-                        // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
-                        const __name = (fn: any, _name: string) => fn;
                         window.scrollBy(0, 3000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
@@ -359,8 +355,6 @@ export class ThreadsScraper {
 
             while (scrollCount < MAX_SCROLLS && !finished) {
                 const rawPosts = await page.evaluate(() => {
-                    // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
-                    const __name = (fn: any, _name: string) => fn;
                     const potentialSelectors = [
                         'div[data-pressable="true"]',
                         'div[data-pressable-container="true"]',
@@ -569,8 +563,6 @@ export class ThreadsScraper {
                 } else {
                     console.log(`[Scraper] Scroll ${scrollCount + 1}: Total unique fresh: ${allPosts.size} (Consecutive old: ${consecutiveOldCount})`);
                     await page.evaluate(async () => {
-                        // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
-                        const __name = (fn: any, _name: string) => fn;
                         window.scrollBy(0, 4000);
                         await new Promise(r => setTimeout(r, 2000));
                     });
@@ -601,8 +593,6 @@ export class ThreadsScraper {
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             const followerCount = await page.evaluate(() => {
-                // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
-                const __name = (fn: any, _name: string) => fn;
                 const followerEl = document.querySelector('[aria-label*="followers"]');
                 if (followerEl) {
                     const str = followerEl.getAttribute('aria-label') || followerEl.textContent || '';
@@ -702,6 +692,10 @@ export class ThreadsScraper {
         }
     }
     private async configurePage(page: Page): Promise<void> {
+        await page.evaluateOnNewDocument(() => {
+            // Polyfill: tsx/esbuild injects __name() calls that don't exist in browser context
+            (window as any).__name = (fn: any) => fn;
+        });
         await page.setViewport({ width: 800, height: 600 });
         await page.setRequestInterception(true);
         page.on('request', (req) => {
