@@ -333,6 +333,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 formatUsed: formatId,
                 selectedMediaUrl: selectedMediaUrl,
                 selectedMediaType: selectedMediaType,
+                updatedAt: new Date(),
             },
         });
 

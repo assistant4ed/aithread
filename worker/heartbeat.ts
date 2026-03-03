@@ -217,15 +217,15 @@ async function runScrape(ws: WorkspaceWithSources) {
     return trackPipelineRun(ws.id, "SCRAPE", async () => {
         const sources = ws.sources || [];
 
-        if (sources.length === 0) return { jobsEnqueued: 0 };
+        console.log(`[Scrape] Starting cycle for ${ws.name}... (Sources: ${sources.length})`);
 
-        console.log(`[Scrape] Starting cycle for ${ws.name}...`);
-
-        // Update tracking
+        // Update tracking BEFORE early return so infra health monitors know we checked
         await prisma.workspace.update({
             where: { id: ws.id },
             data: { lastScrapedAt: new Date() }
         });
+
+        if (sources.length === 0) return { jobsEnqueued: 0 };
 
         const postsToday = await getDailyPublishCount(ws.id);
         const limitReached = postsToday >= ws.dailyPostLimit;

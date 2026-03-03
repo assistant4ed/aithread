@@ -272,29 +272,38 @@ export async function processPost(
     }
 
     // 6. Save
-    const savedPost = await (prisma.post as any).create({
-        data: {
-            threadId: postData.threadId,
-            sourceAccount,
-            contentOriginal: postData.content,
-            contentTranslated: null,
-            mediaUrls: postData.mediaUrls,
-            views: postData.views,
-            likes: postData.likes,
-            replies: postData.replies,
-            reposts: postData.reposts,
-            hotScore: finalScore,
-            sourceUrl: postData.postUrl,
-            externalUrls: postData.externalUrls || [],
-            postedAt: validPostedAt || null,
-            status: "PENDING_REVIEW",
-            workspaceId,
-            sourceId: (source as any)?.id,
-            sourceType: source?.type || "ACCOUNT",
-        },
-    });
+    try {
+        const savedPost = await (prisma.post as any).create({
+            data: {
+                threadId: postData.threadId,
+                sourceAccount,
+                contentOriginal: postData.content,
+                contentTranslated: null,
+                mediaUrls: postData.mediaUrls,
+                views: postData.views,
+                likes: postData.likes,
+                replies: postData.replies,
+                reposts: postData.reposts,
+                hotScore: finalScore,
+                sourceUrl: postData.postUrl,
+                externalUrls: postData.externalUrls || [],
+                postedAt: validPostedAt || null,
+                status: "PENDING_REVIEW",
+                workspaceId,
+                sourceId: (source as any)?.id,
+                sourceType: source?.type || "ACCOUNT",
+            },
+        });
 
-    return savedPost;
+        return savedPost;
+    } catch (error: any) {
+        if (error.code === 'P2003') {
+            // Foreign key constraint failed (e.g. workspace was deleted)
+            console.warn(`[Processor] Failed to save post ${postData.threadId}: Workspace ${workspaceId} no longer exists (${error.code})`);
+            return { rejected: 'duplicate' as RejectionReason }; // Treat as rejected so the job completes successfully
+        }
+        throw error; // Re-throw other errors
+    }
 }
 
 // calculateTopicHotScore removed in favor of topicScore.ts
