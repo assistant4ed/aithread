@@ -174,20 +174,30 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 
     console.log(`[Synthesis] Found ${rawClusters.length} clusters. Coherence Threshold: ${thresholdCount} authors (${uniqueAuthors} unique authors in pool).`);
 
+    const MAX_POSTS_PER_AUTHOR = 2; // Prevent single-author dominance in clusters
+
     for (const cluster of rawClusters) {
         try {
-            const clusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
+            // Apply per-author cap to ensure diversity
+            const allClusterPosts = posts.filter(p => cluster.postIds.includes(p.id));
+            const authorPostCounts = new Map<string, number>();
+            const clusterPosts = allClusterPosts.filter(p => {
+                const count = authorPostCounts.get(p.sourceAccount) || 0;
+                if (count >= MAX_POSTS_PER_AUTHOR) return false;
+                authorPostCounts.set(p.sourceAccount, count + 1);
+                return true;
+            });
             const authors = new Set(clusterPosts.map(p => p.sourceAccount));
 
+            if (clusterPosts.length < allClusterPosts.length) {
+                console.log(`  -> Diversity cap: ${allClusterPosts.length} → ${clusterPosts.length} posts (max ${MAX_POSTS_PER_AUTHOR}/author)`);
+            }
 
-            // 3a. Check Threshold (Strict Coherence for accounts, lenient for topics)
-            const hasTopicPost = clusterPosts.some(p => (p as any).sourceType === "TOPIC");
-            const thresholdCountForCluster = hasTopicPost ? 1 : thresholdCount;
-
-            const isCoherent = authors.size >= thresholdCountForCluster;
+            // 3a. Coherence threshold: require min N unique authors (same for all source types)
+            const isCoherent = authors.size >= thresholdCount;
 
             if (!isCoherent) {
-                console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCountForCluster}).`);
+                console.log(`  -> SKIPPED: Not coherent enough (Authors: ${authors.size} < ${thresholdCount}).`);
                 stats.clustersSkipped++;
                 continue;
             }
