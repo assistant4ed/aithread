@@ -264,14 +264,19 @@ export default function EditWorkspacePage() {
                                 {form.sources.filter(s => s.type === 'ACCOUNT').map((source, idx) => {
                                     const actualIdx = form.sources.findIndex(s => s === source);
                                     return (
-                                        <div key={actualIdx} className="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md group">
+                                        <div key={actualIdx} className="flex items-center gap-0 bg-blue-500/10 border border-blue-500/20 rounded-md group overflow-hidden">
                                             <a
                                                 href={`https://threads.net/${source.value}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-xs font-medium text-blue-400 hover:underline"
+                                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-400 hover:text-blue-200 hover:bg-blue-500/20 transition-colors"
+                                                title={`Open ${source.value} on Threads`}
                                             >
                                                 {source.value}
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                                                    <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                                                </svg>
                                             </a>
                                             <button
                                                 type="button"
@@ -280,7 +285,8 @@ export default function EditWorkspacePage() {
                                                     newSources.splice(actualIdx, 1);
                                                     setForm({ ...form, sources: newSources });
                                                 }}
-                                                className="text-muted/60 hover:text-danger hover:bg-danger/10 rounded p-0.5 transition-colors"
+                                                className="px-1.5 py-1 text-muted/40 hover:text-danger hover:bg-danger/10 transition-colors border-l border-blue-500/20"
+                                                title="Remove source"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
