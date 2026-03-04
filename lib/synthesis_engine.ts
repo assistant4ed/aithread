@@ -54,7 +54,7 @@ export interface SynthesisStats {
 /**
  * Centrally resolve AI provider based on workspace settings with consistent defaults.
  */
-function getWorkspaceProvider(settings?: SynthesisSettings, modelOverride?: string, providerOverride?: string) {
+export function getWorkspaceProvider(settings?: SynthesisSettings, modelOverride?: string, providerOverride?: string) {
     const primaryProviderName = (providerOverride || settings?.aiProvider || "GROQ").toUpperCase();
     const primaryModel = modelOverride || settings?.aiModel || "llama-3.3-70b-versatile";
 
