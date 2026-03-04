@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma";
 import { Prisma, Workspace } from "@prisma/client";
 
 type WorkspaceWithSources = Prisma.WorkspaceGetPayload<{ include: { sources: true } }>;
-import { scrapeQueue, ScrapeJobData, removePendingScrapes } from "../lib/queue";
+import { scrapeQueue, ScrapeJobData } from "../lib/queue";
 import { WorkspaceSettings } from "../lib/processor";
 import { checkAndPublishApprovedPosts, getDailyPublishCount, PublishStats } from "../lib/publisher_service";
 import { runSynthesisEngine } from "../lib/synthesis_engine";
@@ -262,6 +262,9 @@ async function runScrape(ws: WorkspaceWithSources) {
                 removeOnFail: { count: 100 },
                 attempts: 2,
                 backoff: { type: 'fixed', delay: 5000 },
+                // Priority: smaller workspaces processed first (lower = higher priority)
+                // Prevents large workspaces (e.g. 474 sources) from starving small ones (e.g. 37)
+                priority: Math.min(sources.length, 100),
             });
             count++;
         }
@@ -317,8 +320,7 @@ async function runScrape(ws: WorkspaceWithSources) {
 
 async function runSynthesis(ws: Workspace) {
     return trackPipelineRun(ws.id, "SYNTHESIS", async () => {
-        console.log(`[Synthesis] Starting synthesis for ${ws.id}. Clearing pending scrape jobs...`);
-        await removePendingScrapes(ws.id);
+        console.log(`[Synthesis] Starting synthesis for ${ws.id}...`);
 
         await prisma.workspace.update({
             where: { id: ws.id },
