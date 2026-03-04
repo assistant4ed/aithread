@@ -1,0 +1,141 @@
+---
+description: Global rules for the Threads Monitor codebase
+globs:
+alwaysApply: true
+---
+
+# Threads Monitor — Global Rules
+
+## Project Overview
+
+Threads Monitor is a multi-workspace content monitoring and automated publishing platform. It scrapes posts from Threads, clusters and synthesizes them into articles using LLMs, and publishes to Threads, Twitter, and Instagram on a configurable schedule.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router) with React 19 and TypeScript 5 (strict mode)
+- **Database**: PostgreSQL via Prisma 6 ORM
+- **Auth**: NextAuth 5 (JWT strategy) with Credentials + OAuth (Twitter, Facebook, Threads)
+- **Styling**: Tailwind CSS v4 with custom CSS variables in `globals.css`
+- **Queue**: BullMQ + Redis (ioredis) for background job processing
+- **AI**: Multi-provider LLM integration (Groq, OpenAI, Anthropic, Gemini) with fallback chain
+- **Scraping**: Puppeteer with stealth plugin for Threads
+- **Storage**: Azure Blob Storage for media
+- **Testing**: Vitest (sequential, single-worker)
+- **Package Manager**: pnpm
+- **Deployment**: Docker (multi-stage, Node 20 Alpine, standalone output)
+
+## Project Structure
+
+```
+app/                  # Next.js App Router pages and API routes
+  api/                # REST API route handlers (route.ts)
+  workspaces/[id]/    # Workspace pages with _components/ for colocated UI
+components/           # Shared reusable React components
+lib/                  # Core business logic and utilities
+  ai/                 # LLM provider implementations (groq, openai, anthropic, gemini)
+  scrapers/           # Platform-specific scraper logic
+  scoring/            # Hot score and engagement algorithms
+worker/               # Background workers (scrape-worker, heartbeat, youtube-worker)
+prisma/               # Schema and migrations
+test/                 # Test setup and helpers
+scripts/              # Utility scripts
+```
+
+## Coding Conventions
+
+### Naming
+- **Components**: PascalCase files (`ScrapeButton.tsx`, `AutoRefresh.tsx`)
+- **Library files**: camelCase or snake_case (`processor.ts`, `synthesis_engine.ts`, `publisher_service.ts`)
+- **API routes**: kebab-case folders with `route.ts` (`/api/posts/[id]/approve/route.ts`)
+- **Tests**: `*.test.ts`, `*.integration.test.ts`, `*.e2e.test.ts`
+- **Constants**: UPPER_SNAKE_CASE
+- **Variables/functions**: camelCase
+
+### Components
+- **Server components by default** — only add `"use client"` when interactivity is needed
+- Server components fetch data directly via Prisma — no unnecessary API calls
+- Client components use `fetch()` to API routes for mutations
+- Use `router.refresh()` after mutations to revalidate server data
+- Pages use `export const dynamic = "force-dynamic"` when needed
+
+### TypeScript
+- Strict mode is enabled — respect it
+- Import Prisma types: `import { Workspace, Post } from "@prisma/client"`
+- Define interfaces inline or at file top, scoped to domain — no centralized types file
+- Path alias: `@/*` maps to project root (e.g., `import { prisma } from "@/lib/prisma"`)
+
+### API Routes
+- Always check auth first: `const session = await auth()`
+- Return `NextResponse.json()` with appropriate status codes
+- Check workspace ownership: `workspace.ownerId === session.user.id`
+- Handle Prisma error codes (e.g., `P2025` for not found)
+- Cap query limits: `Math.min(limit, 100)`
+- Validate sort fields against allowlists
+
+### State Management
+- Use React hooks (`useState`, `useEffect`) — no external state library
+- Keep state local to components
+- No Context API, Redux, or Zustand needed
+
+### Styling
+- Tailwind v4 utility classes — no CSS modules or styled-components
+- Custom CSS variables defined in `globals.css` (dark theme: `--background`, `--foreground`, `--accent`, `--surface`)
+- Reusable classes: `.input`, `.btn-primary`, `.card`
+
+### Error Handling
+- Try-catch with specific error messages in API routes
+- `withRetry()` helper for transient database errors (P1001)
+- AI provider fallback chain: Primary → GROQ → Gemini
+- Console logging with context prefixes: `[Synthesis]`, `[ScrapeWorker]`, `[Publisher]`
+
+### Forms
+- Plain `useState` object for form state — no form libraries
+- Manual `fetch()` submission to API routes
+- Loading/error state management in component
+
+### Workers
+- BullMQ job processors in `/worker/`
+- Queue definitions in `/lib/queue.ts`
+- Heartbeat runs on interval, triggers scrape/synthesis/publish based on schedule
+- Jobs use `AbortController` for timeout handling
+
+## Key Files
+
+- `auth.ts` — NextAuth configuration (providers, callbacks, JWT)
+- `lib/prisma.ts` — Prisma client singleton
+- `lib/queue.ts` — BullMQ queue definitions and Redis connection
+- `lib/processor.ts` — Post processing and hot score calculation
+- `lib/synthesis_engine.ts` — Article synthesis pipeline
+- `lib/publisher_service.ts` — Multi-platform publishing
+- `lib/clustering.ts` — TF-IDF post clustering
+- `lib/ai/provider.ts` — AI provider abstraction and fallback
+- `lib/storage.ts` — Azure Blob Storage utilities
+- `worker/heartbeat.ts` — Cron scheduler
+- `worker/scrape-worker.ts` — BullMQ scrape job processor
+- `prisma/schema.prisma` — Database schema
+
+## Database
+
+- All queries go through Prisma (parameterized, SQL-injection safe)
+- Key models: Workspace, User, Post, SynthesizedArticle, ScraperSource, ScrapeLog, PipelineRun
+- Posts have `hotScore`, `coherenceStatus` (PENDING/COHERENT/ISOLATED)
+- Articles have `status` (PENDING_REVIEW/APPROVED/PUBLISHED/REJECTED/ERROR)
+- Workspace stores OAuth tokens and configuration
+
+## Testing
+
+- Run tests: `pnpm test`
+- Tests run sequentially (single worker) to avoid race conditions
+- Mocks configured in `vitest.setup.ts` for auth, Prisma, Next.js
+- Integration tests use real database connections
+- Test files colocated with source files
+
+## Don'ts
+
+- Don't use `"use client"` unless the component needs browser APIs or interactivity
+- Don't create centralized type files — keep types near their domain
+- Don't add form libraries — use plain useState
+- Don't add state management libraries — hooks are sufficient
+- Don't use CSS modules — use Tailwind utilities
+- Don't bypass Prisma for raw SQL unless absolutely necessary
+- Don't commit `.env` files — use `.env.example` for documentation

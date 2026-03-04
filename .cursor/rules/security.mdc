@@ -1,0 +1,146 @@
+---
+description: Security rules and guidelines for the Threads Monitor codebase
+globs:
+alwaysApply: true
+---
+
+# Threads Monitor — Security Rules
+
+## Authentication
+
+- **Framework**: NextAuth 5 with JWT session strategy
+- **Config**: `auth.ts` at project root
+- **Providers**: Credentials (email/password with bcryptjs), Twitter OAuth, Facebook/Instagram OAuth, Threads OAuth (custom with proxy)
+- **Session access**: `const session = await auth()` in server code
+
+### Rules
+- Always hash passwords with `bcryptjs` before storing — never store plaintext
+- Always validate `session?.user?.id` before any data access
+- Never expose JWT secret (`AUTH_SECRET`) in client code
+- OAuth tokens are stored in the Workspace model — treat them as sensitive
+
+## Authorization
+
+- **Model**: Ownership-based — workspaces belong to users via `ownerId`
+- **Legacy**: Workspaces with `ownerId = null` are accessible to all authenticated users
+
+### Rules
+- Every API route MUST check auth first:
+  ```typescript
+  const session = await auth();
+  if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  ```
+- Every resource access MUST verify ownership:
+  ```typescript
+  if (workspace.ownerId && workspace.ownerId !== session.user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  ```
+- Never trust client-side auth checks alone — always verify server-side
+- Include workspace ownership in Prisma `where` clauses, not just post-query checks
+
+## API Security
+
+### Input Validation
+- Validate and sanitize ALL user inputs before processing
+- Use `parseInt()` with fallback defaults for numeric params
+- Validate sort/filter fields against explicit allowlists
+- Cap pagination: `Math.min(limit, 100)` to prevent excessive queries
+- Sanitize filenames on upload: `name.replace(/[^a-zA-Z0-9.-]/g, "_")`
+
+### Response Security
+- Never leak stack traces or internal error details in API responses
+- Use generic error messages: `"Internal server error"` for 500s
+- Never return sensitive fields (passwords, tokens) in API responses
+- Return appropriate HTTP status codes (401, 403, 404, 500)
+
+### Request Handling
+- Validate `Content-Type` headers for POST/PATCH requests
+- Validate request body structure before processing
+- Reject unexpected fields in request bodies
+
+## Database Security
+
+- **ORM**: Prisma — all queries are parameterized (SQL injection safe)
+- Never use `prisma.$queryRaw` or `prisma.$executeRaw` with string interpolation
+- Never construct Prisma `where` clauses from unsanitized user input for field names
+- Always include ownership filters in queries to enforce multi-tenancy
+
+### Sensitive Data in Database
+- OAuth tokens (`threadsToken`, `twitterAccessToken`, `instagramAccessToken`) are stored in the Workspace model
+- User passwords stored as bcrypt hashes in `User.passwordHash`
+- Workspace `aiApiKey` stores user-provided LLM API keys
+- Treat all token/key fields as sensitive — never log or expose them
+
+## Secrets Management
+
+### Environment Variables
+- Never commit `.env` files to version control
+- Use `.env.example` for documenting required variables (without real values)
+- Required secrets:
+  - `AUTH_SECRET` — NextAuth HMAC key (minimum 32 characters)
+  - `DATABASE_URL` — PostgreSQL connection string
+  - `REDIS_URL` — Redis connection string
+  - OAuth credentials: `AUTH_TWITTER_ID/SECRET`, `AUTH_INSTAGRAM_ID/SECRET`, `AUTH_THREADS_ID/SECRET`
+  - AI API keys: `GROQ_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`
+  - Cloud storage: `AZURE_STORAGE_CONNECTION_STRING`
+
+### Rules
+- Never hardcode secrets, API keys, or credentials in source code
+- Never log secrets or tokens — even partially
+- Never include secrets in error messages or API responses
+- Use environment variables for all external service credentials
+- Review `.gitignore` to ensure `.env` and credential files are excluded
+
+## Media & File Upload
+
+- Validate file types before upload (e.g., `file.type.startsWith("video")`)
+- Sanitize filenames to prevent path traversal
+- Validate media URLs for reachability with `isUrlReachable()` before storing
+- Use `ensurePermanentUrl()` to convert temporary CDN URLs to permanent storage
+- Never serve user-uploaded content without validation
+
+## OAuth Token Handling
+
+- Threads tokens are exchanged for long-lived tokens (60 days) via proxy
+- OAuth state parameter MUST be validated to prevent CSRF
+- Token refresh should be handled before expiration
+- Never expose OAuth tokens in client-side code or URLs
+- Store tokens server-side only (Workspace model)
+
+## Scraping Security
+
+- Puppeteer runs with `--no-sandbox` in Docker — acceptable for server-side only
+- Never expose the scraper to user-controlled URLs without validation
+- Scraper sources must be validated and associated with a workspace
+- Rate limit scraping to avoid platform bans
+
+## LLM/AI Security
+
+- Sanitize LLM outputs before publishing (`lib/sanitizer.ts`)
+- Never pass user credentials or tokens to LLM prompts
+- Validate AI-generated content before database storage
+- Use the fallback provider chain for resilience, not to bypass content filters
+
+## Logging
+
+- Use context prefixes: `[Synthesis]`, `[ScrapeWorker]`, `[Publisher]`
+- Never log sensitive data: passwords, tokens, API keys, user PII
+- In production, minimize console.log usage — prefer structured logging
+- Error logs should include enough context to debug without exposing secrets
+
+## Code Review Checklist
+
+When reviewing PRs, verify:
+- [ ] Auth check present in all new API routes
+- [ ] Workspace ownership verified before data access
+- [ ] No secrets hardcoded or logged
+- [ ] User inputs validated and sanitized
+- [ ] Prisma queries include ownership filters
+- [ ] Error responses don't leak internal details
+- [ ] File uploads validated (type, name, size)
+- [ ] No `dangerouslySetInnerHTML` without sanitization
+- [ ] OAuth tokens not exposed in responses
+- [ ] New environment variables documented in `.env.example`
