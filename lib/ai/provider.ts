@@ -40,6 +40,7 @@ import { GroqProvider } from "./groq";
 import { OpenAIProvider } from "./openai";
 import { AnthropicProvider } from "./anthropic";
 import { GeminiProvider } from "./gemini";
+import { OpenRouterProvider } from "./openrouter";
 
 export function getProvider(config: ProviderConfig): AIProvider {
     const primary = _createProvider(config);
@@ -60,6 +61,8 @@ function _createProvider(config: ProviderConfig): AIProvider {
             return new AnthropicProvider(config.apiKey || process.env.ANTHROPIC_API_KEY || "", config.model);
         case "GEMINI":
             return new GeminiProvider(config.apiKey || process.env.GEMINI_API_KEY || "", config.model);
+        case "OPENROUTER":
+            return new OpenRouterProvider(config.apiKey || process.env.OPENROUTER_API_KEY || "", config.model);
         default:
             throw new Error(`Unsupported AI provider: ${config.provider}`);
     }

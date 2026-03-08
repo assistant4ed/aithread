@@ -29,6 +29,11 @@ const AI_MODELS: Record<string, { id: string, name: string }[]> = {
         { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
         { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
         { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite" },
+    ],
+    OPENROUTER: [
+        { id: "qwen/qwen-3.5-72b-instruct", name: "Qwen 3.5 72B Instruct" },
+        { id: "deepseek/deepseek-chat", name: "DeepSeek Chat" },
+        { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" }
     ]
 };
 
@@ -400,6 +405,7 @@ export default function NewWorkspacePage() {
                                 <option value="OPENAI">OpenAI (GPT-4o/mini)</option>
                                 <option value="CLAUDE">Claude (Anthropic)</option>
                                 <option value="GEMINI">Google Gemini</option>
+                                <option value="OPENROUTER">OpenRouter</option>
                             </select>
                         </Field>
                         <Field label="AI Model">
