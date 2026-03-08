@@ -319,16 +319,20 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                 select: { autoApproveDrafts: true, autoApprovePrompt: true }
             }));
 
+            let rejectionReason: string | undefined = undefined;
             if (workspace?.autoApproveDrafts) {
                 console.log(`  -> Auto-approving article...`);
-                const approved = await checkAutoApproval(
+                const result = await checkAutoApproval(
                     translatedTitle,
                     translatedContent,
                     workspace.autoApprovePrompt || "Approve if the news is relevant to tech/AI and logically coherent. Reject spam, irrelevant chatter, or promotional filler.",
                     settings
                 );
-                finalStatus = approved ? "APPROVED" : "REJECTED";
-                console.log(`  -> Auto-approval result: ${finalStatus}`);
+                finalStatus = result.approved ? "APPROVED" : "REJECTED";
+                if (!result.approved && result.reason) {
+                    rejectionReason = result.reason;
+                }
+                console.log(`  -> Auto-approval result: ${finalStatus}${rejectionReason ? ` (Reason: ${rejectionReason})` : ""}`);
             }
 
             // Create the article
@@ -347,6 +351,7 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
                     formatUsed: formatId,
                     selectedMediaUrl: selectedMediaUrl,
                     selectedMediaType: selectedMediaType,
+                    rejectionReason: rejectionReason,
                     updatedAt: new Date(),
                 },
             }));
@@ -393,9 +398,8 @@ export async function runSynthesisEngine(workspaceId: string, settings: Synthesi
 /**
  * Check if an article should be auto-approved using LLM.
  */
-export async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<boolean> {
+export async function checkAutoApproval(title: string, content: string, instruction: string, settings?: SynthesisSettings): Promise<{ approved: boolean; reason?: string }> {
     const provider = getWorkspaceProvider(settings);
-
 
     const prompt = `
     You are an AI Content Moderator.
@@ -426,12 +430,15 @@ export async function checkAutoApproval(title: string, content: string, instruct
             response_format: { type: "json_object" },
         });
 
-        if (!raw) return false;
+        if (!raw) return { approved: false, reason: "No response from AI." };
         const parsed = JSON.parse(raw);
-        return !!parsed.approved;
-    } catch (e) {
+        return {
+            approved: !!parsed.approved,
+            reason: parsed.reason
+        };
+    } catch (e: any) {
         console.error("[Synthesis] Auto-approval check failed:", e);
-        return false; // Default to manual review on error
+        return { approved: false, reason: `Error during automated review: ${e.message}` }; // Default to manual review on error
     }
 }
 

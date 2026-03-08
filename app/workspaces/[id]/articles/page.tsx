@@ -29,6 +29,7 @@ interface SynthesizedArticle {
     likes: number;
     replies: number;
     reposts: number;
+    rejectionReason?: string | null;
 }
 
 const STATUS_TABS = ["ALL", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "ERROR"] as const;
@@ -239,7 +240,7 @@ export default function ArticlesPage() {
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {article.status !== "PUBLISHED" && (
+                                        {(article.status === "PENDING_REVIEW" || article.status === "REJECTED") && (
                                             <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-1.5 shadow-sm focus-within:border-accent group transition-all">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted group-focus-within:text-accent"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                                                 <label className="text-xs font-semibold text-muted whitespace-nowrap">Schedule:</label>
@@ -347,6 +348,17 @@ export default function ArticlesPage() {
                                                         </li>
                                                     ))}
                                                 </ul>
+                                            </div>
+                                        )}
+                                        {article.status === "REJECTED" && article.rejectionReason && (
+                                            <div className="mt-3 pt-3 border-t border-danger/20">
+                                                <div className="flex items-start gap-2 bg-danger/5 border border-danger/10 rounded-lg p-3">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-danger uppercase mb-1">Auto-Reject Reason</p>
+                                                        <p className="text-xs text-danger/90">{article.rejectionReason}</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -472,7 +484,7 @@ export default function ArticlesPage() {
                                         )}
                                     </div>
                                     <div className="flex gap-2">
-                                        {article.status === "PENDING_REVIEW" && (
+                                        {(article.status === "PENDING_REVIEW" || article.status === "REJECTED") && (
                                             <>
                                                 <button
                                                     onClick={() => updateStatus(article.id, "APPROVED")}
@@ -480,12 +492,14 @@ export default function ArticlesPage() {
                                                 >
                                                     Approve & Publish
                                                 </button>
-                                                <button
-                                                    onClick={() => updateStatus(article.id, "REJECTED")}
-                                                    className="px-4 py-1.5 rounded-lg border border-border text-muted hover:bg-surface-hover hover:text-foreground transition-colors text-sm"
-                                                >
-                                                    Reject
-                                                </button>
+                                                {article.status !== "REJECTED" && (
+                                                    <button
+                                                        onClick={() => updateStatus(article.id, "REJECTED")}
+                                                        className="px-4 py-1.5 rounded-lg border border-border text-muted hover:bg-surface-hover hover:text-foreground transition-colors text-sm"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                )}
                                                 <a
                                                     href={`/workspaces/${workspaceId}/articles/${article.id}/edit`}
                                                     className="px-4 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors text-sm font-medium"

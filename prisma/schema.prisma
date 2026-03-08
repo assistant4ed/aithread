@@ -211,6 +211,7 @@ model SynthesizedArticle {
 
   publishError          String?
   publishRetryCount     Int        @default(0)
+  rejectionReason       String?
 
   workspace             Workspace  @relation(fields: [workspaceId], references: [id])
 }
