@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { tavily } from "@tavily/core";
+import { tavilySearch } from "./tavily_client";
 import { getWorkspaceProvider, translateText, synthesizeCluster } from "./synthesis_engine";
 import { POST_FORMATS } from "./postFormats";
 
@@ -227,16 +227,15 @@ export async function generateSearchContent(workspace: WorkspaceWithMode, topic:
     const tavilyKey = process.env.TAVILY_API_KEY;
     if (tavilyKey) {
         try {
-            const tvly = tavily({ apiKey: tavilyKey });
-            const results = await tvly.search(`Latest news on ${topic} today`, {
+            const results = await tavilySearch(tavilyKey, `Latest news on ${topic} today`, {
                 searchDepth: "advanced",
                 includeAnswers: true,
                 maxResults: 6,
             });
 
             if (results.results?.length) {
-                externalUrls = results.results.map((r: any) => r.url);
-                searchContext += results.results.map((r: any) =>
+                externalUrls = results.results.map((r) => r.url);
+                searchContext += results.results.map((r) =>
                     `Source: ${r.title}\nURL: ${r.url}\nSummary: ${r.content}`
                 ).join("\n---\n");
             }
@@ -476,8 +475,7 @@ export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode):
 
     if (tavilyKey) {
         try {
-            const tvly = tavily({ apiKey: tavilyKey });
-            const trendResults = await tvly.search(`Latest trending topics in ${workspace.autoDiscoverNiche} last 48 hours`, {
+            const trendResults = await tavilySearch(tavilyKey, `Latest trending topics in ${workspace.autoDiscoverNiche} last 48 hours`, {
                 searchDepth: "advanced",
                 includeAnswers: true,
                 maxResults: 10,
