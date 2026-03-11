@@ -35,9 +35,7 @@ const AI_MODELS: Record<string, { id: string, name: string }[]> = {
         { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash-Lite" },
     ],
     OPENROUTER: [
-        { id: "qwen/qwen-3.5-72b-instruct", name: "Qwen 3.5 72B Instruct" },
-        { id: "deepseek/deepseek-chat", name: "DeepSeek Chat" },
-        { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" }
+        { id: "qwen/qwen3.5-35b-a3b", name: "Qwen 3.5 35B" },
     ]
 };
 

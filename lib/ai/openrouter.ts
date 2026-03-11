@@ -5,7 +5,7 @@ export class OpenRouterProvider implements AIProvider {
     private client: OpenAI;
     private defaultModel: string;
 
-    constructor(apiKey: string, defaultModel: string = "qwen/qwen-3.5-72b-instruct") {
+    constructor(apiKey: string, defaultModel: string = "qwen/qwen3.5-35b-a3b") {
         this.client = new OpenAI({
             baseURL: "https://openrouter.ai/api/v1",
             apiKey,
