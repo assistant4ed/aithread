@@ -55,6 +55,16 @@ model Workspace {
   aiModel               String               @default("llama-3.3-70b-versatile")
   aiApiKey              String?              // Optional override
 
+  // Content Mode Configuration
+  contentMode           ContentMode          @default(SCRAPE)
+  preferredFormats      String[]             @default([])
+  newsApiKey            String?              // Per-workspace News API key (SEARCH mode)
+  dataCollationHours    Int                  @default(6)  // Time limit for data collation (SEARCH mode)
+  referenceWorkspaceId  String?              // Reference workspace ID (REFERENCE mode)
+  autoDiscoverNiche     String?              // Niche description (AUTO_DISCOVER mode)
+  variationBaseTopics   String[]             @default([])  // Base topics (VARIATIONS mode)
+  variationCount        Int                  @default(3)  // Variations per topic (VARIATIONS mode)
+
   ownerId               String?              // Nullable for migration
   owner                 User?                @relation(fields: [ownerId], references: [id])
 }
@@ -239,6 +249,14 @@ enum Platform {
   THREADS
   INSTAGRAM
   TWITTER
+}
+
+enum ContentMode {
+  SCRAPE
+  REFERENCE
+  SEARCH
+  VARIATIONS
+  AUTO_DISCOVER
 }
 
 model AccountCache {

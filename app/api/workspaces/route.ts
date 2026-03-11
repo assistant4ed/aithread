@@ -61,6 +61,15 @@ export async function POST(request: NextRequest) {
             aiApiKey,
             synthesisPrompt,
             coherenceThreshold,
+            // Content Mode fields
+            contentMode,
+            preferredFormats,
+            newsApiKey,
+            dataCollationHours,
+            referenceWorkspaceId,
+            autoDiscoverNiche,
+            variationBaseTopics,
+            variationCount,
         } = body;
 
         if (!name) {
@@ -123,6 +132,15 @@ export async function POST(request: NextRequest) {
                 aiApiKey: aiApiKey || null,
                 synthesisPrompt: synthesisPrompt || undefined,
                 coherenceThreshold: coherenceThreshold ? Number(coherenceThreshold) : undefined,
+                // Content Mode
+                contentMode: contentMode || "SCRAPE",
+                preferredFormats: preferredFormats || [],
+                newsApiKey: newsApiKey || null,
+                dataCollationHours: dataCollationHours ? Number(dataCollationHours) : 6,
+                referenceWorkspaceId: referenceWorkspaceId || null,
+                autoDiscoverNiche: autoDiscoverNiche || null,
+                variationBaseTopics: variationBaseTopics || [],
+                variationCount: variationCount ? Number(variationCount) : 3,
                 ownerId: session.user.id,
             },
             include: { sources: true }

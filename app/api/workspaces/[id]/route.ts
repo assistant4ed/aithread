@@ -70,6 +70,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "autoApproveDrafts", "autoApprovePrompt",
             "aiProvider", "aiModel", "aiApiKey",
             "synthesisPrompt", "coherenceThreshold",
+            // Content Mode fields
+            "contentMode", "preferredFormats", "newsApiKey", "dataCollationHours",
+            "referenceWorkspaceId", "autoDiscoverNiche", "variationBaseTopics", "variationCount",
         ];
 
         const data: Record<string, any> = {};

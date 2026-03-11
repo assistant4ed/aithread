@@ -3,6 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
+import { POST_FORMATS } from "@/lib/postFormats";
+import { FormatSelector } from "@/components/FormatPreview";
+import PromptBuilder from "@/components/PromptBuilder";
 
 const AI_MODELS: Record<string, { id: string, name: string }[]> = {
     GROQ: [
@@ -76,6 +79,15 @@ export default function NewWorkspacePage() {
         aiApiKey: "",
         synthesisPrompt: "You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary.",
         coherenceThreshold: 2,
+        // Content Mode fields
+        contentMode: "SCRAPE",
+        preferredFormats: [] as string[],
+        newsApiKey: "",
+        dataCollationHours: 6,
+        referenceWorkspaceId: "",
+        autoDiscoverNiche: "",
+        variationBaseTopics: [] as string[],
+        variationCount: 3,
     });
 
     const handleConnectOAuth = async (provider: string) => {
@@ -205,7 +217,197 @@ export default function NewWorkspacePage() {
                     />
                 </Field>
 
-                {/* Scraper Sources */}
+                {/* Content Mode Selector */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                        Content Mode
+                    </h3>
+                    <p className="text-xs text-muted">Choose how this workspace generates content.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {[
+                            { id: "SCRAPE", icon: "🔍", label: "Scrape & Synthesize", desc: "Monitor accounts/topics, scrape posts, cluster & synthesize articles" },
+                            { id: "REFERENCE", icon: "📎", label: "Reference", desc: "Create content inspired by another workspace's published articles" },
+                            { id: "SEARCH", icon: "🌐", label: "Search & Generate", desc: "Search the web for real-time news and generate articles from search results" },
+                            { id: "VARIATIONS", icon: "🔄", label: "Topic Variations", desc: "Generate multiple unique content variations for the same topics" },
+                            { id: "AUTO_DISCOVER", icon: "✨", label: "Auto-Discover", desc: "System discovers trending content for your niche automatically" },
+                        ].map(mode => (
+                            <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setForm({ ...form, contentMode: mode.id })}
+                                className={`flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all ${form.contentMode === mode.id
+                                    ? "border-accent bg-accent/10 ring-2 ring-accent/20"
+                                    : "border-border hover:border-accent/30 hover:bg-white/5"
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl">{mode.icon}</span>
+                                    <span className="text-sm font-bold">{mode.label}</span>
+                                </div>
+                                <p className="text-[11px] text-muted leading-relaxed">{mode.desc}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Post Layout Template Selection — All modes */}
+                {form.contentMode !== "SCRAPE" && (
+                    <div className="border border-border rounded-xl p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                                Preferred Post Formats
+                            </h3>
+                            <span className="text-[10px] text-muted bg-accent/5 px-2 py-0.5 rounded border border-accent/20">
+                                {Object.keys(POST_FORMATS).length} formats available
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted">
+                            Select which post layout templates should be used. Leave empty for auto-selection from all formats.
+                        </p>
+                        <FormatSelector
+                            selectedFormats={form.preferredFormats}
+                            onChange={(formats) => setForm({ ...form, preferredFormats: formats })}
+                        />
+                    </div>
+                )}
+
+                {/* Mode-Specific Configuration */}
+                {form.contentMode === "REFERENCE" && (
+                    <div className="border border-purple-500/20 rounded-xl p-4 space-y-4 bg-purple-500/5">
+                        <h3 className="text-sm font-semibold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+                            📎 Reference Mode Settings
+                        </h3>
+                        <Field label="Reference Workspace ID" hint="Enter the ID of the workspace whose articles you want to draw inspiration from.">
+                            <input
+                                type="text"
+                                value={form.referenceWorkspaceId}
+                                onChange={(e) => setForm({ ...form, referenceWorkspaceId: e.target.value })}
+                                placeholder="e.g. cm1abc2def3"
+                                className="input"
+                            />
+                        </Field>
+                    </div>
+                )}
+
+                {form.contentMode === "SEARCH" && (
+                    <div className="border border-blue-500/20 rounded-xl p-4 space-y-4 bg-blue-500/5">
+                        <h3 className="text-sm font-semibold text-blue-300 uppercase tracking-wider flex items-center gap-2">
+                            🌐 Search & Generate Settings
+                        </h3>
+                        <Field label="News API Key (Optional)" hint="Your NewsAPI.org key. Falls back to global key if empty. Free tier: 100 req/day, 24h delay.">
+                            <input
+                                type="password"
+                                value={form.newsApiKey}
+                                onChange={(e) => setForm({ ...form, newsApiKey: e.target.value })}
+                                placeholder="Leave empty to use global key"
+                                className="input"
+                            />
+                        </Field>
+                        <Field label="Data Collation Time Limit (hours)" hint="How far back to search for news articles.">
+                            <input
+                                type="number"
+                                value={form.dataCollationHours}
+                                onChange={(e) => setForm({ ...form, dataCollationHours: Number(e.target.value) })}
+                                className="input"
+                                min={1}
+                                max={720}
+                            />
+                        </Field>
+                    </div>
+                )}
+
+                {form.contentMode === "VARIATIONS" && (
+                    <div className="border border-amber-500/20 rounded-xl p-4 space-y-4 bg-amber-500/5">
+                        <h3 className="text-sm font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                            🔄 Topic Variations Settings
+                        </h3>
+                        <Field label="Base Topics" hint="Add topics that will be used to generate content variations.">
+                            <div className="space-y-3">
+                                {form.variationBaseTopics.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {form.variationBaseTopics.map((topic, i) => (
+                                            <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
+                                                {topic}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newTopics = [...form.variationBaseTopics];
+                                                        newTopics.splice(i, 1);
+                                                        setForm({ ...form, variationBaseTopics: newTopics });
+                                                    }}
+                                                    className="text-amber-400/60 hover:text-amber-300 font-bold"
+                                                >×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        id="new-variation-topic"
+                                        placeholder="e.g. AI in Healthcare"
+                                        className="input flex-1"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const input = e.target as HTMLInputElement;
+                                                if (input.value.trim()) {
+                                                    setForm({ ...form, variationBaseTopics: [...form.variationBaseTopics, input.value.trim()] });
+                                                    input.value = "";
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const input = document.getElementById('new-variation-topic') as HTMLInputElement;
+                                            if (input.value.trim()) {
+                                                setForm({ ...form, variationBaseTopics: [...form.variationBaseTopics, input.value.trim()] });
+                                                input.value = "";
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-white/5 border border-border rounded-lg text-sm hover:bg-white/10"
+                                    >+ Add</button>
+                                </div>
+                            </div>
+                        </Field>
+                        <Field label="Variations Per Topic" hint="How many unique article variations to generate for each topic.">
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={form.variationCount}
+                                    onChange={(e) => setForm({ ...form, variationCount: Number(e.target.value) })}
+                                    className="flex-1 accent-accent"
+                                />
+                                <span className="text-sm font-mono w-8 text-center">{form.variationCount}</span>
+                            </div>
+                        </Field>
+                    </div>
+                )}
+
+                {form.contentMode === "AUTO_DISCOVER" && (
+                    <div className="border border-emerald-500/20 rounded-xl p-4 space-y-4 bg-emerald-500/5">
+                        <h3 className="text-sm font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
+                            ✨ Auto-Discover Settings
+                        </h3>
+                        <p className="text-xs text-muted">Describe your niche. The system will automatically find trending topics and generate content — no accounts to track needed.</p>
+                        <Field label="Niche Description" required hint="Be specific. e.g. 'Hong Kong tech startups and AI developments' or 'Crypto DeFi protocols and NFT markets'">
+                            <textarea
+                                value={form.autoDiscoverNiche}
+                                onChange={(e) => setForm({ ...form, autoDiscoverNiche: e.target.value })}
+                                rows={3}
+                                placeholder="e.g. AI tools for developers, focusing on code generation, IDE plugins, and agent frameworks"
+                                className="input font-mono text-xs w-full"
+                            />
+                        </Field>
+                    </div>
+                )}
+
+                {/* Scraper Sources — only for SCRAPE and REFERENCE modes */}
+                {(form.contentMode === "SCRAPE" || form.contentMode === "REFERENCE") && (
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
@@ -380,6 +582,7 @@ export default function NewWorkspacePage() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* AI Configuration */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
@@ -466,12 +669,16 @@ export default function NewWorkspacePage() {
                     hint="Instructions for the AI on how to write the news articles (tone, style, etc.)"
                     defaultValue="You are a viral social media editor. Synthesize these clustered social media posts into a high-impact, skimmable curated summary."
                 >
+                    <PromptBuilder
+                        value={form.synthesisPrompt}
+                        onChange={(prompt) => setForm({ ...form, synthesisPrompt: prompt })}
+                    />
                     <textarea
                         value={form.synthesisPrompt}
                         onChange={(e) => setForm({ ...form, synthesisPrompt: e.target.value })}
                         rows={4}
                         placeholder="e.g. You are a viral social media editor. Write like a Gen-Z tech influencer..."
-                        className="input font-mono text-xs w-full"
+                        className="input font-mono text-xs w-full mt-3"
                     />
                 </Field>
                 {/* Coherence Threshold */}

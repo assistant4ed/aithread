@@ -81,6 +81,17 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                         >
                             {workspace.isActive ? "ACTIVE" : "PAUSED"}
                         </span>
+                        {workspace.contentMode && workspace.contentMode !== "SCRAPE" && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${
+                                workspace.contentMode === "SEARCH" ? "bg-blue-500/10 text-blue-400 border border-blue-500/30" :
+                                workspace.contentMode === "REFERENCE" ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" :
+                                workspace.contentMode === "VARIATIONS" ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" :
+                                workspace.contentMode === "AUTO_DISCOVER" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" :
+                                "bg-muted/10 text-muted border border-border"
+                            }`}>
+                                {workspace.contentMode.replace(/_/g, ' ')}
+                            </span>
+                        )}
                     </div>
                 </div>
                 <WorkspaceActions
