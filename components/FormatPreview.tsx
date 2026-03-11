@@ -203,7 +203,7 @@ export function FormatSelector({ selectedFormats, onChange }: FormatSelectorProp
                     placeholder="Search formats..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="input flex-1 text-sm"
+                    className="input flex-1 min-w-[200px] text-sm"
                 />
                 <select
                     value={filterTone}
