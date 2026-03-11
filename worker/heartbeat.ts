@@ -9,6 +9,7 @@ import { runSynthesisEngine } from "../lib/synthesis_engine";
 import { trackPipelineRun } from "../lib/pipeline_tracker";
 import { deleteBlobFromStorage } from "../lib/storage";
 import { toUTCDate } from "../lib/time";
+import { generateByMode } from "../lib/content_modes";
 
 console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
@@ -72,8 +73,8 @@ setInterval(() => {
             // Use Promise.all to process workspaces concurrently, preventing one workspace
             // from blocking the heartbeat execution for others or node-cron.
             await Promise.all(workspaces.map(async (ws) => {
-                // 1. Initial Scrape for new/never-scraped workspaces
-                if (!ws.lastScrapedAt) {
+                // 1. Initial Scrape for new/never-scraped workspaces (SCRAPE mode only)
+                if (!ws.lastScrapedAt && ws.contentMode === "SCRAPE") {
                     console.log(`[Heartbeat] 🆕 New workspace detected (${ws.name}). Triggering initial scrape...`);
                     // Fire-and-forget — explicitly detach from the awaited chain
                     setImmediate(() => runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e)));
@@ -101,25 +102,31 @@ setInterval(() => {
                     // Convert HKT publish time string to a UTC Date for reliable comparison
                     const pubDateUTC = toUTCDate(timeStr, now);
 
-                    // --- SCRAPE PHASE ---
+                    // --- SCRAPE PHASE (SCRAPE mode only) ---
                     // Window: (Publish - ReviewWindow - 2h) to (Publish - ReviewWindow)
+                    if (ws.contentMode === "SCRAPE") {
+                        const synthDateUTC = new Date(pubDateUTC);
+                        synthDateUTC.setHours(synthDateUTC.getHours() - reviewWindow);
+
+                        const scrapeWindowStartUTC = new Date(synthDateUTC);
+                        scrapeWindowStartUTC.setHours(scrapeWindowStartUTC.getHours() - 2);
+
+                        const isWithinScrapeWindow = now >= scrapeWindowStartUTC && now < synthDateUTC;
+                        const minutesSinceLastScrape = ws.lastScrapedAt
+                            ? (now.getTime() - ws.lastScrapedAt.getTime()) / 60_000
+                            : 999;
+
+                        // ── Each phase is truly fire-and-forget via setImmediate ──────
+                        // Trigger if in window and haven't scraped in last 28 mins (allow slight drift)
+                        if (isWithinScrapeWindow && minutesSinceLastScrape >= 28) {
+                            console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr} HKT, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
+                            setImmediate(() => runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e)));
+                        }
+                    }
+
+                    // Calculate synthesis time (used by all modes)
                     const synthDateUTC = new Date(pubDateUTC);
                     synthDateUTC.setHours(synthDateUTC.getHours() - reviewWindow);
-
-                    const scrapeWindowStartUTC = new Date(synthDateUTC);
-                    scrapeWindowStartUTC.setHours(scrapeWindowStartUTC.getHours() - 2);
-
-                    const isWithinScrapeWindow = now >= scrapeWindowStartUTC && now < synthDateUTC;
-                    const minutesSinceLastScrape = ws.lastScrapedAt
-                        ? (now.getTime() - ws.lastScrapedAt.getTime()) / 60_000
-                        : 999;
-
-                    // ── Each phase is truly fire-and-forget via setImmediate ──────
-                    // Trigger if in window and haven't scraped in last 28 mins (allow slight drift)
-                    if (isWithinScrapeWindow && minutesSinceLastScrape >= 28) {
-                        console.log(`[Heartbeat] 🕷️ Triggering SCRAPE for ${ws.name} (Window: ${timeStr} HKT, Last: ${Math.round(minutesSinceLastScrape)}m ago)`);
-                        setImmediate(() => runScrape(ws).catch(e => console.error(`[Scrape Error - ${ws.name}]`, e)));
-                    }
 
                     // --- SYNTHESIS PHASE ---
                     // Use UTC comparison for stability with a ±30 second window (matches 1min tick)
@@ -127,8 +134,14 @@ setInterval(() => {
                     const isSynthTime = diffMsSynth < 30_000; // ±30 seconds window
 
                     if (isSynthTime) {
-                        console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
-                        setImmediate(() => runSynthesis(ws).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e)));
+                        // Route to appropriate handler based on content mode
+                        if (ws.contentMode === "SCRAPE") {
+                            console.log(`[Heartbeat] 🧠 Triggering SYNTHESIS for ${ws.name} (Target Publish: ${timeStr} HKT)`);
+                            setImmediate(() => runSynthesis(ws).catch(e => console.error(`[Synthesis Error - ${ws.name}]`, e)));
+                        } else {
+                            console.log(`[Heartbeat] 🤖 Triggering GENERATION (${ws.contentMode}) for ${ws.name} (Target Publish: ${timeStr} HKT)`);
+                            setImmediate(() => runGeneration(ws).catch(e => console.error(`[Generation Error - ${ws.name}]`, e)));
+                        }
                     }
 
                     // --- PUBLISH PHASE ---
@@ -344,6 +357,39 @@ async function runSynthesis(ws: Workspace) {
         });
 
         return result;
+    });
+}
+
+async function runGeneration(ws: Workspace) {
+    return trackPipelineRun(ws.id, "SYNTHESIS", async () => {
+        console.log(`[Generation] Starting content generation for ${ws.name} (mode: ${ws.contentMode})...`);
+
+        await prisma.workspace.update({
+            where: { id: ws.id },
+            data: { lastSynthesizedAt: new Date() }
+        });
+
+        const publishTimes = ws.publishTimes?.length ? ws.publishTimes : ["12:00", "18:00", "22:00"];
+        const maxArticles = Math.ceil(ws.dailyPostLimit / publishTimes.length);
+
+        // Generate content based on workspace mode
+        const result = await generateByMode(ws.id);
+
+        if (!result.success) {
+            console.error(`[Generation] Failed for ${ws.name}: ${result.error}`);
+            return { articlesGenerated: 0, error: result.error };
+        }
+
+        const articles = result.articles || (result.article ? [result.article] : []);
+        console.log(`[Generation] Generated ${articles.length} article(s) for ${ws.name}`);
+
+        // Limit to maxArticles
+        const limitedArticles = articles.slice(0, maxArticles);
+
+        return {
+            articlesGenerated: limitedArticles.length,
+            totalDiscovered: articles.length,
+        };
     });
 }
 
