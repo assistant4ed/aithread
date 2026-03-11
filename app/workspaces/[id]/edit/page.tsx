@@ -588,7 +588,8 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
-                {/* Clustering Prompt */}
+                {/* Clustering Prompt - SCRAPE mode only */}
+                {form.contentMode === "SCRAPE" && (
                 <Field
                     label="Clustering Prompt"
                     hint="Instructions for the AI to group posts into news clusters"
@@ -602,6 +603,7 @@ export default function EditWorkspacePage() {
                         className="input font-mono text-xs w-full"
                     />
                 </Field>
+                )}
                 {/* Synthesis Prompt */}
                 <Field
                     label="Synthesis Personality / Prompt"
@@ -621,7 +623,8 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
-                {/* Coherence Threshold */}
+                {/* Coherence Threshold - SCRAPE mode only */}
+                {form.contentMode === "SCRAPE" && (
                 <Field
                     label="Noise vs. Consensus (Coherence Threshold)"
                     hint="Min authors required for a story. 1 = High Noise, 5+ = High Quality/Trends."
@@ -639,6 +642,7 @@ export default function EditWorkspacePage() {
                         <span className="text-sm font-mono w-8 text-center">{form.coherenceThreshold}</span>
                     </div>
                 </Field>
+                )}
 
 
 
@@ -653,6 +657,9 @@ export default function EditWorkspacePage() {
                     />
                 </Field>
 
+                {/* SCRAPE-specific settings */}
+                {form.contentMode === "SCRAPE" && (
+                <>
                 {/* Topic Filter */}
                 <Field label="Topic Filter (Optional)" hint="e.g. 'AI, Artificial Intelligence, LLMs'. If set, posts must be relevant to this topic.">
                     <input
@@ -812,6 +819,8 @@ export default function EditWorkspacePage() {
                         }) : <div>No pipeline configured.</div>}
                     </div>
                 </div>
+                </>
+                )}
 
                 {/* Auto-Approval Logic */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
