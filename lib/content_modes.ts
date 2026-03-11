@@ -596,6 +596,7 @@ export async function generateByMode(workspaceId: string, topic?: string): Promi
     const ws = workspace as unknown as WorkspaceWithMode;
 
     console.log(`[ContentModes] Generating for workspace "${workspace.name}" in mode: ${ws.contentMode}`);
+    console.log(`[ContentModes] AI Config: provider=${ws.aiProvider}, model=${ws.aiModel}, hasApiKey=${!!ws.aiApiKey}`);
 
     switch (ws.contentMode) {
         case "REFERENCE":
