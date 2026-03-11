@@ -109,6 +109,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
             </div>
 
             {/* Pipeline Status */}
+            {(!workspace.contentMode || workspace.contentMode === "SCRAPE") && (
             <section className="bg-surface/50 border border-border rounded-xl p-5">
                 <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">Pipeline Status</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -126,10 +127,12 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                     />
                 </div>
             </section>
+            )}
 
             {/* Configuration */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Scraper Sources */}
+                {(!workspace.contentMode || workspace.contentMode === "SCRAPE" || workspace.contentMode === "REFERENCE") && (
                 <section className="border border-border rounded-xl p-5">
                     <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
                         Scraper Sources ({workspace.sources.length})
@@ -167,32 +170,40 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                         </div>
                     )}
                 </section>
+                )}
 
                 {/* Settings */}
                 <section className="border border-border rounded-xl p-5">
                     <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Settings</h2>
                     <dl className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                            <dd className="font-mono text-right max-w-[200px] truncate">
-                                {workspace.topicFilter ? (
-                                    <span className="text-accent" title={workspace.topicFilter}>{workspace.topicFilter}</span>
-                                ) : (
-                                    <span className="text-muted/50 italic">None</span>
-                                )}
-                            </dd>
-                        </div>
+                        {(!workspace.contentMode || workspace.contentMode === "SCRAPE") && (
+                            <div className="flex justify-between">
+                                <dt className="text-muted">Topic Filter</dt>
+                                <dd className="font-mono text-right max-w-[200px] truncate">
+                                    {workspace.topicFilter ? (
+                                        <span className="text-accent" title={workspace.topicFilter}>{workspace.topicFilter}</span>
+                                    ) : (
+                                        <span className="text-muted/50 italic">None</span>
+                                    )}
+                                </dd>
+                            </div>
+                        )}
                         <div className="flex justify-between">
                             <dt className="text-muted">Synthesis Language</dt>
                             <dd className="font-mono text-right">{workspace.synthesisLanguage}</dd>
                         </div>
-                        <div className="flex justify-between">
-                            <dt className="text-muted">Hot Score Threshold</dt>
-                            <dd className="font-mono">{workspace.hotScoreThreshold}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                            <dt className="text-muted">Max Post Age</dt>
-                            <dd className="font-mono">{workspace.maxPostAgeHours}h</dd>
-                        </div>
+                        {(!workspace.contentMode || workspace.contentMode === "SCRAPE") && (
+                            <>
+                                <div className="flex justify-between">
+                                    <dt className="text-muted">Hot Score Threshold</dt>
+                                    <dd className="font-mono">{workspace.hotScoreThreshold}</dd>
+                                </div>
+                                <div className="flex justify-between">
+                                    <dt className="text-muted">Max Post Age</dt>
+                                    <dd className="font-mono">{workspace.maxPostAgeHours}h</dd>
+                                </div>
+                            </>
+                        )}
                         <div className="flex justify-between">
                             <dt className="text-muted">Publish Schedule</dt>
                             <dd className="font-mono text-right">

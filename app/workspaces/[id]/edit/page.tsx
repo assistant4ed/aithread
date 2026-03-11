@@ -718,6 +718,8 @@ export default function EditWorkspacePage() {
                         />
                     </Field>
                 </div>
+                </>
+                )}
 
                 {/* Pipeline Schedule */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
@@ -819,8 +821,6 @@ export default function EditWorkspacePage() {
                         }) : <div>No pipeline configured.</div>}
                     </div>
                 </div>
-                </>
-                )}
 
                 {/* Auto-Approval Logic */}
                 <div className="border border-border rounded-xl p-4 space-y-4">

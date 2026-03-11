@@ -781,8 +781,7 @@ export default function NewWorkspacePage() {
                 </>
                 )}
 
-                {/* Pipeline Schedule - SCRAPE mode only */}
-                {form.contentMode === "SCRAPE" && (
+                {/* Pipeline Schedule */}
                 <div className="border border-border rounded-xl p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
                         Pipeline Schedule (UTC+8)
@@ -882,7 +881,6 @@ export default function NewWorkspacePage() {
                         }) : <div>No pipeline configured.</div>}
                     </div>
                 </div>
-                )}
 
                 {/* Threads Credentials */}
                 <div className="border border-border rounded-xl p-4 space-y-4">

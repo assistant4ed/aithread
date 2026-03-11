@@ -9,6 +9,7 @@ interface WorkspaceActionsProps {
     workspace: {
         id: string;
         isActive: boolean;
+        contentMode?: string | null;
     };
     isScraping?: boolean;
 }
@@ -56,7 +57,9 @@ export default function WorkspaceActions({ workspace, isScraping }: WorkspaceAct
 
     return (
         <div className="flex gap-2">
-            <ScrapeButton workspaceId={workspace.id} isScraping={isScraping} />
+            {(!workspace.contentMode || workspace.contentMode === "SCRAPE") && (
+                <ScrapeButton workspaceId={workspace.id} isScraping={isScraping} />
+            )}
             <button
                 onClick={toggleActive}
                 disabled={loading}
