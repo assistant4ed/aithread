@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { tavilySearch } from "./tavily_client";
-import { getWorkspaceProvider, translateText, synthesizeCluster } from "./synthesis_engine";
+import { getWorkspaceProvider, translateText, synthesizeCluster, checkAutoApproval } from "./synthesis_engine";
 import { POST_FORMATS } from "./postFormats";
 
 /**
@@ -185,6 +185,23 @@ ${format.id === 'THREAD_STORM' ? '- Use 1/, 2/, 3/ format for thread numbering' 
             content = await translateText(content, `Translate to ${workspace.synthesisLanguage}.${styleGuide} Keep markdown formatting. Output ONLY the translated text.`, workspace as any);
         }
 
+        // Auto-approval check
+        let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
+        let rejectionReason: string | undefined = undefined;
+
+        if (workspace.autoApproveDrafts) {
+            console.log(`  -> Auto-approving reference article...`);
+            const result = await checkAutoApproval(
+                headline,
+                content,
+                workspace.autoApprovePrompt || "Approve if the content is relevant and logically coherent. Reject spam, irrelevant content, or incoherent text.",
+                workspace as any
+            );
+            finalStatus = result.approved ? "APPROVED" : "REJECTED";
+            rejectionReason = result.reason;
+            console.log(`  -> Auto-approval result: ${finalStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`);
+        }
+
         const article = await prisma.synthesizedArticle.create({
             data: {
                 workspaceId: workspace.id,
@@ -193,11 +210,12 @@ ${format.id === 'THREAD_STORM' ? '- Use 1/, 2/, 3/ format for thread numbering' 
                 articleOriginal: parsed.content,
                 authorCount: 0,
                 postCount: 0,
-                status: "PENDING_REVIEW",
+                status: finalStatus,
                 sourcePostIds: [],
                 sourceAccounts: [`ref:${workspace.referenceWorkspaceId}`],
                 formatUsed: formatId,
                 externalUrls: [],
+                rejectionReason,
             }
         });
 
@@ -326,6 +344,23 @@ ${searchContext.slice(0, 15000)}`;
             content = await translateText(content, `Translate to ${workspace.synthesisLanguage}.${styleGuide} Keep markdown formatting. Output ONLY the translated text.`, workspace as any);
         }
 
+        // Auto-approval check
+        let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
+        let rejectionReason: string | undefined = undefined;
+
+        if (workspace.autoApproveDrafts) {
+            console.log(`  -> Auto-approving article for topic "${topic}"...`);
+            const result = await checkAutoApproval(
+                headline,
+                content,
+                workspace.autoApprovePrompt || "Approve if the content is relevant and logically coherent. Reject spam, irrelevant content, or incoherent text.",
+                workspace as any
+            );
+            finalStatus = result.approved ? "APPROVED" : "REJECTED";
+            rejectionReason = result.reason;
+            console.log(`  -> Auto-approval result: ${finalStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`);
+        }
+
         const article = await prisma.synthesizedArticle.create({
             data: {
                 workspaceId: workspace.id,
@@ -334,11 +369,12 @@ ${searchContext.slice(0, 15000)}`;
                 articleOriginal: parsed.content,
                 authorCount: 0,
                 postCount: 0,
-                status: "PENDING_REVIEW",
+                status: finalStatus,
                 sourcePostIds: [],
                 sourceAccounts: ["Tavily Search API", newsApiKey ? "NewsAPI" : ""].filter(Boolean),
                 formatUsed: formatId,
                 externalUrls,
+                rejectionReason,
             }
         });
 
@@ -426,6 +462,23 @@ JSON ONLY.`;
                     content = await translateText(content, `Translate to ${workspace.synthesisLanguage}.${styleGuide} Keep markdown formatting. Output ONLY the translated text.`, workspace as any);
                 }
 
+                // Auto-approval check
+                let finalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" = "PENDING_REVIEW";
+                let rejectionReason: string | undefined = undefined;
+
+                if (workspace.autoApproveDrafts) {
+                    console.log(`  -> Auto-approving variation: ${variation.angle || 'Default'}...`);
+                    const result = await checkAutoApproval(
+                        headline,
+                        content,
+                        workspace.autoApprovePrompt || "Approve if the content is relevant and logically coherent. Reject spam, irrelevant content, or incoherent text.",
+                        workspace as any
+                    );
+                    finalStatus = result.approved ? "APPROVED" : "REJECTED";
+                    rejectionReason = result.reason;
+                    console.log(`  -> Auto-approval result: ${finalStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`);
+                }
+
                 const article = await prisma.synthesizedArticle.create({
                     data: {
                         workspaceId: workspace.id,
@@ -434,11 +487,12 @@ JSON ONLY.`;
                         articleOriginal: variation.content,
                         authorCount: 0,
                         postCount: 0,
-                        status: "PENDING_REVIEW",
+                        status: finalStatus,
                         sourcePostIds: [],
                         sourceAccounts: [`variation:${topic} (${variation.angle || 'Default'})`],
                         formatUsed: variation.format || await pickFormat(workspace),
                         externalUrls: [],
+                        rejectionReason,
                     }
                 });
                 allArticles.push(article);
