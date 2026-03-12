@@ -38,6 +38,7 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         '--no-playlist',        // if URL is a playlist, only process first video
         '--socket-timeout', '30',
         '--no-check-certificates', // skip SSL validation issues
+        '--js-runtimes', 'node', // Use Node.js for JavaScript execution (YouTube n-parameter challenge)
     ];
 
     // Player client strategy depends on whether we have cookies

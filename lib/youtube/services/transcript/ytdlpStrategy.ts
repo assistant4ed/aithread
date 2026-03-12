@@ -27,6 +27,7 @@ export async function ytdlpVttStrategy(
         '--sub-format', 'vtt/srt',
         '--skip-download',
         '--no-playlist',
+        '--js-runtimes', 'node', // Use Node.js for JavaScript execution (YouTube n-parameter challenge)
     ];
 
     // With cookies, use default web client (android/ios don't support cookies in yt-dlp)
