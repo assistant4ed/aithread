@@ -31,6 +31,8 @@ interface WorkspaceWithMode {
     variationBaseTopics: string[];
     variationCount: number;
     topicFilter: string | null;
+    autoApproveDrafts: boolean;
+    autoApprovePrompt: string | null;
 }
 
 /**
