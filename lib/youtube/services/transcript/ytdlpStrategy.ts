@@ -26,11 +26,13 @@ export async function ytdlpVttStrategy(
             '--sub-format', 'vtt/srt',
             '--skip-download',
             '--no-playlist',
+            '--extractor-args', 'youtube:player_client=web,android',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             '--output', outputTemplate,
             `https://www.youtube.com/watch?v=${videoId}`,
         ], {
             timeout: 60_000,
-            env: { ...process.env, PATH: `/home/linuxbrew/.linuxbrew/bin:${process.env.PATH}` }
+            env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }
         });
     } catch {
         // If manual fails, try auto-generated
@@ -41,11 +43,13 @@ export async function ytdlpVttStrategy(
             '--sub-format', 'vtt/srt',
             '--skip-download',
             '--no-playlist',
+            '--extractor-args', 'youtube:player_client=web,android',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             '--output', outputTemplate,
             `https://www.youtube.com/watch?v=${videoId}`,
         ], {
             timeout: 60_000,
-            env: { ...process.env, PATH: `/home/linuxbrew/.linuxbrew/bin:${process.env.PATH}` }
+            env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }
         });
     }
 

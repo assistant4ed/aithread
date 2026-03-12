@@ -30,19 +30,29 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
             '--dump-json',          // output JSON and exit, no download
             '--no-playlist',        // if URL is a playlist, only process first video
             '--socket-timeout', '30',
+            '--extractor-args', 'youtube:player_client=web,android',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             videoUrl,
         ]);
         stdout = result.stdout;
     } catch (err: any) {
+        // Enhanced error logging for debugging
+        console.error('[yt-dlp] Full stderr:', err.stderr);
+        console.error('[yt-dlp] Full stdout:', err.stdout);
+        console.error('[yt-dlp] Error code:', err.code);
+
         // yt-dlp exits non-zero for private/deleted videos
         if (err.stderr?.includes('Private video')) {
             throw new Error(`VIDEO_PRIVATE: ${videoUrl}`);
         }
-        if (err.stderr?.includes('Video unavailable')) {
+        if (err.stderr?.includes('Video unavailable') || err.stderr?.includes('not found')) {
             throw new Error(`VIDEO_UNAVAILABLE: ${videoUrl}`);
         }
         if (err.code === 'ENOENT') {
             throw new Error(`yt-dlp binary not found — is it installed?`);
+        }
+        if (err.stderr?.includes('JavaScript runtime')) {
+            throw new Error(`yt-dlp requires JavaScript runtime - ensure Node.js is available in PATH. Error: ${err.stderr}`);
         }
         throw new Error(`yt-dlp metadata failed: ${err.stderr || err.message}`);
     }
