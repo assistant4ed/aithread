@@ -100,7 +100,13 @@ setInterval(() => {
                 let publishTriggered = false;
                 for (const timeStr of publishTimes) {
                     // Convert HKT publish time string to a UTC Date for reliable comparison
-                    const pubDateUTC = toUTCDate(timeStr, now);
+                    let pubDateUTC = toUTCDate(timeStr, now);
+
+                    // Fix: If publish time is in the past (e.g., 00:30 when it's 23:30),
+                    // it likely refers to tomorrow. Add 24 hours.
+                    if (pubDateUTC.getTime() < now.getTime() - 60_000) {
+                        pubDateUTC = new Date(pubDateUTC.getTime() + 24 * 60 * 60_000);
+                    }
 
                     // --- SCRAPE PHASE (SCRAPE mode only) ---
                     // Window: (Publish - ReviewWindow - 2h) to (Publish - ReviewWindow)
