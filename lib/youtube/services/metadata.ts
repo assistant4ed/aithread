@@ -34,6 +34,14 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         videoUrl,
     ];
 
+    // Optional: Add cookies from browser if YOUTUBE_COOKIES_BROWSER env var is set
+    // Supports: brave, chrome, chromium, edge, firefox, opera, safari, vivaldi
+    const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+    if (cookiesBrowser) {
+        ytdlpArgs.splice(ytdlpArgs.length - 1, 0, '--cookies-from-browser', cookiesBrowser);
+        console.log(`[yt-dlp] Using cookies from browser: ${cookiesBrowser}`);
+    }
+
     // Debug: log the exact command being executed
     console.log('[yt-dlp] Executing command:', 'yt-dlp', ytdlpArgs.join(' '));
 
@@ -58,6 +66,12 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         }
         if (err.stderr?.includes('JavaScript runtime')) {
             throw new Error(`yt-dlp requires JavaScript runtime - ensure Node.js is available in PATH. Error: ${err.stderr}`);
+        }
+        if (err.stderr?.includes('Sign in to confirm') || err.stderr?.includes('not a bot')) {
+            throw new Error(`VIDEO_REQUIRES_AUTH: This video requires authentication or cookies. YouTube's bot detection is blocking access. Try a different, more popular video.`);
+        }
+        if (err.stderr?.includes('age')) {
+            throw new Error(`VIDEO_AGE_RESTRICTED: This video is age-restricted and requires authentication.`);
         }
         throw new Error(`yt-dlp metadata failed: ${err.stderr || err.message}`);
     }
