@@ -6,6 +6,40 @@ export default function YouTubeCookiesPage() {
     const [cookies, setCookies] = useState("");
     const [status, setStatus] = useState<{ type: "success" | "error" | "info", message: string } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isTesting, setIsTesting] = useState(false);
+
+    const handleTest = async () => {
+        if (!cookies.trim()) {
+            setStatus({ type: "error", message: "Please paste the cookies first" });
+            return;
+        }
+
+        setIsTesting(true);
+        setStatus({ type: "info", message: "🧪 Testing cookies with a real YouTube video... This may take 20-30 seconds." });
+
+        try {
+            const response = await fetch("/api/admin/youtube-cookies/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cookies: cookies.trim() })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setStatus({
+                    type: "success",
+                    message: `${data.message}\n\nTest video: ${data.testVideo.title} by ${data.testVideo.channel}\n\nYou can now click "Save & Deploy" to use these cookies in production!`
+                });
+            } else {
+                setStatus({ type: "error", message: data.error });
+            }
+        } catch (error) {
+            setStatus({ type: "error", message: "Network error during test - please try again" });
+        } finally {
+            setIsTesting(false);
+        }
+    };
 
     const handleSave = async () => {
         if (!cookies.trim()) {
@@ -146,13 +180,27 @@ export default function YouTubeCookiesPage() {
                         The cookies should start with "# Netscape HTTP Cookie File" and contain youtube.com entries
                     </p>
 
-                    <button
-                        onClick={handleSave}
-                        disabled={isLoading || !cookies.trim()}
-                        className="mt-4 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {isLoading ? "Saving..." : "Save Cookies"}
-                    </button>
+                    <div className="mt-4 flex gap-3">
+                        <button
+                            onClick={handleTest}
+                            disabled={isTesting || isLoading || !cookies.trim()}
+                            className="px-6 py-3 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {isTesting ? "Testing..." : "🧪 Test Cookies First"}
+                        </button>
+
+                        <button
+                            onClick={handleSave}
+                            disabled={isLoading || isTesting || !cookies.trim()}
+                            className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {isLoading ? "Deploying..." : "✅ Save & Deploy to Azure"}
+                        </button>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mt-3">
+                        💡 Tip: Test your cookies first to make sure they work before deploying
+                    </p>
                 </div>
 
                 {/* Info Box */}
