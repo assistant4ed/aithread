@@ -27,17 +27,41 @@ export async function whisperStrategy(
     try {
         await fs.mkdir(TMP_DIR, { recursive: true });
 
-        // Quality 9 = lowest (VBR ~60kbps) — good enough for Whisper, small file
-        await execFileAsync('yt-dlp', [
+        // Build yt-dlp arguments with cookie and runtime support
+        const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
+        const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+        const hasCookies = !!(cookiesFile || cookiesBrowser);
+
+        const ytdlpArgs = [
             '--extract-audio',
             '--audio-format', 'mp3',
-            '--audio-quality', '9',
+            '--audio-quality', '9', // lowest quality (VBR ~60kbps) — good enough for Whisper
             '--no-playlist',
+            '--js-runtimes', 'node', // Use Node.js for JavaScript execution
             '--output', audioPath,
-            `https://www.youtube.com/watch?v=${videoId}`,
-        ], {
+        ];
+
+        // Add cookies if available
+        if (cookiesFile) {
+            ytdlpArgs.push('--cookies', cookiesFile);
+        } else if (cookiesBrowser) {
+            ytdlpArgs.push('--cookies-from-browser', cookiesBrowser);
+        }
+
+        // Add user-agent for authenticated requests
+        if (hasCookies) {
+            ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36');
+        }
+
+        ytdlpArgs.push(`https://www.youtube.com/watch?v=${videoId}`);
+
+        await execFileAsync('yt-dlp', ytdlpArgs, {
             timeout: 300_000,
-            env: { ...process.env, PATH: `/home/linuxbrew/.linuxbrew/bin:${process.env.PATH}` }
+            env: {
+                ...process.env,
+                PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}`,
+                NODE_PATH: process.execPath,
+            }
         });
 
         const stat = await fs.stat(audioPath);
