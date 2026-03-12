@@ -30,6 +30,9 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# Ensure Node.js is in PATH for yt-dlp JavaScript runtime
+ENV PATH="/usr/local/bin:$PATH"
+
 WORKDIR /app
 
 # Enable pnpm

@@ -25,22 +25,30 @@ interface YtDlpInfo {
 export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> {
     let stdout: string;
 
-    const ytdlpArgs = [
-        '--dump-json',          // output JSON and exit, no download
-        '--no-playlist',        // if URL is a playlist, only process first video
-        '--socket-timeout', '30',
-        // Try multiple player clients for better success rate
-        // Priority: ios > android > web (ios has best bypass currently)
-        '--extractor-args', 'youtube:player_client=ios,android,web',
-        '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-    ];
-
     // YouTube now requires cookies for most videos (bot detection update Oct 2025+)
     // Support two methods:
     // 1. YOUTUBE_COOKIES_FILE - path to Netscape cookies.txt file (recommended for servers)
     // 2. YOUTUBE_COOKIES_BROWSER - browser name for --cookies-from-browser (local dev only)
     const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
     const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+    const hasCookies = !!(cookiesFile || cookiesBrowser);
+
+    const ytdlpArgs = [
+        '--dump-json',          // output JSON and exit, no download
+        '--no-playlist',        // if URL is a playlist, only process first video
+        '--socket-timeout', '30',
+    ];
+
+    // Player client strategy depends on whether we have cookies
+    if (hasCookies) {
+        // When using cookies, use web client (ios/android don't support cookies)
+        ytdlpArgs.push('--extractor-args', 'youtube:player_client=web');
+        ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+    } else {
+        // Without cookies, try iOS client for better bot bypass
+        ytdlpArgs.push('--extractor-args', 'youtube:player_client=ios,android,web');
+        ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
+    }
 
     if (cookiesFile) {
         ytdlpArgs.push('--cookies', cookiesFile);
