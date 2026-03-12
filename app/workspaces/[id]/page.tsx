@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import WorkspaceActions from "./actions";
 import AutoRefresh from "@/components/AutoRefresh";
+import GenerationStatusIndicator from "@/components/GenerationStatusIndicator";
 import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,11 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                 <MiniStat label="Published" value={publishedCount} color="text-success" />
                 <MiniStat label="Errors" value={errorCount} color="text-danger" />
             </div>
+
+            {/* Generation Status (for non-SCRAPE modes) */}
+            {workspace.contentMode && workspace.contentMode !== "SCRAPE" && (
+                <GenerationStatusIndicator workspaceId={id} />
+            )}
 
             {/* Pipeline Status */}
             {(!workspace.contentMode || workspace.contentMode === "SCRAPE") && (
