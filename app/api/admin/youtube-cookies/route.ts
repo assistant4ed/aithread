@@ -104,24 +104,22 @@ export async function POST(req: NextRequest) {
             const workerConfig = await getResponse.json();
             console.log("[YouTube Cookies] ✅ Got worker configuration");
 
-            // Step 3: Update secrets
-            // IMPORTANT: Preserve existing secrets structure (some use keyVaultUrl, some use value)
-            const secrets = workerConfig.properties.configuration.secrets || [];
-            const existingSecretIndex = secrets.findIndex((s: any) => s.name === "youtube-cookies");
+            // Step 3: Update ONLY the secrets and environment variables we care about
+            // CRITICAL: Don't touch other secrets like ACR credentials - only filter and send back secrets with 'value' field
+            const existingSecrets = workerConfig.properties.configuration.secrets || [];
 
+            // Keep only value-based secrets (not Key Vault or managed identity secrets)
+            const valueSecrets = existingSecrets.filter((s: any) => s.value !== undefined);
+
+            // Update or add youtube-cookies secret
+            const existingSecretIndex = valueSecrets.findIndex((s: any) => s.name === "youtube-cookies");
             if (existingSecretIndex >= 0) {
-                // Update existing youtube-cookies secret, preserving any other fields
-                secrets[existingSecretIndex] = {
-                    ...secrets[existingSecretIndex],
-                    name: "youtube-cookies",
-                    value: cookiesBase64
-                };
+                valueSecrets[existingSecretIndex].value = cookiesBase64;
             } else {
-                // Add new youtube-cookies secret
-                secrets.push({ name: "youtube-cookies", value: cookiesBase64 });
+                valueSecrets.push({ name: "youtube-cookies", value: cookiesBase64 });
             }
 
-            console.log(`[YouTube Cookies] Secrets in configuration: ${secrets.map((s: any) => s.name).join(", ")}`)
+            console.log(`[YouTube Cookies] Value-based secrets to update: ${valueSecrets.map((s: any) => s.name).join(", ")}`);
 
             // Step 4: Update environment variables
             const envVars = workerConfig.properties.template.containers[0].env || [];
@@ -129,12 +127,13 @@ export async function POST(req: NextRequest) {
 
             if (existingEnvIndex >= 0) {
                 envVars[existingEnvIndex].secretRef = "youtube-cookies";
-                delete envVars[existingEnvIndex].value; // Remove value if it was set directly
+                delete envVars[existingEnvIndex].value;
             } else {
                 envVars.push({ name: "YOUTUBE_COOKIES_BASE64", secretRef: "youtube-cookies" });
             }
 
-            workerConfig.properties.configuration.secrets = secrets;
+            // Build update payload with ONLY value-based secrets
+            workerConfig.properties.configuration.secrets = valueSecrets;
             workerConfig.properties.template.containers[0].env = envVars;
 
             // Step 5: Apply update
