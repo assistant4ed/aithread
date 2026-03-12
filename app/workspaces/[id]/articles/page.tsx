@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 
 interface SynthesizedArticle {
@@ -36,10 +36,12 @@ const STATUS_TABS = ["ALL", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "ERROR"] 
 
 export default function ArticlesPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const workspaceId = params.id as string;
     const [articles, setArticles] = useState<SynthesizedArticle[]>([]);
     const [total, setTotal] = useState(0);
-    const [activeTab, setActiveTab] = useState<string>("PENDING_REVIEW");
+    // Initialize activeTab from URL params or default to PENDING_REVIEW
+    const [activeTab, setActiveTab] = useState<string>(searchParams.get("status") || "PENDING_REVIEW");
     const [loading, setLoading] = useState(true);
     const [uploadingId, setUploadingId] = useState<string | null>(null);
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import WorkspaceActions from "./actions";
 import AutoRefresh from "@/components/AutoRefresh";
 import GenerationStatusIndicator from "@/components/GenerationStatusIndicator";
+import DailyProgressCard from "@/components/DailyProgressCard";
 import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,22 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
         PUBLISH: pipelineRuns.find((r: any) => r.step === "PUBLISH"),
     };
 
+    // Calculate next publish time
+    const getNextPublishTime = () => {
+        const now = new Date();
+        const currentHKTime = now.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Asia/Hong_Kong"
+        });
+
+        const publishTimes = workspace.publishTimes || ["12:00", "18:00", "22:00"];
+        const nextTime = publishTimes.find((time: string) => time > currentHKTime);
+        return nextTime || publishTimes[0]; // Return first time if past all today's times
+    };
+
+    const nextPublishTime = getNextPublishTime();
+
     return (
         <div className="space-y-8 animate-fade-in">
             <AutoRefresh intervalMs={latestRuns.SCRAPE?.status === "RUNNING" ? 10000 : 60000} />
@@ -102,12 +119,43 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <MiniStat label="Pending" value={pendingCount} color="text-warning" />
-                <MiniStat label="Approved" value={approvedCount} color="text-accent" />
-                <MiniStat label="Published" value={publishedCount} color="text-success" />
-                <MiniStat label="Errors" value={errorCount} color="text-danger" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <MiniStat
+                    label="Pending"
+                    value={pendingCount}
+                    color="text-warning"
+                    icon="⏳"
+                    href={`/workspaces/${id}/articles?status=PENDING_REVIEW`}
+                />
+                <MiniStat
+                    label="Approved"
+                    value={approvedCount}
+                    color="text-accent"
+                    icon="✓"
+                    href={`/workspaces/${id}/articles?status=APPROVED`}
+                />
+                <MiniStat
+                    label="Published"
+                    value={publishedCount}
+                    color="text-success"
+                    icon="🚀"
+                    href={`/workspaces/${id}/articles?status=PUBLISHED`}
+                />
+                <MiniStat
+                    label="Errors"
+                    value={errorCount}
+                    color="text-danger"
+                    icon="❌"
+                    href={`/workspaces/${id}/articles?status=ERROR`}
+                />
             </div>
+
+            {/* Daily Progress Card */}
+            <DailyProgressCard
+                publishedCount={publishedCount}
+                dailyLimit={workspace.dailyPostLimit}
+                nextPublishTime={nextPublishTime}
+            />
 
             {/* Generation Status (for non-SCRAPE modes) */}
             {workspace.contentMode && workspace.contentMode !== "SCRAPE" && (
@@ -210,6 +258,28 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                                 </div>
                             </>
                         )}
+                        <div className="flex justify-between">
+                            <dt className="text-muted">Daily Post Limit</dt>
+                            <dd className="font-mono">
+                                <span className="text-accent font-bold">{workspace.dailyPostLimit}</span>
+                                <span className="text-muted text-xs ml-1">per day</span>
+                            </dd>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <dt className="text-muted">Today's Progress</dt>
+                            <dd className="flex items-center gap-2">
+                                <span className="font-mono text-xs">
+                                    <span className="text-success font-bold">{publishedCount}</span>
+                                    <span className="text-muted">/{workspace.dailyPostLimit}</span>
+                                </span>
+                                <div className="w-16 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-success rounded-full transition-all duration-300"
+                                        style={{ width: `${Math.min(100, (publishedCount / workspace.dailyPostLimit) * 100)}%` }}
+                                    />
+                                </div>
+                            </dd>
+                        </div>
                         <div className="flex justify-between">
                             <dt className="text-muted">Publish Schedule</dt>
                             <dd className="font-mono text-right">
@@ -463,11 +533,31 @@ function formatRelativeTime(date: Date) {
     return date.toLocaleDateString();
 }
 
-function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
+function MiniStat({ label, value, color, icon, href }: { label: string; value: number; color: string; icon?: string; href?: string }) {
+    const content = (
+        <>
+            <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-muted font-medium">{label}</p>
+                {icon && <span className="text-lg opacity-60">{icon}</span>}
+            </div>
+            <p className={`text-3xl font-bold ${color} transition-all`}>{value}</p>
+        </>
+    );
+
+    if (href) {
+        return (
+            <Link
+                href={href}
+                className="block border border-border rounded-lg p-4 bg-surface hover:bg-surface-hover hover:border-accent/50 hover:scale-[1.02] transition-all duration-200 cursor-pointer group"
+            >
+                {content}
+            </Link>
+        );
+    }
+
     return (
-        <div className="border border-border rounded-lg p-3 bg-surface">
-            <p className="text-xs text-muted">{label}</p>
-            <p className={`text-xl font-bold ${color}`}>{value}</p>
+        <div className="border border-border rounded-lg p-4 bg-surface">
+            {content}
         </div>
     );
 }
