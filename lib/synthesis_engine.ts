@@ -64,13 +64,21 @@ export function getWorkspaceProvider(settings?: SynthesisSettings, modelOverride
         apiKey: settings?.aiApiKey || undefined,
     });
 
-    // Build fallback chain: Primary → GROQ (if not already) → Gemini (geo-safe)
+    // Build fallback chain: Primary → GROQ → OpenRouter → Gemini (multi-provider reliability)
     const fallbacks: import("./ai/provider").AIProvider[] = [primary];
 
     if (primaryProviderName !== "GROQ") {
         fallbacks.push(getProvider({
             provider: "GROQ",
             model: "llama-3.3-70b-versatile",
+        }));
+    }
+
+    // Add OpenRouter as reliable fallback #1 (handles GROQ rate limits)
+    if (primaryProviderName !== "OPENROUTER") {
+        fallbacks.push(getProvider({
+            provider: "OPENROUTER",
+            model: "qwen/qwen-2.5-72b-instruct",  // Reliable model with good availability
         }));
     }
 
