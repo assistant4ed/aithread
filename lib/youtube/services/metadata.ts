@@ -29,8 +29,10 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         '--dump-json',          // output JSON and exit, no download
         '--no-playlist',        // if URL is a playlist, only process first video
         '--socket-timeout', '30',
-        '--extractor-args', 'youtube:player_client=web,android',
-        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        // Try multiple player clients for better success rate
+        // Priority: ios > android > web (ios has best bypass currently)
+        '--extractor-args', 'youtube:player_client=ios,android,web',
+        '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         videoUrl,
     ];
 

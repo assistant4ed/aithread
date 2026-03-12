@@ -26,8 +26,8 @@ export async function ytdlpVttStrategy(
             '--sub-format', 'vtt/srt',
             '--skip-download',
             '--no-playlist',
-            '--extractor-args', 'youtube:player_client=web,android',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            '--extractor-args', 'youtube:player_client=ios,android,web',
+            '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
             '--output', outputTemplate,
             `https://www.youtube.com/watch?v=${videoId}`,
         ], {
@@ -43,8 +43,8 @@ export async function ytdlpVttStrategy(
             '--sub-format', 'vtt/srt',
             '--skip-download',
             '--no-playlist',
-            '--extractor-args', 'youtube:player_client=web,android',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            '--extractor-args', 'youtube:player_client=ios,android,web',
+            '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
             '--output', outputTemplate,
             `https://www.youtube.com/watch?v=${videoId}`,
         ], {
