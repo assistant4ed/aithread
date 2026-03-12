@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { tavilySearch } from "./tavily_client";
 import { getWorkspaceProvider, translateText, synthesizeCluster, checkAutoApproval } from "./synthesis_engine";
 import { POST_FORMATS } from "./postFormats";
+import { startGeneration, updateProgress, completeGeneration, failGeneration } from "./generation_tracker";
 
 /**
  * Content Generation Modes — Backend Logic
@@ -95,9 +96,17 @@ async function pickFormat(workspace: WorkspaceWithMode): Promise<string> {
 /**
  * Generate content inspired by a reference workspace's recent articles.
  */
-export async function generateReferenceContent(workspace: WorkspaceWithMode, topic?: string): Promise<{ success: boolean; article?: any; error?: string }> {
+export async function generateReferenceContent(workspace: WorkspaceWithMode, topic?: string, runId?: string): Promise<{ success: boolean; article?: any; error?: string }> {
     if (!workspace.referenceWorkspaceId) {
         return { success: false, error: "No reference workspace configured." };
+    }
+
+    if (runId) {
+        await updateProgress(runId, {
+            status: "DISCOVERING",
+            currentStep: 1,
+            progress: 10
+        });
     }
 
     // Fetch recent published articles from the reference workspace
@@ -233,8 +242,17 @@ ${format.id === 'THREAD_STORM' ? '- Use 1/, 2/, 3/ format for thread numbering' 
 /**
  * Search web (Tavily primary + optional NewsAPI) and generate content.
  */
-export async function generateSearchContent(workspace: WorkspaceWithMode, topic: string): Promise<{ success: boolean; article?: any; error?: string }> {
+export async function generateSearchContent(workspace: WorkspaceWithMode, topic: string, runId?: string): Promise<{ success: boolean; article?: any; error?: string }> {
     if (!topic) return { success: false, error: "Topic is required for SEARCH mode." };
+
+    if (runId) {
+        await updateProgress(runId, {
+            status: "SYNTHESIZING",
+            currentStep: 2,
+            progress: 40,
+            currentTopic: topic
+        });
+    }
 
     const provider = getWorkspaceProvider(workspace as any);
     const formatId = await pickFormat(workspace);
@@ -392,10 +410,18 @@ ${searchContext.slice(0, 15000)}`;
 /**
  * Generate N variations of content for each base topic.
  */
-export async function generateVariations(workspace: WorkspaceWithMode, specificTopic?: string): Promise<{ success: boolean; articles?: any[]; error?: string }> {
+export async function generateVariations(workspace: WorkspaceWithMode, specificTopic?: string, runId?: string): Promise<{ success: boolean; articles?: any[]; error?: string }> {
     const topics = specificTopic ? [specificTopic] : workspace.variationBaseTopics;
     if (!topics || topics.length === 0) {
         return { success: false, error: "No base topics configured for VARIATIONS mode." };
+    }
+
+    if (runId) {
+        await updateProgress(runId, {
+            status: "SYNTHESIZING",
+            currentStep: 1,
+            progress: 20
+        });
     }
 
     const provider = getWorkspaceProvider(workspace as any);
@@ -523,38 +549,67 @@ export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode):
         return { success: false, error: "No niche description configured for AUTO_DISCOVER mode." };
     }
 
-    const provider = getWorkspaceProvider(workspace as any);
+    // Start tracking (5 steps: discover, generate queries, search, synthesize, translate)
+    const runId = await startGeneration(workspace.id, 5);
 
-    // Step 1: Use Tavily to discover trending topics in the niche
-    const tavilyKey = process.env.TAVILY_API_KEY;
-    let discoveredTopics: { topic: string; signal: string; relevance: number }[] = [];
+    try {
+        await updateProgress(runId, {
+            status: "DISCOVERING",
+            currentStep: 1,
+            progress: 0,
+            metadata: { niche: workspace.autoDiscoverNiche }
+        });
 
-    if (tavilyKey) {
-        try {
-            const trendResults = await tavilySearch(tavilyKey, `Latest trending topics in ${workspace.autoDiscoverNiche} last 48 hours`, {
-                searchDepth: "advanced",
-                includeAnswers: true,
-                maxResults: 10,
+        const provider = getWorkspaceProvider(workspace as any);
+
+        // Step 1: Use Tavily to discover trending topics in the niche
+        const tavilyKey = process.env.TAVILY_API_KEY;
+        let discoveredTopics: { topic: string; signal: string; relevance: number }[] = [];
+
+        if (tavilyKey) {
+            try {
+                await updateProgress(runId, {
+                    currentStep: 1,
+                    progress: 10,
+                    metadata: { stage: "Searching Tavily for trending topics..." }
+                });
+
+                const trendResults = await tavilySearch(tavilyKey, `Latest trending topics in ${workspace.autoDiscoverNiche} last 48 hours`, {
+                    searchDepth: "advanced",
+                    includeAnswers: true,
+                    maxResults: 10,
+                });
+
+                if (trendResults.results?.length) {
+                    // Extract topics from Tavily results
+                    for (const result of trendResults.results.slice(0, 8)) {
+                        discoveredTopics.push({
+                            topic: result.title,
+                            signal: result.content.slice(0, 200),
+                            relevance: result.score || 0.5
+                        });
+                    }
+                }
+
+                await updateProgress(runId, {
+                    progress: 20,
+                    metadata: { topicsFound: discoveredTopics.length }
+                });
+            } catch (e: any) {
+                console.warn("[ContentModes/AUTO_DISCOVER] Tavily discovery failed:", e.message);
+            }
+        }
+
+        // Step 2: If Tavily didn't find enough, use AI to generate queries
+        if (discoveredTopics.length < 3) {
+            await updateProgress(runId, {
+                status: "SYNTHESIZING",
+                currentStep: 2,
+                progress: 30,
+                metadata: { stage: "Generating additional trending queries with AI..." }
             });
 
-            if (trendResults.results?.length) {
-                // Extract topics from Tavily results
-                for (const result of trendResults.results.slice(0, 8)) {
-                    discoveredTopics.push({
-                        topic: result.title,
-                        signal: result.content.slice(0, 200),
-                        relevance: result.score || 0.5
-                    });
-                }
-            }
-        } catch (e: any) {
-            console.warn("[ContentModes/AUTO_DISCOVER] Tavily discovery failed:", e.message);
-        }
-    }
-
-    // Step 2: If Tavily didn't find enough, use AI to generate queries
-    if (discoveredTopics.length < 3) {
-        const discoveryPrompt = `You are a social media trend analyst specializing in "${workspace.autoDiscoverNiche}".
+            const discoveryPrompt = `You are a social media trend analyst specializing in "${workspace.autoDiscoverNiche}".
 
 Today is ${new Date().toLocaleDateString()}. Generate 5 specific, trending search queries that would find the most viral/newsworthy content happening RIGHT NOW in this niche.
 
@@ -569,70 +624,97 @@ Output JSON: { "queries": ["specific query 1", "specific query 2", ...] }
 Each query should be specific enough to find real, recent content.
 JSON ONLY.`;
 
-        let queries: string[] = [];
-        try {
-            const raw = await provider.createChatCompletion([
-                { role: "system", content: "You are a trend research assistant. Output valid JSON." },
-                { role: "user", content: discoveryPrompt }
-            ], {
-                model: workspace.aiModel,
-                temperature: 0.7,
-                response_format: { type: "json_object" }
-            });
+            let queries: string[] = [];
+            try {
+                const raw = await provider.createChatCompletion([
+                    { role: "system", content: "You are a trend research assistant. Output valid JSON." },
+                    { role: "user", content: discoveryPrompt }
+                ], {
+                    model: workspace.aiModel,
+                    temperature: 0.7,
+                    response_format: { type: "json_object" }
+                });
 
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                queries = parsed.queries || [];
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    queries = parsed.queries || [];
+                }
+            } catch (e: any) {
+                console.warn("[ContentModes/AUTO_DISCOVER] Query generation failed:", e.message);
             }
-        } catch (e: any) {
-            console.warn("[ContentModes/AUTO_DISCOVER] Query generation failed:", e.message);
+
+            // Convert queries to topics
+            for (const query of queries.slice(0, 5 - discoveredTopics.length)) {
+                discoveredTopics.push({
+                    topic: query,
+                    signal: "AI-suggested trending query",
+                    relevance: 0.6
+                });
+            }
         }
 
-        // Convert queries to topics
-        for (const query of queries.slice(0, 5 - discoveredTopics.length)) {
+        if (discoveredTopics.length === 0) {
+            // Ultimate fallback: use the niche description directly
             discoveredTopics.push({
-                topic: query,
-                signal: "AI-suggested trending query",
-                relevance: 0.6
+                topic: workspace.autoDiscoverNiche,
+                signal: "Fallback to niche description",
+                relevance: 0.5
             });
         }
-    }
 
-    if (discoveredTopics.length === 0) {
-        // Ultimate fallback: use the niche description directly
-        discoveredTopics.push({
-            topic: workspace.autoDiscoverNiche,
-            signal: "Fallback to niche description",
-            relevance: 0.5
+        // Step 3: Sort by relevance and generate articles for top topics
+        discoveredTopics.sort((a, b) => b.relevance - a.relevance);
+        const allArticles: any[] = [];
+        const maxArticles = 5; // Increased from 3 to 5
+
+        await updateProgress(runId, {
+            currentStep: 3,
+            progress: 40,
+            metadata: { topicsToGenerate: Math.min(discoveredTopics.length, maxArticles) }
         });
-    }
 
-    // Step 3: Sort by relevance and generate articles for top topics
-    discoveredTopics.sort((a, b) => b.relevance - a.relevance);
-    const allArticles: any[] = [];
-    const maxArticles = 5; // Increased from 3 to 5
+        console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating up to ${maxArticles} articles`);
 
-    console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating up to ${maxArticles} articles`);
+        let topicIndex = 0;
+        const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8));
 
-    for (const { topic } of discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8))) {
-        if (allArticles.length >= maxArticles) break;
+        for (const { topic } of topicsToProcess) {
+            if (allArticles.length >= maxArticles) break;
 
-        console.log(`[ContentModes/AUTO_DISCOVER] Generating article for: "${topic}"`);
-        const result = await generateSearchContent(workspace, topic);
-        if (result.success && result.article) {
-            allArticles.push(result.article);
+            topicIndex++;
+            const progressPct = 40 + Math.floor((topicIndex / topicsToProcess.length) * 50);
+
+            await updateProgress(runId, {
+                status: "SYNTHESIZING",
+                currentStep: 3 + topicIndex,
+                progress: progressPct,
+                currentTopic: topic,
+                articlesCreated: allArticles.length
+            });
+
+            console.log(`[ContentModes/AUTO_DISCOVER] Generating article ${topicIndex}/${topicsToProcess.length}: "${topic}"`);
+            const result = await generateSearchContent(workspace, topic);
+            if (result.success && result.article) {
+                allArticles.push(result.article);
+            }
+
+            // Small delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        // Small delay to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
+        if (allArticles.length === 0) {
+            await failGeneration(runId, "Could not discover and generate any content for this niche.");
+            return { success: false, error: "Could not discover and generate any content for this niche. Try adjusting your niche description to be more specific." };
+        }
 
-    if (allArticles.length === 0) {
-        return { success: false, error: "Could not discover and generate any content for this niche. Try adjusting your niche description to be more specific." };
-    }
+        await completeGeneration(runId, allArticles.length);
+        console.log(`[ContentModes/AUTO_DISCOVER] Successfully generated ${allArticles.length} articles`);
+        return { success: true, articles: allArticles };
 
-    console.log(`[ContentModes/AUTO_DISCOVER] Successfully generated ${allArticles.length} articles`);
-    return { success: true, articles: allArticles };
+    } catch (error: any) {
+        await failGeneration(runId, error.message || String(error));
+        throw error;
+    }
 }
 
 // ─── Mode Router ────────────────────────────────────────────────────────────
@@ -652,24 +734,52 @@ export async function generateByMode(workspaceId: string, topic?: string): Promi
     console.log(`[ContentModes] Generating for workspace "${workspace.name}" in mode: ${ws.contentMode}`);
     console.log(`[ContentModes] AI Config: provider=${ws.aiProvider}, model=${ws.aiModel}, hasApiKey=${!!ws.aiApiKey}`);
 
-    switch (ws.contentMode) {
-        case "REFERENCE":
-            return generateReferenceContent(ws, topic);
+    // AUTO_DISCOVER has its own internal tracking
+    if (ws.contentMode === "AUTO_DISCOVER") {
+        return generateAutoDiscoverContent(ws);
+    }
 
-        case "SEARCH":
-            if (!topic) return { success: false, error: "Topic is required for SEARCH mode." };
-            return generateSearchContent(ws, topic);
+    // For other modes, wrap with tracking
+    const runId = await startGeneration(workspaceId, 3);
 
-        case "VARIATIONS":
-            return generateVariations(ws, topic);
+    try {
+        let result;
 
-        case "AUTO_DISCOVER":
-            return generateAutoDiscoverContent(ws);
+        switch (ws.contentMode) {
+            case "REFERENCE":
+                result = await generateReferenceContent(ws, topic, runId);
+                break;
 
-        case "SCRAPE":
-        default:
-            // For SCRAPE mode, use the original generate-article flow (Tavily-only)
-            if (!topic) return { success: false, error: "Topic is required." };
-            return generateSearchContent(ws, topic);
+            case "SEARCH":
+                if (!topic) return { success: false, error: "Topic is required for SEARCH mode." };
+                result = await generateSearchContent(ws, topic, runId);
+                break;
+
+            case "VARIATIONS":
+                result = await generateVariations(ws, topic, runId);
+                break;
+
+            case "SCRAPE":
+            default:
+                // For SCRAPE mode, use the original generate-article flow (Tavily-only)
+                if (!topic) return { success: false, error: "Topic is required." };
+                result = await generateSearchContent(ws, topic, runId);
+                break;
+        }
+
+        if (result.success) {
+            const count = ('articles' in result && result.articles)
+                ? result.articles.length
+                : ('article' in result && result.article ? 1 : 0);
+            await completeGeneration(runId, count);
+        } else {
+            await failGeneration(runId, result.error || "Unknown error");
+        }
+
+        return result;
+
+    } catch (error: any) {
+        await failGeneration(runId, error.message || String(error));
+        throw error;
     }
 }

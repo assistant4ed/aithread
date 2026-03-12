@@ -49,6 +49,7 @@ model Workspace {
   autoApprovePrompt     String?
   sources               ScraperSource[]
   pipelineRuns          PipelineRun[]
+  generationRuns        GenerationRun[]
 
   // AI Configuration
   aiProvider            String               @default("GROQ")
@@ -257,6 +258,37 @@ enum ContentMode {
   SEARCH
   VARIATIONS
   AUTO_DISCOVER
+}
+
+enum GenerationStatus {
+  DISCOVERING
+  SYNTHESIZING
+  TRANSLATING
+  REVIEWING
+  COMPLETED
+  ERROR
+}
+
+model GenerationRun {
+  id               String           @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  status           GenerationStatus @default(DISCOVERING)
+  currentStep      Int              @default(0)
+  totalSteps       Int              @default(0)
+  currentTopic     String?
+  progress         Int              @default(0) // 0-100
+  articlesCreated  Int              @default(0)
+  startedAt        DateTime         @default(now())
+  completedAt      DateTime?
+  errorMessage     String?
+  metadata         Json?            // Flexible field for additional context
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, startedAt])
 }
 
 model AccountCache {
