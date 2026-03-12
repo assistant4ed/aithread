@@ -37,6 +37,7 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         '--dump-json',          // output JSON and exit, no download
         '--no-playlist',        // if URL is a playlist, only process first video
         '--socket-timeout', '30',
+        '--no-check-certificates', // skip SSL validation issues
     ];
 
     // Player client strategy depends on whether we have cookies
@@ -66,7 +67,14 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
     console.log('[yt-dlp] Executing command:', 'yt-dlp', ytdlpArgs.join(' '));
 
     try {
-        const result = await execFileAsync('yt-dlp', ytdlpArgs);
+        // Ensure Node.js is available in PATH for yt-dlp's JavaScript runtime
+        const env = {
+            ...process.env,
+            PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}`,
+            NODE_PATH: process.execPath, // Explicitly set Node.js binary path
+        };
+
+        const result = await execFileAsync('yt-dlp', ytdlpArgs, { env });
         stdout = result.stdout;
     } catch (err: any) {
         // Enhanced error logging for debugging
