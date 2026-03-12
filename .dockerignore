@@ -17,5 +17,4 @@ yarn-error.log*
 Dockerfile
 Dockerfile.worker
 docker-compose.yml
-scripts
 README.md
