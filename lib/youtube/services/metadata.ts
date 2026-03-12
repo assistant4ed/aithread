@@ -38,16 +38,12 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         '--no-playlist',        // if URL is a playlist, only process first video
         '--socket-timeout', '30',
         '--no-check-certificates', // skip SSL validation issues
-        '--age-limit', '100',   // allow age-restricted content (1-100 years)
     ];
 
     // Player client strategy depends on whether we have cookies
-    // Note: android client can sometimes bypass age restrictions better than web
     if (hasCookies) {
-        // When using cookies, use android client first (sometimes bypasses age gates), then web as fallback
-        // Note: Despite yt-dlp docs saying ios/android don't support cookies, android client with web fallback works
-        ytdlpArgs.push('--extractor-args', 'youtube:player_client=android,web');
-        ytdlpArgs.push('--user-agent', 'com.google.android.youtube/19.02.39 (Linux; U; Android 13) gzip');
+        // With cookies, use default web client (android/ios don't support cookies in yt-dlp)
+        ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36');
     } else {
         // Without cookies, try iOS client for better bot bypass
         ytdlpArgs.push('--extractor-args', 'youtube:player_client=ios,android,web');

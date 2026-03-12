@@ -57,13 +57,11 @@ describe('YouTube Metadata Extraction - Unit Tests', () => {
         expect(result.availableCaptionLanguages).toContain('en');
         expect(result.availableCaptionLanguages).toContain('zh-Hant');
 
-        // Verify yt-dlp was called with correct arguments (android client first for age-restricted content)
+        // Verify yt-dlp was called with correct arguments
         expect(execFile).toHaveBeenCalledWith('yt-dlp', expect.arrayContaining([
             '--dump-json',
             '--no-playlist',
-            '--age-limit', '100',
-            '--extractor-args', 'youtube:player_client=android,web',
-            '--user-agent', expect.stringContaining('android'),
+            '--user-agent', expect.stringContaining('Mozilla'),
             'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
         ]));
     });

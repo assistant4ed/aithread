@@ -27,13 +27,11 @@ export async function ytdlpVttStrategy(
         '--sub-format', 'vtt/srt',
         '--skip-download',
         '--no-playlist',
-        '--age-limit', '100', // allow age-restricted content
     ];
 
-    // Use android client for age-restricted content when cookies are available
+    // With cookies, use default web client (android/ios don't support cookies in yt-dlp)
     if (hasCookies) {
-        commonArgs.push('--extractor-args', 'youtube:player_client=android,web');
-        commonArgs.push('--user-agent', 'com.google.android.youtube/19.02.39 (Linux; U; Android 13) gzip');
+        commonArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36');
     } else {
         commonArgs.push('--extractor-args', 'youtube:player_client=ios,android,web');
         commonArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
