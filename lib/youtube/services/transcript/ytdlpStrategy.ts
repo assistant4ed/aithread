@@ -20,15 +20,24 @@ export async function ytdlpVttStrategy(
     // Build common args with cookie support
     const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
     const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+    const hasCookies = !!(cookiesFile || cookiesBrowser);
 
     const commonArgs = [
         '--sub-langs', langsArg,
         '--sub-format', 'vtt/srt',
         '--skip-download',
         '--no-playlist',
-        '--extractor-args', 'youtube:player_client=ios,android,web',
-        '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        '--age-limit', '100', // allow age-restricted content
     ];
+
+    // Use android client for age-restricted content when cookies are available
+    if (hasCookies) {
+        commonArgs.push('--extractor-args', 'youtube:player_client=android,web');
+        commonArgs.push('--user-agent', 'com.google.android.youtube/19.02.39 (Linux; U; Android 13) gzip');
+    } else {
+        commonArgs.push('--extractor-args', 'youtube:player_client=ios,android,web');
+        commonArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
+    }
 
     if (cookiesFile) {
         commonArgs.push('--cookies', cookiesFile);
@@ -38,6 +47,13 @@ export async function ytdlpVttStrategy(
 
     commonArgs.push('--output', outputTemplate, `https://www.youtube.com/watch?v=${videoId}`);
 
+    // Ensure Node.js is available for yt-dlp's JavaScript runtime
+    const env = {
+        ...process.env,
+        PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}`,
+        NODE_PATH: process.execPath,
+    };
+
     // Try manual subtitles first
     try {
         await execFileAsync('yt-dlp', [
@@ -46,7 +62,7 @@ export async function ytdlpVttStrategy(
             ...commonArgs
         ], {
             timeout: 60_000,
-            env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }
+            env
         });
     } catch {
         // If manual fails, try auto-generated
@@ -56,7 +72,7 @@ export async function ytdlpVttStrategy(
             ...commonArgs
         ], {
             timeout: 60_000,
-            env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }
+            env
         });
     }
 
