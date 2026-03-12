@@ -128,7 +128,7 @@ export async function processScrapeJob(job: Job<ScrapeJobData>) {
         let failedEngagement = 0;
         let unknownFollowers = 0;
 
-        const discoveredAuthors = new Set<string>();
+
 
         for (const post of posts) {
             if (controller.signal.aborted) throw new Error("Job timed out during processing");
@@ -194,10 +194,6 @@ export async function processScrapeJob(job: Job<ScrapeJobData>) {
                 continue;
             }
 
-            // Discovery: Collect author if they passed all filters
-            if (type === 'TOPIC' && post.authorUsername) {
-                discoveredAuthors.add(post.authorUsername);
-            }
 
             newCount++;
             console.log(`[ScrapeWorker]   + New: ${savedPost.threadId} (score: ${savedPost.hotScore})`);
@@ -234,30 +230,6 @@ export async function processScrapeJob(job: Job<ScrapeJobData>) {
             }
         }
 
-        // discovery: Add new accounts as sources
-        if (type === 'TOPIC' && discoveredAuthors.size > 0) {
-            for (const username of discoveredAuthors) {
-                try {
-                    await prisma.scraperSource.upsert({
-                        where: {
-                            workspaceId_type_value: { workspaceId, type: 'ACCOUNT', value: username }
-                        },
-                        update: {},
-                        create: {
-                            workspaceId,
-                            type: 'ACCOUNT',
-                            value: username,
-                            platform: 'THREADS',
-                            isActive: true,
-                            minLikes: 50,
-                            minReplies: 0,
-                            maxAgeHours: 24,
-                            trustWeight: 1.0
-                        }
-                    });
-                } catch (err) { }
-            }
-        }
 
         // structured logging
         if (sourceId) {
