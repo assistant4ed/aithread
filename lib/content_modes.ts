@@ -667,8 +667,12 @@ JSON ONLY.`;
         const allArticles: any[] = [];
         const maxArticles = 5; // Increased from 3 to 5
 
+        const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8));
+
+        // Update totalSteps now that we know how many articles we'll generate
         await updateProgress(runId, {
             currentStep: 3,
+            totalSteps: 3 + topicsToProcess.length, // Discovery (3 steps) + articles
             progress: 40,
             metadata: { topicsToGenerate: Math.min(discoveredTopics.length, maxArticles) }
         });
@@ -676,7 +680,6 @@ JSON ONLY.`;
         console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating up to ${maxArticles} articles`);
 
         let topicIndex = 0;
-        const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8));
 
         for (const { topic } of topicsToProcess) {
             if (allArticles.length >= maxArticles) break;
