@@ -18,9 +18,16 @@ export class FallbackProvider implements AIProvider {
     constructor(private providers: AIProvider[]) { }
 
     async createChatCompletion(messages: AIChatMessage[], options?: AIChatOptions): Promise<string | null> {
-        for (const provider of this.providers) {
+        for (let i = 0; i < this.providers.length; i++) {
+            const provider = this.providers[i];
             try {
-                const result = await provider.createChatCompletion(messages, options);
+                // Only pass model option to the first provider (primary)
+                // Fallback providers use their own default models
+                const providerOptions = i === 0 ? options : {
+                    ...options,
+                    model: undefined  // Let fallback use its own model
+                };
+                const result = await provider.createChatCompletion(messages, providerOptions);
                 if (result) return result;
             } catch (e) {
                 console.error("[FallbackProvider] Step failed:", e);
