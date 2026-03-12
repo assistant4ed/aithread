@@ -33,11 +33,18 @@ export async function POST(req: NextRequest) {
 
         for (const job of pendingJobs) {
             try {
+                // Validate and cast language to expected type
+                const validLanguages = ['zh-HK', 'en', 'zh-TW'] as const;
+                type ValidLanguage = typeof validLanguages[number];
+                const outputLanguage: ValidLanguage = validLanguages.includes(job.language as ValidLanguage)
+                    ? (job.language as ValidLanguage)
+                    : 'en'; // default to English if invalid
+
                 // Add job to BullMQ queue
                 await youtubeQueue.add('process-video', {
                     dbJobId: job.id,
                     videoUrl: job.videoUrl,
-                    outputLanguage: job.language,
+                    outputLanguage,
                     includeFrames: true,
                     requestedBy: job.requestedById
                 });
