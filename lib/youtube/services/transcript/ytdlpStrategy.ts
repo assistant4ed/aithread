@@ -17,19 +17,33 @@ export async function ytdlpVttStrategy(
     const outputTemplate = path.join(TMP_DIR, `${videoId}`);
     const langsArg = [preferredLang, 'en'].join(',');
 
+    // Build common args with cookie support
+    const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
+    const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+
+    const commonArgs = [
+        '--sub-langs', langsArg,
+        '--sub-format', 'vtt/srt',
+        '--skip-download',
+        '--no-playlist',
+        '--extractor-args', 'youtube:player_client=ios,android,web',
+        '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+    ];
+
+    if (cookiesFile) {
+        commonArgs.push('--cookies', cookiesFile);
+    } else if (cookiesBrowser) {
+        commonArgs.push('--cookies-from-browser', cookiesBrowser);
+    }
+
+    commonArgs.push('--output', outputTemplate, `https://www.youtube.com/watch?v=${videoId}`);
+
     // Try manual subtitles first
     try {
         await execFileAsync('yt-dlp', [
             '--write-subs',
             '--no-write-auto-subs',
-            '--sub-langs', langsArg,
-            '--sub-format', 'vtt/srt',
-            '--skip-download',
-            '--no-playlist',
-            '--extractor-args', 'youtube:player_client=ios,android,web',
-            '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-            '--output', outputTemplate,
-            `https://www.youtube.com/watch?v=${videoId}`,
+            ...commonArgs
         ], {
             timeout: 60_000,
             env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }
@@ -39,14 +53,7 @@ export async function ytdlpVttStrategy(
         await execFileAsync('yt-dlp', [
             '--write-auto-subs',
             '--no-write-subs',
-            '--sub-langs', langsArg,
-            '--sub-format', 'vtt/srt',
-            '--skip-download',
-            '--no-playlist',
-            '--extractor-args', 'youtube:player_client=ios,android,web',
-            '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-            '--output', outputTemplate,
-            `https://www.youtube.com/watch?v=${videoId}`,
+            ...commonArgs
         ], {
             timeout: 60_000,
             env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:${process.env.PATH}` }

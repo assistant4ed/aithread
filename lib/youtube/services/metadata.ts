@@ -33,16 +33,26 @@ export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> 
         // Priority: ios > android > web (ios has best bypass currently)
         '--extractor-args', 'youtube:player_client=ios,android,web',
         '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-        videoUrl,
     ];
 
-    // Optional: Add cookies from browser if YOUTUBE_COOKIES_BROWSER env var is set
-    // Supports: brave, chrome, chromium, edge, firefox, opera, safari, vivaldi
+    // YouTube now requires cookies for most videos (bot detection update Oct 2025+)
+    // Support two methods:
+    // 1. YOUTUBE_COOKIES_FILE - path to Netscape cookies.txt file (recommended for servers)
+    // 2. YOUTUBE_COOKIES_BROWSER - browser name for --cookies-from-browser (local dev only)
+    const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
     const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
-    if (cookiesBrowser) {
-        ytdlpArgs.splice(ytdlpArgs.length - 1, 0, '--cookies-from-browser', cookiesBrowser);
+
+    if (cookiesFile) {
+        ytdlpArgs.push('--cookies', cookiesFile);
+        console.log(`[yt-dlp] Using cookies from file: ${cookiesFile}`);
+    } else if (cookiesBrowser) {
+        ytdlpArgs.push('--cookies-from-browser', cookiesBrowser);
         console.log(`[yt-dlp] Using cookies from browser: ${cookiesBrowser}`);
+    } else {
+        console.warn('[yt-dlp] ⚠️  No cookies configured - videos may fail with bot detection. Set YOUTUBE_COOKIES_FILE or YOUTUBE_COOKIES_BROWSER env var.');
     }
+
+    ytdlpArgs.push(videoUrl);
 
     // Debug: log the exact command being executed
     console.log('[yt-dlp] Executing command:', 'yt-dlp', ytdlpArgs.join(' '));
