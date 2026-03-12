@@ -52,12 +52,11 @@ RUN npx prisma generate
 # Clear any tsx/esbuild cache to ensure fresh TypeScript compilation
 RUN rm -rf node_modules/.cache /tmp/* || true
 
-# Copy and set up entrypoint script for YouTube cookies decoding
-COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Set up entrypoint script for YouTube cookies decoding (already copied with COPY . .)
+RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 # Use entrypoint to decode cookies before starting worker
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
 # The specific worker command will be overridden in docker-compose or Azure config
 CMD ["pnpm", "worker:scraper"]
