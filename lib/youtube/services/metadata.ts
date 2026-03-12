@@ -25,15 +25,20 @@ interface YtDlpInfo {
 export async function extractMetadata(videoUrl: string): Promise<VideoMetadata> {
     let stdout: string;
 
+    const ytdlpArgs = [
+        '--dump-json',          // output JSON and exit, no download
+        '--no-playlist',        // if URL is a playlist, only process first video
+        '--socket-timeout', '30',
+        '--extractor-args', 'youtube:player_client=web,android',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        videoUrl,
+    ];
+
+    // Debug: log the exact command being executed
+    console.log('[yt-dlp] Executing command:', 'yt-dlp', ytdlpArgs.join(' '));
+
     try {
-        const result = await execFileAsync('yt-dlp', [
-            '--dump-json',          // output JSON and exit, no download
-            '--no-playlist',        // if URL is a playlist, only process first video
-            '--socket-timeout', '30',
-            '--extractor-args', 'youtube:player_client=web,android',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            videoUrl,
-        ]);
+        const result = await execFileAsync('yt-dlp', ytdlpArgs);
         stdout = result.stdout;
     } catch (err: any) {
         // Enhanced error logging for debugging

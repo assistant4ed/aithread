@@ -49,5 +49,8 @@ COPY . .
 # Generate Prisma Client
 RUN npx prisma generate
 
+# Clear any tsx/esbuild cache to ensure fresh TypeScript compilation
+RUN rm -rf node_modules/.cache /tmp/* || true
+
 # The specific worker command will be overridden in docker-compose or Azure config
 CMD ["pnpm", "worker:scraper"]
