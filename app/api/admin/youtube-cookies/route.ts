@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 /**
  * POST /api/admin/youtube-cookies
  *
- * Saves YouTube cookies to database for yt-dlp to bypass bot detection.
- * Cookies are base64 encoded for safe storage.
+ * Saves YouTube cookies to Azure Container App secrets via REST API.
+ * Fully automatic - no terminal commands needed!
  */
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -39,85 +39,128 @@ export async function POST(req: NextRequest) {
         // Base64 encode for safe storage (handles multiline, special characters)
         const cookiesBase64 = Buffer.from(cookies).toString("base64");
 
-        // Store in database (using a simple key-value config table)
-        // First, check if we have a Config model, if not we'll use a different approach
-
-        // For now, let's store it in a simple way using Prisma's raw query or create a Config table
-        // Since we don't have a Config model, let's store it as an environment variable approach
-        // by updating it in Azure directly
-
         console.log("[YouTube Cookies] Received cookies, length:", cookies.length);
         console.log("[YouTube Cookies] Base64 encoded, length:", cookiesBase64.length);
-        console.log("[YouTube Cookies] Contains youtube.com entries:", cookies.includes("youtube.com"));
-        console.log("[YouTube Cookies] Has session cookies:", hasSessionCookies);
 
-        // Automatically update Azure Container App secrets
-        const { execFile } = require("child_process");
-        const { promisify } = require("util");
-        const execFileAsync = promisify(execFile);
+        // Get Azure credentials from environment
+        const AZURE_SUBSCRIPTION_ID = process.env.AZURE_SUBSCRIPTION_ID;
+        const AZURE_CREDENTIALS = process.env.AZURE_CREDENTIALS;
+
+        if (!AZURE_CREDENTIALS || !AZURE_SUBSCRIPTION_ID) {
+            // No Azure credentials - provide manual commands
+            console.log("[YouTube Cookies] No Azure credentials found - returning manual commands");
+            return NextResponse.json({
+                success: true,
+                deployed: false,
+                message: "✅ Cookies validated! Copy and run these commands in your terminal:",
+                commands: [
+                    `az containerapp secret set --name worker-youtube-sg --resource-group john-threads --secrets "youtube-cookies=${cookiesBase64}"`,
+                    `az containerapp update --name worker-youtube-sg --resource-group john-threads --set-env-vars "YOUTUBE_COOKIES_BASE64=secretref:youtube-cookies"`
+                ]
+            });
+        }
 
         try {
-            // Step 1: Set the secret in Azure
-            console.log("[YouTube Cookies] Setting Azure Container App secret...");
-            await execFileAsync("az", [
-                "containerapp", "secret", "set",
-                "--name", "worker-youtube-sg",
-                "--resource-group", "john-threads",
-                "--secrets", `youtube-cookies=${cookiesBase64}`
-            ]);
+            // Parse Azure credentials
+            const creds = JSON.parse(AZURE_CREDENTIALS);
+            const { clientId, clientSecret, tenantId } = creds;
 
-            // Step 2: Update environment variable to use the secret
-            console.log("[YouTube Cookies] Updating environment variable...");
-            await execFileAsync("az", [
-                "containerapp", "update",
-                "--name", "worker-youtube-sg",
-                "--resource-group", "john-threads",
-                "--set-env-vars", "YOUTUBE_COOKIES_BASE64=secretref:youtube-cookies"
-            ]);
+            console.log("[YouTube Cookies] Using Azure REST API to deploy...");
 
-            // Step 3: Also update the web container for local testing via API
-            console.log("[YouTube Cookies] Updating web container...");
-            await execFileAsync("az", [
-                "containerapp", "update",
-                "--name", "web-sg",
-                "--resource-group", "john-threads",
-                "--set-env-vars", "YOUTUBE_COOKIES_BASE64=secretref:youtube-cookies"
-            ]);
+            // Step 1: Get access token
+            const tokenResponse = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    scope: "https://management.azure.com/.default",
+                    grant_type: "client_credentials"
+                })
+            });
 
-            // Step 4: Set the same secret for web container
-            await execFileAsync("az", [
-                "containerapp", "secret", "set",
-                "--name", "web-sg",
-                "--resource-group", "john-threads",
-                "--secrets", `youtube-cookies=${cookiesBase64}`
-            ]);
+            if (!tokenResponse.ok) {
+                throw new Error(`Failed to get Azure token: ${await tokenResponse.text()}`);
+            }
 
-            console.log("[YouTube Cookies] ✅ All containers updated successfully!");
+            const { access_token } = await tokenResponse.json();
+            console.log("[YouTube Cookies] ✅ Got Azure access token");
+
+            // Step 2: Get current worker configuration
+            const workerApiUrl = `https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/john-threads/providers/Microsoft.App/containerApps/worker-youtube-sg?api-version=2023-05-01`;
+
+            const getResponse = await fetch(workerApiUrl, {
+                headers: { "Authorization": `Bearer ${access_token}` }
+            });
+
+            if (!getResponse.ok) {
+                throw new Error(`Failed to get worker config: ${await getResponse.text()}`);
+            }
+
+            const workerConfig = await getResponse.json();
+            console.log("[YouTube Cookies] ✅ Got worker configuration");
+
+            // Step 3: Update secrets
+            const secrets = workerConfig.properties.configuration.secrets || [];
+            const existingSecretIndex = secrets.findIndex((s: any) => s.name === "youtube-cookies");
+
+            if (existingSecretIndex >= 0) {
+                secrets[existingSecretIndex].value = cookiesBase64;
+            } else {
+                secrets.push({ name: "youtube-cookies", value: cookiesBase64 });
+            }
+
+            // Step 4: Update environment variables
+            const envVars = workerConfig.properties.template.containers[0].env || [];
+            const existingEnvIndex = envVars.findIndex((e: any) => e.name === "YOUTUBE_COOKIES_BASE64");
+
+            if (existingEnvIndex >= 0) {
+                envVars[existingEnvIndex].secretRef = "youtube-cookies";
+                delete envVars[existingEnvIndex].value; // Remove value if it was set directly
+            } else {
+                envVars.push({ name: "YOUTUBE_COOKIES_BASE64", secretRef: "youtube-cookies" });
+            }
+
+            workerConfig.properties.configuration.secrets = secrets;
+            workerConfig.properties.template.containers[0].env = envVars;
+
+            // Step 5: Apply update
+            console.log("[YouTube Cookies] Updating worker container app...");
+            const updateResponse = await fetch(workerApiUrl, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `Bearer ${access_token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(workerConfig)
+            });
+
+            if (!updateResponse.ok) {
+                const errorText = await updateResponse.text();
+                throw new Error(`Failed to update worker: ${errorText}`);
+            }
+
+            console.log("[YouTube Cookies] ✅ Worker updated successfully!");
 
             return NextResponse.json({
                 success: true,
-                message: "✅ Cookies saved and deployed! YouTube videos should now work. The worker container will restart automatically with the new cookies.",
+                message: "✅ Cookies deployed to Azure automatically! YouTube videos should now work. The worker will restart in ~30 seconds.",
                 deployed: true
             });
 
         } catch (azError: any) {
-            console.error("[YouTube Cookies] Azure CLI error:", azError.stderr || azError.message);
+            console.error("[YouTube Cookies] Azure REST API error:", azError.message);
 
             // Fallback: provide manual instructions
             return NextResponse.json({
-                success: false,
-                error: "Automatic deployment failed. Please follow manual instructions below.",
-                cookiesBase64,
-                manualInstructions: [
-                    "Run these commands in your terminal:",
-                    "",
-                    `az containerapp secret set --name worker-youtube-sg --resource-group john-threads --secrets youtube-cookies="${cookiesBase64.substring(0, 40)}..."`,
-                    "",
-                    `az containerapp update --name worker-youtube-sg --resource-group john-threads --set-env-vars "YOUTUBE_COOKIES_BASE64=secretref:youtube-cookies"`,
-                    "",
-                    "Worker will restart automatically with new cookies."
+                success: true,
+                deployed: false,
+                message: "✅ Cookies validated! Auto-deploy failed. Copy and run these commands:",
+                commands: [
+                    `az containerapp secret set --name worker-youtube-sg --resource-group john-threads --secrets "youtube-cookies=${cookiesBase64}"`,
+                    `az containerapp update --name worker-youtube-sg --resource-group john-threads --set-env-vars "YOUTUBE_COOKIES_BASE64=secretref:youtube-cookies"`
                 ]
-            }, { status: 500 });
+            });
         }
 
     } catch (error: any) {
@@ -137,37 +180,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    try {
-        const fs = require("fs/promises");
-        const path = require("path");
-        const cookiesPath = path.join(process.cwd(), "youtube-cookies.txt");
-
-        try {
-            const stats = await fs.stat(cookiesPath);
-            const content = await fs.readFile(cookiesPath, "utf-8");
-            const lineCount = content.split("\n").length;
-            const hasYouTube = content.includes("youtube.com");
-            const hasSession = content.includes("SAPISID");
-
-            return NextResponse.json({
-                configured: true,
-                file: cookiesPath,
-                size: stats.size,
-                lines: lineCount,
-                hasYouTubeCookies: hasYouTube,
-                hasSessionCookies: hasSession,
-                lastModified: stats.mtime
-            });
-        } catch (err) {
-            // File doesn't exist
-            return NextResponse.json({
-                configured: false,
-                message: "No cookies file found. Please configure cookies."
-            });
-        }
-
-    } catch (error: any) {
-        console.error("[YouTube Cookies] Error checking cookies:", error);
-        return NextResponse.json({ error: "Failed to check cookies" }, { status: 500 });
-    }
+    return NextResponse.json({
+        configured: false,
+        message: "Cookie status checking not implemented yet"
+    });
 }
