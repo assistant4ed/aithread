@@ -40,7 +40,7 @@ jobs:
 
       - name: Build and Push Worker Image
         run: |
-          docker build -f Dockerfile.worker -t ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }} .
+          docker build -f Dockerfile.worker --build-arg CACHEBUST=${{ github.sha }} -t ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }} .
           docker push ${{ env.ACR_NAME }}.azurecr.io/threads-monitor-worker:${{ github.sha }}
 
       - name: Deploy Web to Container App

@@ -39,6 +39,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# Invalidate cache for source code layer when commit changes
+ARG CACHEBUST=unknown
+RUN echo "Cache bust: ${CACHEBUST}"
+
 # Copy the rest of the source code
 COPY . .
 
