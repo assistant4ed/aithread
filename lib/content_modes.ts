@@ -669,12 +669,15 @@ JSON ONLY.`;
 
         const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8));
 
+        // Calculate actual articles we'll generate (limited by maxArticles)
+        const articlesToGenerate = Math.min(topicsToProcess.length, maxArticles);
+
         // Update totalSteps now that we know how many articles we'll generate
         await updateProgress(runId, {
             currentStep: 3,
-            totalSteps: 3 + topicsToProcess.length, // Discovery (3 steps) + articles
+            totalSteps: 3 + articlesToGenerate, // Discovery (3 steps) + actual articles to generate
             progress: 40,
-            metadata: { topicsToGenerate: Math.min(discoveredTopics.length, maxArticles) }
+            metadata: { topicsToGenerate: articlesToGenerate }
         });
 
         console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating up to ${maxArticles} articles`);
@@ -685,7 +688,7 @@ JSON ONLY.`;
             if (allArticles.length >= maxArticles) break;
 
             topicIndex++;
-            const progressPct = 40 + Math.floor((topicIndex / topicsToProcess.length) * 50);
+            const progressPct = 40 + Math.floor((topicIndex / articlesToGenerate) * 50);
 
             await updateProgress(runId, {
                 status: "SYNTHESIZING",
@@ -695,7 +698,7 @@ JSON ONLY.`;
                 articlesCreated: allArticles.length
             });
 
-            console.log(`[ContentModes/AUTO_DISCOVER] Generating article ${topicIndex}/${topicsToProcess.length}: "${topic}"`);
+            console.log(`[ContentModes/AUTO_DISCOVER] Generating article ${topicIndex}/${articlesToGenerate}: "${topic}"`);
             const result = await generateSearchContent(workspace, topic);
             if (result.success && result.article) {
                 allArticles.push(result.article);

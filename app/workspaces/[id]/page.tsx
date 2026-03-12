@@ -36,11 +36,23 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
     if (!workspace) notFound();
 
+    // Calculate start of today in Hong Kong timezone (used for daily limit tracking)
+    const nowHK = new Date().toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
+    const todayStartHK = new Date(nowHK);
+    todayStartHK.setHours(0, 0, 0, 0);
+
     // Article stats (replacing Post stats)
-    const [pendingCount, approvedCount, publishedCount, errorCount] = await Promise.all([
+    const [pendingCount, approvedCount, publishedCount, publishedTodayCount, errorCount] = await Promise.all([
         (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "PENDING_REVIEW" } }),
         (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "APPROVED" } }),
         (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "PUBLISHED" } }),
+        (prisma as any).synthesizedArticle.count({
+            where: {
+                workspaceId: id,
+                status: "PUBLISHED",
+                publishedAt: { gte: todayStartHK }
+            }
+        }),
         (prisma as any).synthesizedArticle.count({ where: { workspaceId: id, status: "ERROR" } }),
     ]);
 
@@ -152,7 +164,7 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
 
             {/* Daily Progress Card */}
             <DailyProgressCard
-                publishedCount={publishedCount}
+                publishedCount={publishedTodayCount}
                 dailyLimit={workspace.dailyPostLimit}
                 nextPublishTime={nextPublishTime}
             />
@@ -269,13 +281,13 @@ export default async function WorkspaceDetailPage({ params }: PageProps) {
                             <dt className="text-muted">Today's Progress</dt>
                             <dd className="flex items-center gap-2">
                                 <span className="font-mono text-xs">
-                                    <span className="text-success font-bold">{publishedCount}</span>
+                                    <span className="text-success font-bold">{publishedTodayCount}</span>
                                     <span className="text-muted">/{workspace.dailyPostLimit}</span>
                                 </span>
                                 <div className="w-16 h-1.5 bg-muted/20 rounded-full overflow-hidden">
                                     <div
                                         className="h-full bg-success rounded-full transition-all duration-300"
-                                        style={{ width: `${Math.min(100, (publishedCount / workspace.dailyPostLimit) * 100)}%` }}
+                                        style={{ width: `${Math.min(100, (publishedTodayCount / workspace.dailyPostLimit) * 100)}%` }}
                                     />
                                 </div>
                             </dd>
