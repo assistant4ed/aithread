@@ -59,14 +59,19 @@ jobs:
         include:
           - name: web-sg
             image: threads-monitor-web
+            minReplicas: 0
           - name: worker-scraper-sg
             image: threads-monitor-worker
+            minReplicas: 0
           - name: worker-heartbeat-sg
             image: threads-monitor-worker
+            minReplicas: 0
           - name: worker-youtube-sg
             image: threads-monitor-worker
+            minReplicas: 1  # Always-on to process BullMQ jobs
           - name: worker-metrics-sg
             image: threads-monitor-worker
+            minReplicas: 1
     steps:
       - name: Log in to Azure
         uses: azure/login@v2
@@ -81,12 +86,10 @@ jobs:
           echo "acr_password=$ACR_PASSWORD" >> $GITHUB_OUTPUT
 
       - name: Deploy ${{ matrix.name }}
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: ${{ matrix.name }}
-          containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
-          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ matrix.image }}:${{ github.sha }}
-          registryUrl: ${{ env.ACR_NAME }}.azurecr.io
-          registryUsername: ${{ env.ACR_NAME }}
-          registryPassword: ${{ steps.acr-creds.outputs.acr_password }}
+        run: |
+          az containerapp update \
+            --name ${{ matrix.name }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ matrix.image }}:${{ github.sha }} \
+            --min-replicas ${{ matrix.minReplicas }} \
+            --max-replicas 10
