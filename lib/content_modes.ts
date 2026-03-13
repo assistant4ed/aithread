@@ -34,6 +34,8 @@ interface WorkspaceWithMode {
     topicFilter: string | null;
     autoApproveDrafts: boolean;
     autoApprovePrompt: string | null;
+    dailyPostLimit: number;
+    publishTimes: string[];
 }
 
 /**
@@ -562,8 +564,10 @@ JSON ONLY.`;
 
 /**
  * Automatically discover trending topics for a niche and generate content.
+ * @param workspace - The workspace configuration
+ * @param maxArticles - Maximum number of articles to generate (default: 1)
  */
-export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode): Promise<{ success: boolean; articles?: any[]; error?: string }> {
+export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode, maxArticles: number = 1): Promise<{ success: boolean; articles?: any[]; error?: string }> {
     if (!workspace.autoDiscoverNiche) {
         return { success: false, error: "No niche description configured for AUTO_DISCOVER mode." };
     }
@@ -689,11 +693,11 @@ JSON ONLY.`;
         // Step 3: Sort by relevance and generate articles for top topics
         discoveredTopics.sort((a, b) => b.relevance - a.relevance);
         const allArticles: any[] = [];
-        const maxArticles = 5; // Increased from 3 to 5
 
-        const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, 8));
+        // Limit topics to process to what we actually need
+        const topicsToProcess = discoveredTopics.slice(0, Math.min(discoveredTopics.length, maxArticles * 2));
 
-        // Calculate actual articles we'll generate (limited by maxArticles)
+        // Calculate actual articles we'll generate (limited by maxArticles parameter)
         const articlesToGenerate = Math.min(topicsToProcess.length, maxArticles);
 
         // Update totalSteps now that we know how many articles we'll generate
@@ -704,7 +708,7 @@ JSON ONLY.`;
             metadata: { topicsToGenerate: articlesToGenerate }
         });
 
-        console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating up to ${maxArticles} articles`);
+        console.log(`[ContentModes/AUTO_DISCOVER] Discovered ${discoveredTopics.length} topics, generating ${articlesToGenerate} article(s)`);
 
         let topicIndex = 0;
 
@@ -766,7 +770,11 @@ export async function generateByMode(workspaceId: string, topic?: string): Promi
 
     // AUTO_DISCOVER has its own internal tracking
     if (ws.contentMode === "AUTO_DISCOVER") {
-        return generateAutoDiscoverContent(ws);
+        // Calculate max articles based on publishing schedule
+        const publishTimes = ws.publishTimes?.length ? ws.publishTimes : ["12:00", "18:00", "22:00"];
+        const maxArticles = Math.ceil(ws.dailyPostLimit / publishTimes.length);
+        console.log(`[ContentModes] AUTO_DISCOVER will generate ${maxArticles} article(s) based on ${publishTimes.length} publish times and dailyPostLimit=${ws.dailyPostLimit}`);
+        return generateAutoDiscoverContent(ws, maxArticles);
     }
 
     // For other modes, wrap with tracking
