@@ -26,14 +26,38 @@ export async function extractMediaAssets(
     // 1. Download thumbnail using yt-dlp
     console.log(`[Media] Downloading thumbnail for ${videoId}...`);
     try {
-        await execFileAsync('yt-dlp', [
+        const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
+        const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+        const hasCookies = !!(cookiesFile || cookiesBrowser);
+
+        const ytdlpArgs = [
             '--write-thumbnail',
             '--skip-download',
             '--convert-thumbnails', 'jpg',
-            '--output', thumbnailPath.replace(/\.jpg$/, ''), // yt-dlp adds extension
-            `https://www.youtube.com/watch?v=${videoId}`
-        ], {
-            env: { ...process.env, PATH: `/home/linuxbrew/.linuxbrew/bin:${process.env.PATH}` }
+            '--js-runtimes', 'node',
+            '--output', thumbnailPath.replace(/\.jpg$/, ''),
+        ];
+
+        // Add cookies if available
+        if (cookiesFile) {
+            ytdlpArgs.push('--cookies', cookiesFile);
+        } else if (cookiesBrowser) {
+            ytdlpArgs.push('--cookies-from-browser', cookiesBrowser);
+        }
+
+        // Add user-agent for authenticated requests
+        if (hasCookies) {
+            ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36');
+        }
+
+        ytdlpArgs.push(`https://www.youtube.com/watch?v=${videoId}`);
+
+        await execFileAsync('yt-dlp', ytdlpArgs, {
+            env: {
+                ...process.env,
+                PATH: `/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:${process.env.PATH}`,
+                NODE_PATH: process.execPath,
+            }
         });
 
         // yt-dlp might save as .webp then convert, or just save as .jpg. 
@@ -49,17 +73,41 @@ export async function extractMediaAssets(
     }
 
     // 2. Extract keyframes for chapters using ffmpeg
-    // We need the video URL. To avoid downloading the whole video, 
+    // We need the video URL. To avoid downloading the whole video,
     // we can use yt-dlp to get a direct stream URL for ffmpeg.
     if (chapterTimestamps.length > 0) {
         console.log(`[Media] Extracting ${chapterTimestamps.length} chapter screenshots...`);
         try {
-            const { stdout: streamUrl } = await execFileAsync('yt-dlp', [
+            const cookiesFile = process.env.YOUTUBE_COOKIES_FILE;
+            const cookiesBrowser = process.env.YOUTUBE_COOKIES_BROWSER;
+            const hasCookies = !!(cookiesFile || cookiesBrowser);
+
+            const ytdlpArgs = [
                 '-g',
                 '-f', 'best[height<=480]',
-                `https://www.youtube.com/watch?v=${videoId}`
-            ], {
-                env: { ...process.env, PATH: `/home/linuxbrew/.linuxbrew/bin:${process.env.PATH}` }
+                '--js-runtimes', 'node',
+            ];
+
+            // Add cookies if available
+            if (cookiesFile) {
+                ytdlpArgs.push('--cookies', cookiesFile);
+            } else if (cookiesBrowser) {
+                ytdlpArgs.push('--cookies-from-browser', cookiesBrowser);
+            }
+
+            // Add user-agent for authenticated requests
+            if (hasCookies) {
+                ytdlpArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36');
+            }
+
+            ytdlpArgs.push(`https://www.youtube.com/watch?v=${videoId}`);
+
+            const { stdout: streamUrl } = await execFileAsync('yt-dlp', ytdlpArgs, {
+                env: {
+                    ...process.env,
+                    PATH: `/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:${process.env.PATH}`,
+                    NODE_PATH: process.execPath,
+                }
             });
 
             const url = streamUrl.trim().split('\n')[0];
