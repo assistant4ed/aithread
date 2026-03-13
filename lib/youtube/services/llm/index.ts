@@ -14,7 +14,7 @@ const OPENROUTER_MODEL = 'openrouter/free';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
-type LLMProvider = 'anthropic' | 'openrouter' | 'gemini' | 'groq';
+type LLMProvider = 'anthropic' | 'openrouter' | 'gemini' | 'groq' | 'openai';
 
 export async function generateScript(
     transcript: TranscriptResult,
@@ -57,16 +57,35 @@ export async function generateScript(
             'script-generation'
         );
     } catch (err) {
-        if (provider !== 'groq' && !!process.env.GROQ_API_KEY) {
-            console.warn(`[LLM] Primary provider ${provider} failed. Falling back to Groq...`);
-            rawScript = await callWithRetry<GeneratedScript>(
-                'groq',
-                SCRIPT_SYSTEM_PROMPT,
-                userMessage,
-                'script-generation-fallback'
-            );
-        } else {
-            throw err;
+        // Try fallback providers in order: OpenRouter → OpenAI → Groq
+        const fallbackProviders: LLMProvider[] = [];
+
+        if (hasOpenRouter && provider !== 'openrouter') fallbackProviders.push('openrouter');
+        if (process.env.OPENAI_API_KEY && provider !== 'openai') fallbackProviders.push('openai' as LLMProvider);
+        if (process.env.GROQ_API_KEY && provider !== 'groq') fallbackProviders.push('groq');
+
+        for (const fallback of fallbackProviders) {
+            try {
+                console.warn(`[LLM] Primary provider ${provider} failed. Trying ${fallback}...`);
+                rawScript = await callWithRetry<GeneratedScript>(
+                    fallback,
+                    SCRIPT_SYSTEM_PROMPT,
+                    userMessage,
+                    `script-generation-fallback-${fallback}`
+                );
+                break; // Success - exit fallback loop
+            } catch (fallbackErr: any) {
+                console.warn(`[LLM] Fallback provider ${fallback} also failed: ${fallbackErr.message}`);
+                if (fallback === fallbackProviders[fallbackProviders.length - 1]) {
+                    // Last fallback failed - throw original error
+                    throw err;
+                }
+                // Continue to next fallback
+            }
+        }
+
+        if (!rawScript!) {
+            throw err; // No fallbacks available or all failed
         }
     }
 
@@ -93,16 +112,34 @@ async function translateScript(provider: LLMProvider, script: GeneratedScript): 
         );
         return translated;
     } catch (err) {
-        if (provider !== 'groq' && !!process.env.GROQ_API_KEY) {
-            console.warn(`[LLM] Translation with ${provider} failed. Falling back to Groq...`);
-            return await callWithRetry<GeneratedScript>(
-                'groq',
-                TRANSLATION_SYSTEM_PROMPT,
-                JSON.stringify(script),
-                'translation-fallback'
-            );
+        // Try fallback providers in order: OpenRouter → OpenAI → Groq
+        const fallbackProviders: LLMProvider[] = [];
+
+        if (process.env.OPENROUTER_API_KEY && provider !== 'openrouter') fallbackProviders.push('openrouter');
+        if (process.env.OPENAI_API_KEY && provider !== 'openai') fallbackProviders.push('openai');
+        if (process.env.GROQ_API_KEY && provider !== 'groq') fallbackProviders.push('groq');
+
+        for (const fallback of fallbackProviders) {
+            try {
+                console.warn(`[LLM] Translation with ${provider} failed. Trying ${fallback}...`);
+                const translated = await callWithRetry<GeneratedScript>(
+                    fallback,
+                    TRANSLATION_SYSTEM_PROMPT,
+                    JSON.stringify(script),
+                    `translation-fallback-${fallback}`
+                );
+                return translated; // Success - return immediately
+            } catch (fallbackErr: any) {
+                console.warn(`[LLM] Translation fallback ${fallback} failed: ${fallbackErr.message}`);
+                if (fallback === fallbackProviders[fallbackProviders.length - 1]) {
+                    // Last fallback failed - throw original error
+                    throw err;
+                }
+                // Continue to next fallback
+            }
         }
-        throw err;
+
+        throw err; // No fallbacks available
     }
 }
 
@@ -178,7 +215,24 @@ async function callWithRetry<T>(
                 });
                 const rawText = response.choices[0].message.content || '';
                 return parseJSONResponse<T>(rawText, operationLabel);
+            } else if (provider === 'openai') {
+                const client = new OpenAI({
+                    apiKey: process.env.OPENAI_API_KEY!,
+                });
+
+                const response = await client.chat.completions.create({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userMessage }
+                    ],
+                    response_format: { type: 'json_object' }
+                });
+
+                const rawText = response.choices[0].message.content || '';
+                return parseJSONResponse<T>(rawText, operationLabel);
             } else {
+                // openrouter
                 const client = new OpenAI({
                     baseURL: 'https://openrouter.ai/api/v1',
                     apiKey: process.env.OPENROUTER_API_KEY!,
