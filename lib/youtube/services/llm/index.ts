@@ -9,6 +9,7 @@ import type { TranscriptResult, VideoMetadata, GeneratedScript } from '../../typ
 
 const MAX_INPUT_TOKENS = 150_000;
 const MAX_OUTPUT_TOKENS = 8_192;
+const MAX_TRANSLATION_OUTPUT_TOKENS = 16_384; // Chinese characters require more tokens
 const ANTHROPIC_MODEL = 'claude-3-5-sonnet-20240620';
 const OPENROUTER_MODEL = 'qwen/qwen3.5-35b-a3b';
 const GEMINI_MODEL = 'gemini-2.5-flash';
@@ -108,7 +109,9 @@ async function translateScript(provider: LLMProvider, script: GeneratedScript): 
             provider,
             TRANSLATION_SYSTEM_PROMPT,
             JSON.stringify(script),
-            'translation'
+            'translation',
+            3, // maxAttempts
+            MAX_TRANSLATION_OUTPUT_TOKENS // Use higher token limit for Chinese translation
         );
         return translated;
     } catch (err) {
@@ -126,7 +129,9 @@ async function translateScript(provider: LLMProvider, script: GeneratedScript): 
                     fallback,
                     TRANSLATION_SYSTEM_PROMPT,
                     JSON.stringify(script),
-                    `translation-fallback-${fallback}`
+                    `translation-fallback-${fallback}`,
+                    3, // maxAttempts
+                    MAX_TRANSLATION_OUTPUT_TOKENS // Use higher token limit for Chinese translation
                 );
                 return translated; // Success - return immediately
             } catch (fallbackErr: any) {
@@ -162,7 +167,8 @@ async function callWithRetry<T>(
     systemPrompt: string,
     userMessage: string,
     operationLabel: string,
-    maxAttempts = 3
+    maxAttempts = 3,
+    maxTokens = MAX_OUTPUT_TOKENS
 ): Promise<T> {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -171,7 +177,7 @@ async function callWithRetry<T>(
                 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
                 const response = await client.messages.create({
                     model: ANTHROPIC_MODEL,
-                    max_tokens: MAX_OUTPUT_TOKENS,
+                    max_tokens: maxTokens,
                     system: systemPrompt,
                     messages: [{ role: 'user', content: userMessage }],
                 });
@@ -192,7 +198,7 @@ async function callWithRetry<T>(
                     model: GEMINI_MODEL,
                     generationConfig: {
                         responseMimeType: "application/json",
-                        maxOutputTokens: MAX_OUTPUT_TOKENS,
+                        maxOutputTokens: maxTokens,
                     }
                 });
 
