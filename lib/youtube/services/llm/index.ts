@@ -10,7 +10,7 @@ import type { TranscriptResult, VideoMetadata, GeneratedScript } from '../../typ
 const MAX_INPUT_TOKENS = 150_000;
 const MAX_OUTPUT_TOKENS = 8_192;
 const ANTHROPIC_MODEL = 'claude-3-5-sonnet-20240620';
-const OPENROUTER_MODEL = 'openrouter/free';
+const OPENROUTER_MODEL = 'qwen/qwen3.5-35b-a3b';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
