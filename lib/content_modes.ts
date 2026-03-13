@@ -316,9 +316,22 @@ export async function generateSearchContent(workspace: WorkspaceWithMode, topic:
 
     // 3. Synthesize
     const systemPrompt = workspace.synthesisPrompt || "You are a professional news editor. Write a clear, engaging summary.";
+
+    // Determine max character limit based on language
+    const isChinese = workspace.synthesisLanguage?.toLowerCase().includes('chinese') ||
+                      workspace.synthesisLanguage?.toLowerCase().includes('中文') ||
+                      workspace.synthesisLanguage?.toLowerCase().includes('zh');
+    const maxChars = isChinese ? 500 : 1000;
     const synthesisPrompt = `${systemPrompt}
 
 Based on the following real-time search results, write a compelling article about "${topic}" using the ${format.id} format.
+
+## CRITICAL RULES
+- Maximum length: ${maxChars} characters (including spaces, emojis, punctuation)
+- DO NOT include any URLs or links like (https://example.com/...) in the content
+- DO NOT include fake placeholder links
+- References should be text-only mentions, never URLs
+- Keep it concise and punchy
 
 ## OUTPUT FORMAT: ${format.id}
 **Structure:** ${format.structure}
@@ -333,12 +346,12 @@ ${format.visualExample || "Standard format"}
 - Follow the structure EXACTLY as specified
 - Match the tone and style described
 - Use the visual template as a guide for layout
-- Cite sources naturally within the content where relevant
+- Mention sources by name only (e.g., "According to TechCrunch..." NOT with URLs)
 ${format.id === 'DATA_STORY' ? '- Lead with the most surprising statistic' : ''}
 ${format.id === 'NEWS_FLASH' ? '- Keep it punchy and urgent' : ''}
 ${format.id === 'EXPLAINER' ? '- Start with what people are confused about' : ''}
 
-Output JSON: { "headline": "A catchy headline", "content": "Full article in markdown" }
+Output JSON: { "headline": "A catchy headline", "content": "Full article in markdown, max ${maxChars} chars" }
 JSON ONLY.
 
 ## Search Results
