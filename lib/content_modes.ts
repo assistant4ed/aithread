@@ -258,12 +258,15 @@ export async function generateSearchContent(workspace: WorkspaceWithMode, topic:
     const formatId = await pickFormat(workspace);
     const format = POST_FORMATS[formatId] || POST_FORMATS["LISTICLE"];
 
-    // 1. Tavily search (primary)
+    // 1. Tavily search (primary) with fallback to second key
     let searchContext = "";
     let externalUrls: string[] = [];
 
-    const tavilyKey = process.env.TAVILY_API_KEY;
-    if (tavilyKey) {
+    const tavilyKeys = [process.env.TAVILY_API_KEY, process.env['2ND_TAVILY_API_KEY']].filter(Boolean);
+
+    for (const tavilyKey of tavilyKeys) {
+        if (!tavilyKey) continue;
+
         try {
             const results = await tavilySearch(tavilyKey, `Latest news on ${topic} today`, {
                 searchDepth: "advanced",
@@ -276,9 +279,12 @@ export async function generateSearchContent(workspace: WorkspaceWithMode, topic:
                 searchContext += results.results.map((r) =>
                     `Source: ${r.title}\nURL: ${r.url}\nSummary: ${r.content}`
                 ).join("\n---\n");
+                break; // Success - don't try fallback key
             }
         } catch (e: any) {
-            console.warn("[ContentModes/SEARCH] Tavily search failed:", e.message);
+            const keyIndex = tavilyKeys.indexOf(tavilyKey) + 1;
+            console.warn(`[ContentModes/SEARCH] Tavily search failed (key ${keyIndex}):`, e.message);
+            // Continue to next key if available
         }
     }
 
@@ -562,11 +568,13 @@ export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode):
 
         const provider = getWorkspaceProvider(workspace as any);
 
-        // Step 1: Use Tavily to discover trending topics in the niche
-        const tavilyKey = process.env.TAVILY_API_KEY;
+        // Step 1: Use Tavily to discover trending topics in the niche (with fallback to second key)
+        const tavilyKeys = [process.env.TAVILY_API_KEY, process.env['2ND_TAVILY_API_KEY']].filter(Boolean);
         let discoveredTopics: { topic: string; signal: string; relevance: number }[] = [];
 
-        if (tavilyKey) {
+        for (const tavilyKey of tavilyKeys) {
+            if (!tavilyKey) continue;
+
             try {
                 await updateProgress(runId, {
                     currentStep: 1,
@@ -595,8 +603,11 @@ export async function generateAutoDiscoverContent(workspace: WorkspaceWithMode):
                     progress: 20,
                     metadata: { topicsFound: discoveredTopics.length }
                 });
+                break; // Success - don't try fallback key
             } catch (e: any) {
-                console.warn("[ContentModes/AUTO_DISCOVER] Tavily discovery failed:", e.message);
+                const keyIndex = tavilyKeys.indexOf(tavilyKey) + 1;
+                console.warn(`[ContentModes/AUTO_DISCOVER] Tavily discovery failed (key ${keyIndex}):`, e.message);
+                // Continue to next key if available
             }
         }
 
