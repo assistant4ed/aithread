@@ -45,19 +45,19 @@ export async function startWorker() {
                     });
                 }
 
-                job.updateProgress(10);
+                job.updateProgress(5);
                 const metadata = await extractMetadata(videoUrl);
                 console.log(`[Job ${job.id}] Metadata extracted: ${metadata.title}`);
 
-                job.updateProgress(30);
+                job.updateProgress(10); // Metadata done
                 const transcript = await extractTranscript(metadata.id, metadata);
                 console.log(`[Job ${job.id}] Transcript extracted via ${transcript.source}`);
 
-                job.updateProgress(50);
+                job.updateProgress(50); // Transcript done (this takes the longest with Whisper)
                 const script = await generateScript(transcript, metadata, outputLanguage);
                 console.log(`[Job ${job.id}] Script generated and translated`);
 
-                job.updateProgress(70);
+                job.updateProgress(80); // Script generation done
                 let assets = { thumbnailPath: '', chapterScreenshots: {} };
                 if (includeFrames) {
                     const chapterTimestamps = script.chapters.map(c => c.timestampStart).filter(Boolean);
@@ -68,7 +68,7 @@ export async function startWorker() {
                     assets = await extractMediaAssets(metadata.id, []);
                 }
 
-                job.updateProgress(90);
+                job.updateProgress(85); // Media assets done
                 const outPdfName = `${metadata.id}_${outputLanguage}.pdf`;
                 const pdfPath = path.join(OUTPUT_DIR, outPdfName);
                 await generatePDF(script, assets, pdfPath);
