@@ -511,9 +511,17 @@ export default function ArticlesPage() {
                                             </>
                                         )}
                                         {article.status === "APPROVED" && (
-                                            <span className="text-sm text-accent font-mono animate-pulse">
-                                                Publishing in progress...
-                                            </span>
+                                            <>
+                                                <span className="text-sm text-accent font-mono animate-pulse flex items-center">
+                                                    Publishing in progress...
+                                                </span>
+                                                <a
+                                                    href={`/workspaces/${workspaceId}/articles/${article.id}/edit`}
+                                                    className="px-4 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors text-sm font-medium"
+                                                >
+                                                    Edit Draft
+                                                </a>
+                                            </>
                                         )}
                                         {article.status === "ERROR" && (
                                             <div className="flex items-center gap-3">
