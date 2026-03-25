@@ -1,4 +1,5 @@
 import { signIn } from "@/auth"
+import { AuthError } from "next-auth"
 
 export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
     const searchParams = await props.searchParams;
@@ -21,7 +22,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
 
                 {error && (
                     <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm font-medium animate-shake">
-                        {error === "CredentialsSignin" ? "Invalid email or password" : "Authentication failed"}
+                        {error === "CredentialsSignin" || error === "CredentialsSigninServer" ? "Invalid email or password" : "Authentication failed"}
                     </div>
                 )}
 
@@ -29,9 +30,16 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
                     <form
                         action={async (formData) => {
                             "use server"
-                            const email = formData.get("email") as string
-                            const password = formData.get("password") as string
-                            await signIn("credentials", { email, password, redirectTo: "/" })
+                            try {
+                                await signIn("credentials", formData)
+                            } catch (error) {
+                                if (error instanceof AuthError) {
+                                    // Handle AuthError
+                                    const type = error.type
+                                    throw error // NextAuth will handle the redirect with error param
+                                }
+                                throw error // Rethrow for Next.js to handle (like redirects)
+                            }
                         }}
                         className="space-y-4 text-left"
                     >

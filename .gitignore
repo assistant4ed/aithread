@@ -50,4 +50,4 @@ output
 # YouTube cookies (never commit these - contain session data)
 youtube-cookies.txt
 youtube-cookies-base64.txt
-*-cookies.txt
+*-cookies.txtbackups/

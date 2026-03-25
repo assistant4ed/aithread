@@ -51,7 +51,6 @@ services:
       - "6379:6379"
 
 # Note: We assume an external PostgreSQL database (e.g. Supabase or Azure Postgres)
-# If you want a local Postgres for testing, uncomment below:
   db:
     image: postgres:15-alpine
     environment:
