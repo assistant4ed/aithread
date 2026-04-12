@@ -50,4 +50,15 @@ output
 # YouTube cookies (never commit these - contain session data)
 youtube-cookies.txt
 youtube-cookies-base64.txt
-*-cookies.txtbackups/
+*-cookies.txt
+backups/
+.planning/
+cloud-sql-proxy
+deploy_gcp.sh
+dump.sql
+cloudbuild.*.yaml
+proxy.log
+add_user.js
+check.js
+create_test_user.js
+HobbyLand_Login_Sheet.csv

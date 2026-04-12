@@ -10,6 +10,16 @@ import { trackPipelineRun } from "../lib/pipeline_tracker";
 import { deleteBlobFromStorage } from "../lib/storage";
 import { toUTCDate } from "../lib/time";
 import { generateByMode } from "../lib/content_modes";
+import http from "http";
+
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Heartbeat Worker OK");
+});
+server.listen(PORT, () => {
+    console.log(`[Heartbeat] Health check server listening on port ${PORT}`);
+});
 
 console.log("=== Threads Monitor Worker (Heartbeat) ===");
 console.log("Starting worker process...");
@@ -464,6 +474,7 @@ async function runPublish(ws: Workspace, maxPublish: number = 1) {
     return trackPipelineRun(ws.id, "PUBLISH", async () => {
         const hasAny = (ws.threadsAppId && ws.threadsToken)
             || (ws.instagramAccountId && ws.instagramAccessToken)
+            || (ws.facebookPageId && ws.facebookPageToken)
             || (ws.twitterApiKey && ws.twitterAccessToken);
 
         if (!hasAny) {
@@ -483,6 +494,8 @@ async function runPublish(ws: Workspace, maxPublish: number = 1) {
             threadsAccessToken: ws.threadsToken || undefined,
             instagramAccountId: ws.instagramAccountId || undefined,
             instagramAccessToken: ws.instagramAccessToken || undefined,
+            facebookPageId: ws.facebookPageId || undefined,
+            facebookPageToken: ws.facebookPageToken || undefined,
             twitterApiKey: ws.twitterApiKey || undefined,
             twitterApiSecret: ws.twitterApiSecret || undefined,
             twitterAccessToken: ws.twitterAccessToken || undefined,

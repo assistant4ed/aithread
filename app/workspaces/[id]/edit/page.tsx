@@ -98,6 +98,8 @@ export default function EditWorkspacePage() {
         twitterApiSecret: "",
         twitterAccessToken: "",
         twitterAccessSecret: "",
+        facebookPageId: "",
+        facebookPageToken: "",
         autoApproveDrafts: false,
         autoApprovePrompt: "",
         sources: [] as any[],
@@ -145,6 +147,8 @@ export default function EditWorkspacePage() {
                     twitterApiSecret: data.twitterApiSecret || "",
                     twitterAccessToken: data.twitterAccessToken || "",
                     twitterAccessSecret: data.twitterAccessSecret || "",
+                    facebookPageId: data.facebookPageId || "",
+                    facebookPageToken: data.facebookPageToken || "",
                     autoApproveDrafts: data.autoApproveDrafts || false,
                     autoApprovePrompt: data.autoApprovePrompt || "",
                     sources: data.sources || [],
@@ -204,6 +208,8 @@ export default function EditWorkspacePage() {
                     twitterApiSecret: form.twitterApiSecret || null,
                     twitterAccessToken: form.twitterAccessToken || null,
                     twitterAccessSecret: form.twitterAccessSecret || null,
+                    facebookPageId: form.facebookPageId || null,
+                    facebookPageToken: form.facebookPageToken || null,
                     autoApproveDrafts: form.autoApproveDrafts,
                     autoApprovePrompt: form.autoApprovePrompt || null,
                     sources: form.sources,
@@ -1048,6 +1054,62 @@ export default function EditWorkspacePage() {
                                     value={form.instagramAccessToken}
                                     onChange={(e) => setForm({ ...form, instagramAccessToken: e.target.value })}
                                     placeholder="Paste access token here"
+                                    className="input"
+                                />
+                            </Field>
+                        </div>
+                    </details>
+                </div>
+
+                {/* Facebook Page Connection */}
+                <div className="border border-border rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
+                            Facebook Page Connection
+                        </h3>
+                        {form.facebookPageToken ? (
+                            <span className="text-xs bg-success/10 text-success px-2 py-1 rounded border border-success/20 font-medium flex items-center gap-1">
+                                ✓ Connected
+                            </span>
+                        ) : (
+                            <span className="text-xs bg-surface text-muted px-2 py-1 rounded border border-border font-medium">
+                                Not Connected
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
+                        <p className="text-[11px] text-blue-200/80 leading-relaxed">
+                            <strong className="text-blue-400">Auto-Connected:</strong> Your Facebook Page is automatically linked when you connect Instagram via the <strong className="text-blue-400">Connect Instagram</strong> button above. The first Facebook Page associated with your account will be used for publishing.
+                        </p>
+                    </div>
+
+                    {form.facebookPageId && (
+                        <div className="text-xs text-muted">
+                            Page ID: <code className="bg-white/5 px-1.5 py-0.5 rounded">{form.facebookPageId}</code>
+                        </div>
+                    )}
+
+                    <details className="mt-4 text-xs">
+                        <summary className="cursor-pointer text-muted hover:text-foreground transition-colors font-medium">
+                            Manual Setup (Advanced)
+                        </summary>
+                        <div className="mt-4 space-y-4 pt-4 border-t border-border/50">
+                            <Field label="Facebook Page ID">
+                                <input
+                                    type="text"
+                                    value={form.facebookPageId}
+                                    onChange={(e) => setForm({ ...form, facebookPageId: e.target.value })}
+                                    placeholder="e.g. 123456789012345"
+                                    className="input"
+                                />
+                            </Field>
+                            <Field label="Facebook Page Access Token">
+                                <input
+                                    type="password"
+                                    value={form.facebookPageToken}
+                                    onChange={(e) => setForm({ ...form, facebookPageToken: e.target.value })}
+                                    placeholder="Paste page access token here"
                                     className="input"
                                 />
                             </Field>

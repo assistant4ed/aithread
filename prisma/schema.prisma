@@ -39,6 +39,8 @@ model Workspace {
   twitterApiSecret      String?
   instagramExpiresAt    Int?
   instagramRefreshToken String?
+  facebookPageId        String?
+  facebookPageToken     String?
   twitterExpiresAt      Int?
   twitterRefreshToken   String?
   threadsExpiresAt      Int?
@@ -209,6 +211,9 @@ model SynthesizedArticle {
   publishedAtTwitter    DateTime?
   publishedUrlInstagram String?
   publishedUrlTwitter   String?
+  publishedUrlFacebook  String?
+  publishedAtFacebook   DateTime?
+  facebookPostId        String?
   threadsMediaId        String?
   tweetId               String?
   formatUsed            String?

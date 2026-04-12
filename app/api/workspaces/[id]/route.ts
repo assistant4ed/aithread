@@ -66,6 +66,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             "publishTimes", "reviewWindowHours", "clusteringPrompt",
             "postLookbackHours",
             "instagramAccessToken", "instagramAccountId",
+            "facebookPageId", "facebookPageToken",
             "twitterApiKey", "twitterApiSecret", "twitterAccessToken", "twitterAccessSecret",
             "autoApproveDrafts", "autoApprovePrompt",
             "aiProvider", "aiModel", "aiApiKey",

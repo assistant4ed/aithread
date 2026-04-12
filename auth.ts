@@ -81,9 +81,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientId: process.env.AUTH_INSTAGRAM_ID,
             clientSecret: process.env.AUTH_INSTAGRAM_SECRET,
             // We use Facebook provider to access Instagram Graph API (Business Publishing)
+            // and also Facebook Page Publishing
             authorization: {
                 params: {
-                    scope: "email,public_profile,instagram_basic,instagram_content_publish,pages_show_list,business_management"
+                    scope: "email,public_profile,instagram_basic,instagram_content_publish,pages_show_list,pages_manage_posts,pages_read_engagement,business_management"
                 }
             },
         }),
@@ -164,16 +165,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     })
                     console.log(`Updated Twitter tokens for workspace ${workspaceId}`)
                 } else if (account.provider === "facebook") {
-                    // Fetch the actual Instagram Business Account ID
-                    // 1. Get user's pages
-                    const pagesReq = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=instagram_business_account&access_token=${account.access_token}`);
+                    // Fetch the actual Instagram Business Account ID and Facebook Page token
+                    // 1. Get user's pages (with page access tokens)
+                    const pagesReq = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=instagram_business_account,name,access_token&access_token=${account.access_token}`);
                     const pagesData = await pagesReq.json();
 
                     let instagramAccountId: string | null = null;
+                    let facebookPageId: string | null = null;
+                    let facebookPageToken: string | null = null;
 
                     if (pagesData.data && pagesData.data.length > 0) {
                         console.log(`📄 Found ${pagesData.data.length} Facebook Pages`);
                         console.log("📝 Full Pages Data:", JSON.stringify(pagesData.data));
+
+                        // Use the first page for Facebook posting
+                        const firstPage = pagesData.data[0];
+                        facebookPageId = firstPage.id;
+                        facebookPageToken = firstPage.access_token;
+                        console.log(`✅ Facebook Page: ${firstPage.name} (ID: ${facebookPageId})`);
+
                         // Find the first page with a connected IG business account
                         const pageWithIg = pagesData.data.find((p: any) => p.instagram_business_account);
                         if (pageWithIg) {
@@ -193,9 +203,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             instagramRefreshToken: account.refresh_token,
                             instagramExpiresAt: account.expires_at,
                             instagramAccountId: instagramAccountId,
+                            facebookPageId: facebookPageId,
+                            facebookPageToken: facebookPageToken,
                         },
                     })
-                    console.log(`Updated Instagram (via Facebook) tokens for workspace ${workspaceId}`)
+                    console.log(`Updated Instagram + Facebook Page tokens for workspace ${workspaceId}`)
                 } else if (account.provider === "threads") {
                     let accessToken = account.access_token;
                     let expiresAt = account.expires_at;

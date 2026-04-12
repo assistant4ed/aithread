@@ -43,6 +43,11 @@ vi.mock("@/lib/twitter_client", () => ({
     postTweet: vi.fn().mockResolvedValue({ id: "tweet-123" }),
 }));
 
+vi.mock("@/lib/facebook_client", () => ({
+    publishToFacebookPage: vi.fn().mockResolvedValue({ postId: "page1_post1", url: "https://facebook.com/page1_post1" }),
+    getFacebookPost: vi.fn().mockResolvedValue({ permalink_url: "https://www.facebook.com/page/posts/12345" }),
+}));
+
 vi.mock("@/lib/sanitizer", () => ({
     stripPlatformReferences: vi.fn((text: string) => text || ""),
 }));

@@ -298,6 +298,17 @@ export async function processScrapeJob(job: Job<ScrapeJobData>) {
     }
 }
 
+// ─── Cloud Run Health Check Server ───────────────────────────────────────────
+import http from "http";
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Scrape Worker OK");
+});
+server.listen(PORT, () => {
+    console.log(`[ScrapeWorker] Health check server listening on port ${PORT}`);
+});
+
 // ─── Start Worker ────────────────────────────────────────────────────────────
 
 console.log("=== Threads Scrape Worker ===");
@@ -338,6 +349,7 @@ async function shutdown() {
         await scraper.close();
     }
 
+    server.close();
     console.log("[ScrapeWorker] All scrapers closed. Goodbye.");
     process.exit(0);
 }

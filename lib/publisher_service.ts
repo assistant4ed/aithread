@@ -16,6 +16,10 @@ export interface PublisherConfig {
     instagramAccountId?: string;
     instagramAccessToken?: string;
 
+    // Facebook Page
+    facebookPageId?: string;
+    facebookPageToken?: string;
+
     // Twitter
     twitterApiKey?: string;
     twitterApiSecret?: string;
@@ -36,6 +40,7 @@ export interface PublisherConfig {
  */
 import { createInstagramContainer, publishInstagramContainer, waitForInstagramContainer, getInstagramMedia } from "./instagram_client";
 import { uploadTwitterMedia, postTweet } from "./twitter_client";
+import { publishToFacebookPage, getFacebookPost } from "./facebook_client";
 
 /**
  * Returns the number of ARTICLES published today for a given workspace.
@@ -342,11 +347,13 @@ export async function publishArticle(
     const results: Record<string, string | null> = {
         threads: null,
         instagram: null,
+        facebook: null,
         twitter: null
     };
 
     const dates: Record<string, Date | null> = {
         instagram: null,
+        facebook: null,
         twitter: null
     };
 
@@ -440,6 +447,37 @@ export async function publishArticle(
         }
     }
 
+    // --- FACEBOOK PAGE ---
+    if (config.facebookPageId && config.facebookPageToken) {
+        try {
+            console.log(`[Publisher] Publishing to Facebook Page...`);
+
+            const fbResult = await publishToFacebookPage(
+                config.facebookPageId,
+                config.facebookPageToken,
+                text,
+                mediaUrl || undefined,
+                mediaType
+            );
+
+            // Try to get the actual permalink
+            let fbUrl = fbResult.url;
+            try {
+                const details = await getFacebookPost(fbResult.postId, config.facebookPageToken);
+                if (details.permalink_url) fbUrl = details.permalink_url;
+            } catch (e) { }
+
+            results.facebook = fbUrl;
+            results.facebook_id = fbResult.postId;
+            dates.facebook = new Date();
+            console.log(`[Publisher] Facebook success: ${fbUrl}`);
+
+        } catch (e: any) {
+            console.error(`[Publisher] Facebook failed:`, e.message);
+            errors.push(`Facebook: ${e.message}`);
+        }
+    }
+
     // --- TWITTER ---
     // Check for either OAuth 1.0 (Legacy) or OAuth 2.0 (Bearer)
     const hasTwitterV1 = config.twitterApiKey && config.twitterApiSecret && config.twitterAccessToken && config.twitterAccessSecret;
@@ -496,7 +534,7 @@ export async function publishArticle(
 
     // Determine final status
     // If at least one succeeded, we consider it PUBLISHED (but maybe partial)
-    const anySuccess = results.threads || results.instagram || results.twitter;
+    const anySuccess = results.threads || results.instagram || results.facebook || results.twitter;
 
     if (anySuccess) {
         await (prisma as any).synthesizedArticle.update({
@@ -505,11 +543,14 @@ export async function publishArticle(
                 status: "PUBLISHED",
                 publishedUrl: results.threads, // Main URL still Threads
                 publishedUrlInstagram: results.instagram,
+                publishedUrlFacebook: results.facebook,
                 publishedUrlTwitter: results.twitter,
                 publishedAtInstagram: dates.instagram,
+                publishedAtFacebook: dates.facebook,
                 publishedAtTwitter: dates.twitter,
                 publishedAt: new Date(),
                 threadsMediaId: results.threads_id, // Store the raw media ID for metrics
+                facebookPostId: results.facebook_id,
             },
         });
     } else {
